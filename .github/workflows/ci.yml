@@ -21,7 +21,7 @@ jobs:
 
       - name: 语法检查（全部 JS）
         run: |
-          for f in src/server.js src/web/assets/*.js test/*.mjs test/*.cjs; do
+          for f in src/server.js src/core/*.js src/web/assets/*.js test/*.mjs test/*.cjs; do
             node --check "$f"
           done
 
@@ -44,6 +44,15 @@ jobs:
             echo "$p -> $code"
             [ "$code" = "200" ]
           done
+
+      - name: 审计接口可用
+        run: |
+          curl -s -X POST -H 'Content-Type: application/json' -d '{"panelTitle":"ci"}' http://127.0.0.1:8199/api/settings > /dev/null
+          sleep 0.3
+          curl -s 'http://127.0.0.1:8199/api/audit?limit=5' > /tmp/audit.json
+          cat /tmp/audit.json
+          grep -q '"ok":true' /tmp/audit.json
+          grep -q '/api/settings' /tmp/audit.json
 
       - name: 失败时打印服务端日志
         if: failure()

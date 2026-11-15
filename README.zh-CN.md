@@ -6,7 +6,7 @@
 > 发布成 `https://你的域名/某个路径`，**不用公网 IP、不用改路由器、不用开端口**。
 > 支持**多条隧道同时在线**（快速 + 命名、或多账号多域名）。
 
-- 版本：**v0.8.1**（多页面改版收尾：图表观测、筛选/暂停、只读账号、Ctrl+K、测试入库）
+- 版本：**v0.9.0**（server.js 按职责拆成 15 个模块 + 审计日志）
 - 适用：NAS、自建网站、Home Assistant、Jellyfin、Gitea、Immich、qBittorrent……任何 HTTP 服务
 - 平台：Linux / arm64 / amd64 均可（本仓库在 Ubuntu 20.04 + Tegra arm64 上实测）
 

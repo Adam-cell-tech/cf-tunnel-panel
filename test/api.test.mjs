@@ -284,6 +284,20 @@ ok('/api/notify/history 可用', nh.d.ok === true && Array.isArray(nh.d.items), 
 const sys = await j('/api/system');
 ok('/api/system 字段齐全', sys.d.ok && sys.d.version && sys.d.node && typeof sys.d.uptimeSec === 'number' && typeof sys.d.backupCount === 'number', JSON.stringify({ v: sys.d.version, b: sys.d.backupCount }));
 
+
+// ---- 审计日志 ----
+await j('/api/settings', { method: 'POST', body: { panelTitle: (await j('/api/state')).d.state.settings.panelTitle } }); // 制造一条"改设置"记录
+await sleep(120);
+const au = await j('/api/audit?limit=50');
+ok('/api/audit 可用', au.d.ok === true && Array.isArray(au.d.rows), `${(au.d.rows || []).length} 条`);
+ok('/api/audit 有文件与计数', !!(au.d.stats && typeof au.d.stats.fileBytes === 'number' && typeof au.d.stats.count === 'number'), JSON.stringify(au.d.stats && { c: au.d.stats.count, b: au.d.stats.fileBytes }));
+const rec = (au.d.rows || [])[0] || {};
+ok('审计记录字段齐全', ['at', 'actor', 'ip', 'method', 'path', 'status', 'action'].every((k) => k in rec), Object.keys(rec).join(','));
+ok('审计记到了刚才那次改设置', (au.d.rows || []).some((r) => r.path === '/api/settings' && r.method === 'POST' && r.ok), '');
+ok('审计不记 GET /api/state（查看类不刷屏）', !(au.d.rows || []).some((r) => r.path === '/api/state' && r.ok), '');
+const auq = await j('/api/audit?q=' + encodeURIComponent('settings'));
+ok('审计支持关键字搜索', auq.d.ok && (auq.d.rows || []).every((r) => [r.action, r.path, r.actor, r.ip].join(' ').toLowerCase().includes('settings')), String((auq.d.rows || []).length));
+
 // 清理临时探针规则
 try {
   const cur = (await j('/api/state')).d.state.routes || [];

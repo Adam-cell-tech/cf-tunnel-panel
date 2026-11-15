@@ -2,6 +2,19 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.9.0
+
+- **Backend split**: `src/server.js` 2543 → ~800 lines; logic moved into 15 focused modules under `src/core/`
+  (`paths`, `util`, `state`, `registry`, `auth`, `caddy`, `pusher`, `tunnels`, `insight`, `bench`, `probe`,
+  `integrations`, `notify`, `web`, `monitor`, `audit`). No behavioural change intended; verified by the full suite.
+- **State sharing**: `state.js` now exports a live `stateProxy` plus `setState()` so导入/回滚 takes effect everywhere
+  (a stale destructured `state` used to make `/api/state` report the wrong route/exit counts).
+- **Audit log**: every state-changing request and every failed `/api` call is recorded (actor, real client IP,
+  action, status, duration). Ring buffer of 500 + append-only `data/audit.log` (JSON Lines, rotated at 2 MB).
+  New endpoint `GET /api/audit?limit=&q=`; new card on the Observe page with search and pagination.
+- **Fixes**: `src/core/paths.js` resolved `web/`, `ui.html` and `package.json` one level too shallow after the move.
+- Tests: 86 API + 57 DOM assertions (143 total).
+
 ## v0.8.1
 
 **安全**

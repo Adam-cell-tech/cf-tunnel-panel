@@ -7,6 +7,10 @@ let summary = null;
 let page = 1;
 let logEl = null;
 let paused = false;
+let auditRows = [];
+let auditPage = 1;
+let auditTotal = 0;
+const AUDIT_PER_PAGE = 10;
 
 function rangeSec() { return Number(($('#accRange') || {}).value || 0) || 0; }
 
@@ -107,6 +111,40 @@ function applyFilter() {
   }
 }
 
+function auditPill(ok, status) {
+  const cls = ok ? 'ok' : 'err';
+  return `<span class="pill ${cls}">${status || (ok ? '成功' : '失败')}</span>`;
+}
+
+function renderAudit() {
+  const box = $('#auditBody');
+  if (!box) return;
+  if (!auditRows.length) { box.innerHTML = '<div class="empty">还没有审计记录（改一次配置或失败一次请求就会出现）</div>'; return; }
+  const pages = Math.max(1, Math.ceil(auditTotal / AUDIT_PER_PAGE));
+  if (auditPage > pages) auditPage = pages;
+  const slice = auditRows.slice((auditPage - 1) * AUDIT_PER_PAGE, auditPage * AUDIT_PER_PAGE);
+  box.innerHTML = `<div class="tbl-wrap"><table class="stackable">
+    <thead><tr><th>时间</th><th>谁</th><th>从哪</th><th>做了什么</th><th>请求</th><th>结果</th></tr></thead>
+    <tbody>${slice.map((r) => `<tr>
+      <td data-label="时间">${fmtTime(r.at)}</td>
+      <td data-label="谁">${esc(r.actor || '-')}${r.actor && r.actor.includes('只读') ? ' <span class="tag">只读</span>' : ''}</td>
+      <td data-label="从哪"><span class="mono">${esc(r.ip || '-')}</span></td>
+      <td data-label="做了什么">${esc(r.action || r.path || '-')}</td>
+      <td data-label="请求"><span class="mono">${esc(r.method)} ${esc(r.path)}</span></td>
+      <td data-label="结果">${auditPill(r.ok, r.status)}</td>
+    </tr>`).join('')}</tbody></table></div>
+    ${pagerHtml(auditPage, pages, auditTotal)}`;
+  bindPager(box, (pg) => { auditPage = pg; renderAudit(); });
+}
+
+async function loadAudit() {
+  const q = ($('#auditQ') || {}).value || '';
+  const d = await api(`/api/audit?limit=200${q ? `&q=${encodeURIComponent(q)}` : ''}`);
+  auditRows = d.rows || [];
+  auditTotal = (d.stats && d.stats.count) || auditRows.length;
+  renderAudit();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   logEl = $('#logBox');
   $('#btnAccessRefresh').addEventListener('click', loadAccess);
@@ -129,6 +167,13 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#btnLogDownload').addEventListener('click', () => { location.href = '/api/logs/download'; });
 
   loadAccess();
+  loadAudit().catch(() => {});
+  $('#btnAuditRefresh').addEventListener('click', () => loadAudit().catch((e) => toast(e.message)));
+  let auditTimer = null;
+  $('#auditQ').addEventListener('input', () => {
+    clearTimeout(auditTimer);
+    auditTimer = setTimeout(() => { auditPage = 1; loadAudit().catch(() => {}); }, 300);
+  });
   openLogStream(appendLog);
   setInterval(() => {
     if (!$('#accessAuto').checked) return;

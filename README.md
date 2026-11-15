@@ -7,7 +7,7 @@
 > changes, no open ports**. Multiple tunnels can run at the same time (quick + named, or several
 > accounts and domains).
 
-- Version: **v0.8.1**
+- Version: **v0.9.0**
 - Works with: NAS, self-hosted sites, Home Assistant, Jellyfin, Gitea, Immich, qBittorrent… any HTTP service
 - Stack: `node:http` backend (zero dependencies), hand-written frontend (no build step), `Caddy` for routing,
   `cloudflared` for the tunnel — one `docker compose up` and you are done
@@ -291,6 +291,16 @@ Notifications support `generic` (JSON POST), DingTalk, Feishu and Bark, with per
 A ready-made Grafana dashboard lives in [`docs/grafana-dashboard.json`](docs/grafana-dashboard.json);
 scrape config and alerts are documented in [`docs/PROMETHEUS-GRAFANA.md`](docs/PROMETHEUS-GRAFANA.md).
 
+### 8.4 Audit log
+
+Every state-changing request (`POST`/`PUT`/`DELETE`) and every failed `/api` call is recorded with
+**who** (panel user, read-only user, or “not logged in”), **from which IP** (real client IP behind the tunnel),
+**what** (human-readable action such as “修改代理规则”), the status code and duration.
+
+- Stored in memory (last 500) **and** appended to `data/audit.log` (JSON Lines, rotated at 2 MB / 3000 lines).
+- `GET /api/audit?limit=200&q=keyword` — search by person, IP, action or path.
+- Plain `GET` reads are **not** recorded, so browsing the panel never floods the log.
+
 ## 9. Security
 
 - **Panel login**: HTTP Basic. 8 wrong attempts from one IP → 10 minute lock (correct credentials still work).
@@ -353,7 +363,8 @@ cf-tunnel-panel/
 ├── docker-compose.yml       # three containers, host network
 ├── Dockerfile               # node:22 + cloudflared binary
 ├── caddy.bootstrap.json     # initial Caddy config
-├── src/server.js            # backend (node:http, zero deps)
+├── src/server.js            # HTTP router + wiring only (~800 lines)
+├── src/core/                # backend split by responsibility (see below)
 ├── src/web/                 # multi-page frontend (no build step)
 │   ├── assets/app.css       # design system: dark/light, responsive
 │   ├── assets/*.js          # one script per page
@@ -365,7 +376,27 @@ cf-tunnel-panel/
 └── docs/                    # ROADMAP, Prometheus/Grafana, rate limiting
 ```
 
-Tests (132 assertions total):
+Backend modules (`src/core/`, split out of the 2500-line `server.js` in v0.9.0):
+
+| Module | Responsibility |
+| --- | --- |
+| `paths.js` | paths, constants, Cloudflare IP ranges |
+| `util.js` | log ring buffer, JSON helpers, parsers, rate limit, security headers |
+| `state.js` | state shape, migration, validation, persistence + rolling backups |
+| `registry.js` | tunnel runtime registry (Map + read-only accessors) |
+| `auth.js` | panel auth (Basic, read-only account, brute-force lockout) |
+| `caddy.js` | turns rules into a Caddy JSON config (routing, maintenance page) |
+| `pusher.js` | pushes that config to Caddy (debounced, records failures) |
+| `tunnels.js` | cloudflared process pool (start/stop, 429 backoff, fatal errors) |
+| `insight.js` | access stats, hourly buckets, match simulation, shadow analysis, upstream health, metrics |
+| `bench.js` / `probe.js` | speed test endpoints / upstream + WebSocket probing |
+| `integrations.js` | Docker API, Cloudflare API |
+| `notify.js` | webhook pushes, cooldown, quiet hours, history |
+| `web.js` | page shell + static assets (ETag/gzip) |
+| `monitor.js` | background patrol (status sampling, expired shares) |
+| `audit.js` | audit log (who changed what, from where) |
+
+Tests (143 assertions total):
 
 ```bash
 export PANEL_PASS='your-panel-password'   # tests attach credentials automatically
@@ -373,11 +404,11 @@ npm i -D jsdom
 npm test                                  # = npm run test:api && npm run test:dom
 ```
 
-- `test/api.test.mjs` — 78 endpoint assertions: exits, rules, upstream probing, match simulation, share links,
+- `test/api.test.mjs` — 86 endpoint assertions: exits, rules, upstream probing, match simulation, share links,
   maintenance mode, blacklist, backoff, WebSocket test, backup restore/diff, export/import, Cloudflare API,
-  brute-force lockout, read-only account, traffic/history/notify/system. It inserts a temporary `/qa` probe
+  brute-force lockout, read-only account, traffic/history/notify/system, audit log. It inserts a temporary `/qa` probe
   rule and removes it afterwards; it never changes your password.
-- `test/dom.test.cjs` — 54 page assertions in jsdom: six pages load without script errors, theme toggle,
+- `test/dom.test.cjs` — 57 page assertions in jsdom: six pages load without script errors, theme toggle,
   polling does not clobber typing, rule search, inline import, scope memory, observe filters, log pause,
   charts, Ctrl+K palette, read-only form, system info.
 

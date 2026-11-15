@@ -1,0 +1,257 @@
+'use strict';
+/**
+ * Caddy 配置生成（分流规则、维护页）
+ * 从 src/server.js 按职责拆出（v0.9.0），仅做搬运，行为不变。
+ */
+
+const http=require('http'); const https=require('https'); const crypto=require('crypto');
+const zlib=require('zlib'); const net=require('net'); const fs=require('fs');
+const path=require('path'); const os=require('os'); const { spawn }=require('child_process');
+const QRCode=require('qrcode'); const bcrypt=require('bcryptjs');
+
+const { CLOUDFLARE_DEFAULT_RANGES, LB_POLICIES } = require('./paths');
+const { log, parseCidrs, parseHeaderLines, parseUpstream } = require('./util');
+const _state = require('./state');
+const state = _state.stateProxy;
+const { runtimes, tunnelById } = require('./registry');
+function buildRouteHandlers(r) {
+  const handle = [];
+
+  // 1) 基础认证（口令在保存时已转 bcrypt 哈希）
+  if (r.basicAuth && r.basicAuth.user && r.basicAuth.hash) {
+    handle.push({
+      handler: 'authentication',
+      providers: {
+        http_basic: {
+          hash: { algorithm: 'bcrypt' },
+          accounts: [{ username: r.basicAuth.user, password: r.basicAuth.hash }],
+        },
+      },
+    });
+  }
+
+  // 2) 剥离路径前缀
+  if (r.strip && r.path) {
+    const prefix = r.path.replace(/\*+$/, '').replace(/\/+$/, '');
+    if (prefix) handle.push({ handler: 'rewrite', strip_path_prefix: prefix });
+  }
+
+  // 3) 反向代理
+  const main = parseUpstream(r.upstream);
+  const upstreams = [{ dial: main.dial }];
+  if (r.backupUpstream) upstreams.push({ dial: parseUpstream(r.backupUpstream).dial });
+
+  const proxy = { handler: 'reverse_proxy', upstreams };
+  const transport = { protocol: 'http' };
+  if (main.scheme === 'https') transport.tls = {};
+  if (r.timeoutSec > 0) transport.response_header_timeout = r.timeoutSec * 1e9;
+  proxy.transport = transport;
+  if (r.timeoutSec > 0) proxy.flush_interval = 0;
+
+  if (upstreams.length > 1) {
+    // 注意：Caddy v2.11 起字段名是 selection_policy（老写法 selection 会 400 unknown field）
+    proxy.load_balancing = {
+      selection_policy: { policy: LB_POLICIES.includes(r.lbPolicy) ? r.lbPolicy : 'round_robin' },
+      try_duration: (r.lbTryDuration > 0 ? r.lbTryDuration : 10) * 1e9,
+      try_interval: 500e6,
+    };
+  }
+
+  const reqSet = Object.assign(
+    {
+      'X-Forwarded-Host': ['{http.request.host}'],
+      'X-Real-IP': ['{http.request.remote.host}'],
+      'X-Panel-Route': [r.name || r.id],
+    },
+    parseHeaderLines(r.headersReq),
+  );
+  proxy.headers = { request: { set: reqSet } };
+  const resSet = parseHeaderLines(r.headersRes);
+  if (Object.keys(resSet).length) proxy.headers.response = { set: resSet };
+
+  handle.push(proxy);
+  return handle;
+}
+
+// 某个出口对外的域名：命名隧道取配置里的 publicHostname，快速隧道取运行时拿到的 trycloudflare 域名
+function tunnelHostOf(id) {
+  const t = tunnelById(id);
+  if (!t) return '';
+  if (t.mode === 'named') return String(t.publicHostname || '').trim();
+  const rt = runtimes.get(id);
+  const m = String((rt && rt.url) || '').match(/^https?:\/\/([^/:]+)/i);
+  return m ? m[1] : '';
+}
+
+function buildMatch(r, forcedHost) {
+  const m = {};
+  const explicit = String(r.host || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const hosts = explicit.length ? explicit : (forcedHost ? [forcedHost] : []);
+  if (hosts.length) m.host = hosts;
+  if (r.path) m.path = [r.path.endsWith('*') ? r.path : r.path.replace(/\/+$/, '') + '*'];
+  if (r.matchMethod) m.method = String(r.matchMethod).split(',').map((s) => s.trim()).filter(Boolean);
+  const cidrs = parseCidrs(r.ipAllow);
+  if (cidrs.length) m.remote_ip = { ranges: cidrs };
+  return m;
+}
+
+let lastSkipped = [];
+function buildCaddyConfig() {
+  const routes = [];
+  let securityTail = 0;
+  lastSkipped = [];
+
+  // ① IP 黑名单：最先匹配，直接 403（连"这里有没有服务"都不暴露）
+  let deny = [];
+  try { deny = parseCidrs(state.settings.security && state.settings.security.ipDeny); } catch { deny = []; }
+  if (deny.length) {
+    routes.push({
+      match: [{ remote_ip: { ranges: deny } }],
+      handle: [{
+        handler: 'static_response', status_code: 403,
+        headers: { 'Content-Type': ['text/plain; charset=utf-8'] }, body: '403 forbidden',
+      }],
+      terminal: true,
+    });
+  }
+
+  // ② 限流：只有自定义 Caddy 镜像（带 caddy-ratelimit）时才下发，否则会 load 失败
+  const rl = (state.settings.security || {}).rateLimit || {};
+  if (rl.enabled && Number(rl.rps) > 0) {
+    if (process.env.CADDY_RATELIMIT === '1') {
+      routes.push({
+        handle: [{
+          handler: 'rate_limit',
+          zones: [{
+            key: '{remote_host}',
+            events: Math.max(1, Math.round(Number(rl.rps))),
+            window: '1s',
+          }],
+        }],
+        terminal: false,
+      });
+    } else if (!global.__rlWarned) {
+      global.__rlWarned = true;
+      log('已勾选限流，但当前 Caddy 不带 rate_limit 模块 —— 见 docs/RATELIMIT.md 换自定义镜像并设 CADDY_RATELIMIT=1', 'panel');
+    }
+  }
+
+  // ③ 维护模式：整站 503，隧道和出口不用动，关掉即恢复
+  const maint = state.settings.maintenance || {};
+  if (maint.on) {
+    routes.push({
+      handle: [{
+        handler: 'static_response',
+        status_code: 503,
+        headers: {
+          'Content-Type': ['text/html; charset=utf-8'],
+          'Retry-After': [String(Math.max(1, Math.min(86400, Number(maint.retryAfter) || 300)))],
+          'Cache-Control': ['no-store'],
+        },
+        body: maintPage(String(maint.body || '站点正在维护，请稍后再来。')),
+      }],
+      terminal: true,
+    });
+  } else {
+    securityTail = routes.length; // 分享链接要插在「安全层之后、业务规则之前」
+    for (const r of state.routes.filter((x) => x.enabled && x.upstream)) {
+      let host = '';
+      if (r.tunnelId) {
+        host = tunnelHostOf(r.tunnelId);
+        if (!host) {
+          const t = tunnelById(r.tunnelId);
+          lastSkipped.push({ id: r.id, name: r.name, path: r.path, tunnelId: r.tunnelId,
+            reason: t ? `出口「${t.name}」还没有公网域名（先启动它）` : '所属出口已被删除' });
+          continue;
+        }
+      }
+      routes.push({ match: [buildMatch(r, host)], handle: buildRouteHandlers(r), terminal: true });
+    }
+  }
+
+  // ③ 一次性分享链接：/s/<token>/… 直通某个上游，到期由 janitor 删除
+  const now = Date.now();
+  const shareRoutes = [];
+  for (const s of (state.shares || []).filter((x) => x && x.token && x.expiresAt > now && x.upstream)) {
+    let up = null;
+    try { up = parseUpstream(s.upstream); } catch { up = null; }
+    if (!up) continue;
+    shareRoutes.push({
+      match: [{ path: [`/s/${s.token}`, `/s/${s.token}/*`] }],
+      handle: [
+        { handler: 'rewrite', strip_path_prefix: `/s/${s.token}` },
+        { handler: 'reverse_proxy', upstreams: [{ dial: up.dial }] },
+      ],
+      terminal: true,
+    });
+  }
+  // 分享链接必须排在业务规则前面：否则任何 path=/ 的兜底规则（面板、静态站）会先吃掉 /s/<token>
+  if (shareRoutes.length) routes.splice(securityTail, 0, ...shareRoutes);
+
+  routes.push({
+    handle: [
+      {
+        handler: 'static_response',
+        status_code: 404,
+        headers: { 'Content-Type': ['text/plain; charset=utf-8'] },
+        body: String(state.settings.notFoundBody || 'not found'),
+      },
+    ],
+  });
+
+  return {
+    admin: { listen: '127.0.0.1:2019', origins: [CADDY_ADMIN, 'http://localhost:2019'] },
+    logging: {
+      logs: {
+        default: {
+          level: 'INFO',
+          encoder: { format: 'json' },
+          // 访问日志落文件，面板据此做「最近请求 / 状态码 / 命中了哪条规则」统计
+          writer: { output: 'file', filename: accessLogPathForCaddy(), roll_size_mb: 10, roll_keep: 3 },
+        },
+      },
+    },
+    apps: {
+      http: {
+        servers: {
+          main: {
+            listen: [state.settings.caddyListen || ':8080'],
+            automatic_https: { disable: true },
+            logs: {}, // 打开 access log（写进上面的 default logger）
+            // 流量经 Cloudflare 隧道进来时，TCP 对端是 cloudflared/边缘节点，
+            // 真实访客 IP 在 CF-Connecting-IP 里。不配这两项，IP 白名单/黑名单
+            // 会把所有人当成同一个 IP（127.0.0.1 或某个边缘地址）。
+            trusted_proxies: { source: 'static', ranges: cloudflareRanges() },
+            client_ip_headers: ['CF-Connecting-IP'],
+            routes,
+          },
+        },
+      },
+    },
+  };
+}
+
+function maintPage(body) {
+  const esc = String(body).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>维护中</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0f172a;color:#e2e8f0;
+font:16px/1.7 system-ui,-apple-system,"PingFang SC","Microsoft Yahei",sans-serif;padding:24px}
+.box{max-width:560px;text-align:center}.ic{font-size:44px;margin-bottom:8px}
+h1{font-size:20px;margin:0 0 10px}p{color:#94a3b8;white-space:pre-wrap;margin:0}</style>
+<div class="box"><div class="ic">🛠️</div><h1>站点维护中</h1><p>${esc}</p></div>`;
+}
+
+/** 是否落在静默时段（支持跨零点，如 23:00-07:00；可逗号分隔多段）。 */
+const caddy = { ok: false, error: null, lastPush: 0, routeCount: 0 };
+
+function cloudflareRanges() {
+  const custom = String(process.env.CLOUDFLARE_IPS || '').trim();
+  if (!custom) return CLOUDFLARE_DEFAULT_RANGES;
+  return custom.split(',').map((x) => x.trim()).filter(Boolean);
+}
+
+
+const { CADDY_ADMIN, accessLogPathForCaddy } = require('./paths');
+
+module.exports = { buildCaddyConfig, buildMatch, buildRouteHandlers, caddy, cloudflareRanges, lastSkipped, maintPage, tunnelHostOf };

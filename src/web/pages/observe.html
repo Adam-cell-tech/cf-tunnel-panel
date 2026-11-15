@@ -32,6 +32,19 @@
     <div class="bd tight" id="accessBody"><div class="empty">读取中…</div></div>
   </div>
 
+
+  <div class="card">
+    <div class="hd">
+      <h2>审计日志</h2>
+      <div class="right">
+        <input id="auditQ" placeholder="搜人 / IP / 动作…" style="width:170px" aria-label="搜索审计日志" />
+        <button class="sm ghost" id="btnAuditRefresh">刷新</button>
+      </div>
+    </div>
+    <p class="hint" style="margin:0 0 8px">谁在什么时候、从哪个 IP、改了什么。只记"改动作 + 失败请求"，查看类请求不记，避免把日志刷爆。</p>
+    <div class="bd tight" id="auditBody"><div class="empty">读取中…</div></div>
+  </div>
+
   <div class="card flush">
     <div class="hd">
       <h2>面板日志</h2>

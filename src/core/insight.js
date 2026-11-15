@@ -1,0 +1,344 @@
+'use strict';
+/**
+ * 可观测：访问统计、小时聚合、模拟匹配、遮蔽分析、上游健康、指标与徽章
+ * 从 src/server.js 按职责拆出（v0.9.0），仅做搬运，行为不变。
+ */
+
+const http=require('http'); const https=require('https'); const crypto=require('crypto');
+const zlib=require('zlib'); const net=require('net'); const fs=require('fs');
+const path=require('path'); const os=require('os'); const { spawn }=require('child_process');
+const QRCode=require('qrcode'); const bcrypt=require('bcryptjs');
+
+const { ACCESS_LOG_FILE, BACKUP_DIR, DATA_DIR, STATE_FILE, VERSION } = require('./paths');
+const _state = require('./state');
+const state = _state.stateProxy;
+const { tunnelById, tunnelRt } = require('./registry');
+const { caddy, tunnelHostOf } = require('./caddy');
+function trafficByHour(hours = 12) {
+  const now = Date.now();
+  const start = now - hours * 3600 * 1000;
+  const buckets = new Map();
+  for (let i = 0; i < hours; i += 1) {
+    const t = start + i * 3600 * 1000;
+    const key = new Date(t).setMinutes(0, 0, 0);
+    buckets.set(key, { t: key, total: 0, ok: 0, err: 0 });
+  }
+  let text = '';
+  try {
+    const st = fs.statSync(ACCESS_LOG_FILE);
+    const from = Math.max(0, st.size - 2 * 1024 * 1024);
+    const fd = fs.openSync(ACCESS_LOG_FILE, 'r');
+    const buf = Buffer.alloc(st.size - from);
+    fs.readSync(fd, buf, 0, buf.length, from);
+    fs.closeSync(fd);
+    text = buf.toString('utf8');
+  } catch { return { available: false, hours, buckets: [] }; }
+  for (const line of text.split('\n')) {
+    if (!line.trim() || !line.includes('http.log.access')) continue;
+    let o;
+    try { o = JSON.parse(line); } catch { continue; }
+    // Caddy 的 ts 是 Unix 秒（浮点），不是 ISO 字符串
+    const ts = typeof o.ts === 'number' ? o.ts * 1000 : Date.parse(String(o.ts || ''));
+    if (!Number.isFinite(ts) || ts < start) continue;
+    const key = new Date(ts).setMinutes(0, 0, 0);
+    const b = buckets.get(key);
+    if (!b) continue;
+    b.total += 1;
+    const code = Number((o.status || 0));
+    if (code >= 400) b.err += 1; else b.ok += 1;
+  }
+  return { available: true, hours, buckets: [...buckets.values()] };
+}
+
+/** 面板自身占用情况：状态文件、备份数、日志大小、内存。 */
+function systemInfo() {
+  const sizeOf = (f) => { try { return fs.statSync(f).size; } catch { return 0; } };
+  let backups = 0;
+  try { backups = fs.readdirSync(BACKUP_DIR).filter((f) => f.endsWith('.json')).length; } catch {}
+  return {
+    version: VERSION,
+    node: process.version,
+    uptimeSec: Math.round(process.uptime()),
+    startedAt: Date.now() - Math.round(process.uptime() * 1000),
+    dataDir: DATA_DIR,
+    stateBytes: sizeOf(STATE_FILE),
+    backupCount: backups,
+    logBytes: sizeOf(ACCESS_LOG_FILE),
+    caddyLogBytes: sizeOf(ACCESS_LOG_FILE),
+    memMB: Math.round(process.memoryUsage().rss / 1048576),
+    host: os.hostname(),
+    platform: `${os.type()} ${os.release()} ${os.arch()}`,
+  };
+}
+
+function readAccess(limit = 100) {
+  let raw = '';
+  try {
+    const st = fs.statSync(ACCESS_LOG_FILE);
+    const maxBytes = 512 * 1024;
+    const start = Math.max(0, st.size - maxBytes);
+    const fd = fs.openSync(ACCESS_LOG_FILE, 'r');
+    const buf = Buffer.alloc(Math.min(maxBytes, st.size - start));
+    fs.readSync(fd, buf, 0, buf.length, start);
+    fs.closeSync(fd);
+    raw = buf.toString('utf8');
+  } catch {
+    return { ok: true, available: false, file: ACCESS_LOG_FILE, rows: [], summary: null,
+      note: '还没有访问日志（Caddy 需重启一次以启用 access log，或暂时没有流量）' };
+  }
+  const lines = raw.split('\n').filter((l) => l.trim().startsWith('{'));
+  const rows = [];
+  for (const line of lines) {
+    let o;
+    try { o = JSON.parse(line); } catch { continue; }
+    // 只收 HTTP 访问日志；同一文件里还混着 admin / tls 等其它 logger 的行
+    if (!String(o.logger || '').includes('http.log.access')) continue;
+    const req = o.request || {};
+    rows.push({
+      ts: o.ts ? new Date(o.ts * 1000).toISOString() : '',
+      host: req.host || '',
+      method: req.method || '',
+      uri: req.uri || '',
+      status: Number(o.status) || 0,
+      durMs: o.duration ? Math.round(o.duration * 1000) : 0,
+      size: Number(o.size) || 0,
+      ip: req.remote_ip || '',
+      ua: (req.headers && req.headers['User-Agent'] && req.headers['User-Agent'][0]) || '',
+    });
+  }
+  const tail = rows.slice(-limit).reverse();
+  const byStatus = {};
+  const byPath = {};
+  const byHost = {};
+  for (const r of tail) {
+    const c = r.status >= 500 ? '5xx' : r.status >= 400 ? '4xx' : r.status >= 300 ? '3xx' : r.status >= 200 ? '2xx' : '其他';
+    byStatus[c] = (byStatus[c] || 0) + 1;
+    const key = (r.uri || '/').split('?')[0];
+    byPath[key] = (byPath[key] || 0) + 1;
+    byHost[r.host || '(无 Host)'] = (byHost[r.host || '(无 Host)'] || 0) + 1;
+  }
+  const top = (obj, n = 6) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, v]) => ({ k, v }));
+  return {
+    ok: true, available: true, file: ACCESS_LOG_FILE, rows: tail,
+    summary: { total: tail.length, byStatus, topPaths: top(byPath), topHosts: top(byHost) },
+  };
+}
+
+// ---------------------------------------------------------------- 模拟匹配
+/** 用面板自己的规则表模拟一次「这个路径会命中哪条规则」，不经过 Caddy。 */
+function simulateMatch(pathname, host, method) {
+  let pn = String(pathname || '/').trim();
+  if (!pn.startsWith('/')) pn = '/' + pn;
+  const h = String(host || '').trim().toLowerCase();
+  const m = String(method || 'GET').trim().toUpperCase();
+  const list = state.routes.map((r, idx) => ({ r, idx })).filter((x) => x.r.enabled && x.r.upstream);
+  for (let i = 0; i < list.length; i++) {
+    const r = list[i].r;
+    let hosts = String(r.host || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+    if (!hosts.length && r.tunnelId) {
+      const fh = tunnelHostOf(r.tunnelId);
+      if (fh) hosts = [fh.toLowerCase()];
+      // 出口当前没有公网域名（没起/被删）时，Caddy 里这条规则根本不会下发 —— 模拟也要跳过，
+      // 否则会把"专属规则"当成"任意域名都匹配"，和真实行为不符。
+      else continue;
+    }
+    if (hosts.length) {
+      if (!h) return { ok: true, matched: false, needHost: true, hosts, note: '这条规则限定了域名，请填写要模拟的域名' };
+      const okHost = hosts.some((x) => (x.startsWith('*.') ? h.endsWith(x.slice(1)) : x === h));
+      if (!okHost) continue;
+    }
+    if (r.matchMethod) {
+      const ms = String(r.matchMethod).split(',').map((x) => x.trim().toUpperCase()).filter(Boolean);
+      if (ms.length && !ms.includes(m)) continue;
+    }
+    const rp = String(r.path || '');
+    const prefix = rp.endsWith('*') ? rp.slice(0, -1) : rp.replace(/\/+$/, '');
+    if (prefix && !pn.startsWith(prefix)) continue;
+    const t = r.tunnelId ? tunnelById(r.tunnelId) : null;
+    return {
+      ok: true, matched: true, index: i + 1, ofIndex: list[i].idx, total: list.length,
+      rule: { id: r.id, name: r.name, path: r.path, host: r.host, upstream: r.upstream, backupUpstream: r.backupUpstream,
+        strip: !!r.strip, basicAuth: !!(r.basicAuth && r.basicAuth.user), ipAllow: r.ipAllow || '',
+        matchMethod: r.matchMethod || '', timeoutSec: r.timeoutSec || 0, note: r.note || '' },
+      scope: t ? `出口：${t.name || t.id}` : '全局',
+      note: '',
+    };
+  }
+  return { ok: true, matched: false, index: 0, total: list.length,
+    note: '没有任何规则命中 —— 会落到自定义 404（这条路径在 Caddy 里被拒绝了）' };
+}
+
+/** 每条规则用自己的路径+域名跑一遍模拟，找出被前面规则挡住的（永远不会生效的）。 */
+function shadowReport() {
+  const out = [];
+  state.routes.forEach((r, idx) => {
+    if (!r.enabled || !r.upstream) return;
+    // 绑定到某个出口、而那个出口当前还没有公网域名时，这条规则压根没下发给 Caddy，
+    // 它只会出现在 skipped 里，不能算「被谁拦住」（否则会误报）。
+    if (r.tunnelId && !tunnelHostOf(r.tunnelId)) return;
+    if (!String(r.host || '').trim() && r.tunnelId && !tunnelHostOf(r.tunnelId)) return;
+    const host = String(r.host || '').split(',')[0].trim() || (r.tunnelId ? tunnelHostOf(r.tunnelId) : '') || '';
+    const res = simulateMatch(r.path || '/', host, String(r.matchMethod || 'GET').split(',')[0] || 'GET');
+    if (res.needHost) return;
+    if (!res.matched) { out.push({ index: idx, id: r.id, name: r.name, path: r.path, reason: '没有命中任何规则' }); return; }
+    if (res.ofIndex !== idx) {
+      const by = state.routes[res.ofIndex] || {};
+      out.push({ index: idx, id: r.id, name: r.name, path: r.path, byIndex: res.ofIndex,
+        byName: by.name || by.path || '前面的规则', reason: `被「${by.name || by.path}」拦住` });
+    }
+  });
+  return out;
+}
+
+// ---------------------------------------------------------------- 上游健康（定时轻量 TCP 探测）
+function upstreamTarget(raw) {
+  try {
+    const u = new URL(String(raw || '').trim());
+    if (!/^https?:$/.test(u.protocol)) return null;
+    return { url: u.origin + u.pathname.replace(/\/+$/, ''), host: u.hostname, port: Number(u.port || (u.protocol === 'https:' ? 443 : 80)) };
+  } catch { return null; }
+}
+
+function tcpProbeOnce(host, port, timeout = 900) {
+  return new Promise((resolve) => {
+    const t0 = Date.now();
+    const sock = net.connect({ host, port });
+    const fin = (ok, error) => { try { sock.destroy(); } catch {} resolve({ ok, error: error || null, ms: Date.now() - t0 }); };
+    sock.setTimeout(timeout, () => fin(false, 'timeout'));
+    sock.once('connect', () => fin(true));
+    sock.once('error', (e) => fin(false, e.code === 'ECONNREFUSED' ? 'connection refused' : e.code || e.message));
+  });
+}
+
+async function refreshUpstreamHealth() {
+  const targets = new Map();
+  for (const r of state.routes) {
+    if (r.enabled === false) continue;
+    for (const raw of [r.upstream, r.backupUpstream]) {
+      const t = upstreamTarget(raw);
+      if (t && !targets.has(t.url)) targets.set(t.url, t);
+    }
+  }
+  for (const [url, t] of targets) {
+    const res = await tcpProbeOnce(t.host, t.port);
+    upstreamHealth.set(url, { url, ok: res.ok, ms: res.ms, error: res.error, at: Date.now() });
+  }
+  for (const url of Array.from(upstreamHealth.keys())) if (!targets.has(url)) upstreamHealth.delete(url);
+}
+
+/** 规则上游可能带路径前缀，匹配时按 origin+path 前缀宽松比对。 */
+function healthOf(raw) {
+  const t = upstreamTarget(raw);
+  if (!t) return null;
+  if (upstreamHealth.has(t.url)) return upstreamHealth.get(t.url);
+  for (const [url, v] of upstreamHealth) if (t.url.startsWith(url)) return v;
+  return null;
+}
+
+// ---------------------------------------------------------------- 运行同步
+/** 恢复/导入配置后让运行时跟上：新增的启动、删掉的停掉、参数变了的重启。 */
+function requestsLastMinute() {
+  try {
+    const st = fs.statSync(ACCESS_LOG_FILE);
+    const span = Math.min(96 * 1024, st.size);
+    const fd = fs.openSync(ACCESS_LOG_FILE, 'r');
+    const buf = Buffer.alloc(span);
+    fs.readSync(fd, buf, 0, span, Math.max(0, st.size - span));
+    fs.closeSync(fd);
+    const since = Date.now() - 60000;
+    let n = 0;
+    for (const line of buf.toString('utf8').split('\n')) {
+      if (!line.trim().startsWith('{')) continue;
+      let o; try { o = JSON.parse(line); } catch { continue; }
+      if (!String(o.logger || '').includes('http.log.access')) continue;
+      const ts = typeof o.ts === 'number' ? o.ts * 1000 : Date.parse(String(o.ts || ''));
+      if (Number.isFinite(ts) && ts >= since) n += 1;
+    }
+    return n;
+  } catch { return null; }
+}
+
+function sampleHistory() {
+  const running = state.tunnels.filter((t) => (tunnelRt(t.id) || {}).status === 'running').length;
+  rtHistory.push({ t: Date.now(), running, total: state.tunnels.length, caddyOk: caddy.ok ? 1 : 0, req: requestsLastMinute() });
+  if (rtHistory.length > HISTORY_MAX) rtHistory.splice(0, rtHistory.length - HISTORY_MAX);
+}
+
+const HISTORY_MAX = 240;       // 每分钟一个点，240 点 = 4 小时
+const rtHistory = [];          // [{t, running, total, caddyOk, req}]
+let histTick = 0;
+
+// 最近一分钟的请求数（只读日志尾部 96KB，够一分钟用）
+function metricsText() {
+  const lines = [];
+  const run = state.tunnels.filter((t) => tunnelRt(t.id).status === 'running').length;
+  lines.push('# HELP cf_tunnel_panel_up 面板本身是否在线');
+  lines.push('# TYPE cf_tunnel_panel_up gauge');
+  lines.push('cf_tunnel_panel_up 1');
+  lines.push('# HELP cf_tunnel_running 正在运行的隧道出口数');
+  lines.push('# TYPE cf_tunnel_running gauge');
+  lines.push(`cf_tunnel_running ${run}`);
+  lines.push('# HELP cf_tunnel_routes 生效的代理规则数');
+  lines.push('# TYPE cf_tunnel_routes gauge');
+  lines.push(`cf_tunnel_routes ${caddy.routeCount || 0}`);
+  lines.push('# HELP cf_caddy_ok Caddy 配置是否下发成功');
+  lines.push('# TYPE cf_caddy_ok gauge');
+  lines.push('cf_caddy_ok ' + (caddy.ok ? 1 : 0));
+  lines.push('# HELP cf_tunnel_up 单个出口是否在线（1=在线）');
+  lines.push('# TYPE cf_tunnel_up gauge');
+  for (const t of state.tunnels) {
+    const rt = tunnelRt(t.id);
+    lines.push(`cf_tunnel_up{id="${t.id}",name="${String(t.name).replace(/"/g, '')}"} ${rt.status === 'running' ? 1 : 0}`);
+  }
+  const acc = readAccess(200);
+  if (acc.available) {
+    lines.push('# HELP cf_tunnel_requests_total 访问日志里的请求数（按状态码分组）');
+    lines.push('# TYPE cf_tunnel_requests_total counter');
+    for (const [k, v] of Object.entries((acc.summary && acc.summary.byStatus) || {})) lines.push(`cf_tunnel_requests_total{status="${k}"} ${v}`);
+  }
+  return lines.join('\n') + '\n';
+}
+
+// ---------------------------------------------------------------- Cloudflare API
+function badgeSvg(label, value, ok) {
+  const color = ok ? '#16a34a' : '#dc2626';
+  const lw = 8 + label.length * 6.6, vw = 12 + String(value).length * 6.6;
+  const w = Math.round(lw + vw);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="20" role="img" aria-label="${label}: ${value}">
+<rect width="${w}" height="20" rx="3" fill="#555"/><rect x="${lw}" width="${vw}" height="20" rx="3" fill="${color}"/>
+<rect x="${lw}" width="4" height="20" fill="${color}"/><g fill="#fff" font-family="DejaVu Sans,Verdana,sans-serif" font-size="11">
+<text x="6" y="14">${label}</text><text x="${lw + 6}" y="14">${value}</text></g></svg>`;
+}
+
+function diffRoutes(backupRoutes, currentRoutes) {
+  const key = (r) => `${r.path || '/'}|${r.tunnelId || ''}|${r.host || ''}`;
+  const bm = new Map((backupRoutes || []).map((r) => [r.id, r]));
+  const cm = new Map((currentRoutes || []).map((r) => [r.id, r]));
+  const skip = new Set(['id']);
+  const added = [];
+  const removed = [];
+  const changed = [];
+  for (const [id, r] of cm) {
+    const b = bm.get(id);
+    if (!b) { added.push({ id, name: r.name, path: r.path, key: key(r) }); continue; }
+    const fields = [];
+    for (const k of new Set([...Object.keys(b), ...Object.keys(r)])) {
+      if (skip.has(k)) continue;
+      const a = JSON.stringify(b[k] === undefined ? null : b[k]);
+      const c = JSON.stringify(r[k] === undefined ? null : r[k]);
+      if (a !== c) fields.push(k);
+    }
+    if (fields.length) changed.push({ id, name: r.name, path: r.path, fields });
+  }
+  for (const [id, b] of bm) {
+    if (!cm.has(id)) removed.push({ id, name: b.name, path: b.path, key: key(b) });
+  }
+  return { added, removed, changed };
+}
+
+
+// ---------------------------------------------------------------- 徽章 / metrics
+
+const upstreamHealth = new Map(); // upstream url -> { ok, ms, error, at }
+
+module.exports = { upstreamHealth, HISTORY_MAX, badgeSvg, diffRoutes, healthOf, histTick, metricsText, readAccess, refreshUpstreamHealth, requestsLastMinute, rtHistory, sampleHistory, shadowReport, simulateMatch, systemInfo, tcpProbeOnce, trafficByHour, upstreamTarget };

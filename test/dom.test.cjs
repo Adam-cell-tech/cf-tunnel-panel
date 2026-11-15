@@ -197,6 +197,16 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
       chk('观测: 暂停后按钮变「继续」', /继续/.test(pz.textContent) && pz.getAttribute('aria-pressed') === 'true', pz.textContent);
     }
     chk('观测: 有只看错误开关', !!doc.querySelector('#logOnlyErr'), '');
+    chk('观测: 有审计日志卡片', !!doc.querySelector('#auditBody') && !!doc.querySelector('#auditQ'), '');
+    await new Promise((r) => setTimeout(r, 600));
+    const ab = doc.querySelector('#auditBody');
+    chk('观测: 审计表渲染出记录', !!ab && !!ab.querySelector('table, .empty'), ab ? ab.textContent.trim().slice(0, 30) : '');
+    const ar = doc.querySelector('#btnAuditRefresh');
+    if (ar) {
+      ar.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 400));
+      chk('观测: 审计刷新不报错', errors.length === 0, errors.join(' | ').slice(0, 160));
+    }
     chk('观测: 无脚本错误', errors.length === 0, errors.join(' | ').slice(0, 160));
   }
 
