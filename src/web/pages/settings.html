@@ -63,6 +63,7 @@
         <label class="inline"><input class="chk" type="checkbox" id="evDown" /> 出口掉线</label>
         <label class="inline"><input class="chk" type="checkbox" id="evUrl" /> 快速隧道换域名</label>
         <label class="inline"><input class="chk" type="checkbox" id="evCaddy" /> Caddy 下发失败</label>
+        <label class="inline"><input class="chk" type="checkbox" id="evSessionIp" /> 登录会话换 IP</label>
         <button class="sm ghost" id="btnNotifyTest">发测试通知</button>
         <button class="sm ghost" id="btnNotifyClear">清空地址</button>
         <span class="muted" id="notifyMsg"></span>
@@ -83,9 +84,9 @@
 
   <div class="card">
     <div class="hd"><h2>登录会话</h2><div class="sub">谁在什么设备上登录着，可以逐个踢掉</div>
-      <div class="right"><button class="sm" id="btnSessRefresh">刷新</button><button class="sm ghost" id="btnSessKickOthers">踢掉其它设备</button></div></div>
+      <div class="right"><button class="sm" id="btnSessRefresh">刷新</button><button class="sm ghost" id="btnSessKickOthers">踢掉其它设备</button><button class="sm ghost" id="btnSessRevokeAll">退出全部设备</button></div></div>
     <div class="bd">
-      <div class="hint" id="sessMsg">一个会话 = 一次登录：7 天免密、12 小时不动就失效。踢掉后那台设备需要重新登录。</div>
+      <div class="hint" id="sessMsg">一个会话 = 一次登录：7 天免密、12 小时不动就失效。踢掉后那台设备需要重新登录。同一会话换了来源 IP 会打「换过 IP」标记并推一条通知（改面板口令会自动踢掉所有会话）。</div>
       <div class="tbl-wrap"><table class="stackable" id="sessTable"><thead><tr><th>账号</th><th>角色</th><th>来源 IP</th><th>设备</th><th>登录时间</th><th>最后活动</th><th></th></tr></thead><tbody></tbody></table></div>
     </div>
   </div>

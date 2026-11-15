@@ -371,6 +371,27 @@ Everything the panel does is a plain JSON endpoint, so you can script it.
 
 Configuration is stored in `data/state.json` (mode `0600`, 20 rolling backups in `data/backups/`).
 
+### 10.3 Login sessions (more controllable than Basic)
+
+| Method | Use case | Revocable |
+| --- | --- | --- |
+| Browser session (cookie `cfp_sid`) | everyday use | ✅ kick one by one |
+| HTTP Basic | curl / scripts / Prometheus | ❌ verified per request |
+
+- Sessions last 7 days idle-free, die after 12h of inactivity, and live **in memory only** — restarting the container logs everyone out.
+- **Settings → Login sessions** lists device, source IP, login time and last activity; you can kick individually or "sign out everywhere".
+- A session that **changes source IP** (a copied cookie) is flagged `IP changed` in the table, written to the audit log and pushed as a notification (toggle it under "Notifications").
+- **Changing the panel password or viewer account revokes every session** and redirects to the login page.
+- Write requests authenticated by session require a same-origin `Sec-Fetch-Site` / `Origin`, otherwise 403 (CSRF guard).
+
+### 10.4 English / Chinese UI
+
+Toggle with 🌐 in the top bar; the choice is stored in the `cfp_lang` cookie. The server renders nav and `<html lang>`, the client replaces **229** strings by exact "Chinese → English" lookup. Unknown strings stay Chinese on purpose — no machine translation, so you never get half-translated text.
+
+### 10.5 Audit log
+
+Bottom of the Observe page: who changed what, when, from which IP. Only state-changing requests and failed requests are recorded; high-frequency read-only endpoints (`/metrics`, `/badge.svg`, assets, log stream) are skipped so the log stays useful. Written to `data/audit.log` (JSON Lines, trimmed to the last 3000 lines past 2MB); API: `GET /api/audit?limit=&q=`.
+
 ## 11. Troubleshooting
 
 | Symptom | Likely cause |

@@ -135,6 +135,7 @@ function fill() {
   $('#evDown').checked = !!(n.events && n.events.tunnelDown);
   $('#evUrl').checked = !!(n.events && n.events.urlChange);
   $('#evCaddy').checked = !!(n.events && n.events.caddyFail);
+  if ($('#evSessionIp')) $('#evSessionIp').checked = !!(n.events && n.events.sessionIp);
   $('#notifyCool').value = n.cooldownSec === undefined ? 300 : n.cooldownSec;
   $('#notifyQuiet').value = n.quietHours || '';
   $('#panelUser').value = (ST.state.panel && ST.state.panel.user) || '';
@@ -154,7 +155,7 @@ async function save() {
     notify: {
       url: $('#notifyUrl').value.trim(),
       format: $('#notifyFormat').value,
-      events: { tunnelDown: $('#evDown').checked, urlChange: $('#evUrl').checked, caddyFail: $('#evCaddy').checked },
+      events: { tunnelDown: $('#evDown').checked, urlChange: $('#evUrl').checked, caddyFail: $('#evCaddy').checked, sessionIp: $('#evSessionIp') ? $('#evSessionIp').checked : true },
       cooldownSec: Number($('#notifyCool').value) || 0,
       quietHours: $('#notifyQuiet').value.trim(),
     },
@@ -182,7 +183,7 @@ async function loadSessions() {
     tb.innerHTML = rows.length ? rows.map((x) => `<tr>
         <td data-label="账号">${esc(x.user)}${x.current ? ' <span class="tag ok">当前</span>' : ''}</td>
         <td data-label="角色">${x.role === 'viewer' ? '只读' : '管理员'}</td>
-        <td data-label="来源 IP"><span class="mono">${esc(x.ip || '-')}</span></td>
+        <td data-label="来源 IP"><span class="mono">${esc(x.ip || '-')}</span>${x.ipChangedAt ? ` <span class="tag err" title="原来是 ${esc(x.prevIp || '?')}，${fmtTime(x.ipChangedAt)} 变过来">换过 IP</span>` : ''}</td>
         <td data-label="设备"><span class="muted" style="font-size:12px">${esc(String(x.ua || '-').slice(0, 48))}</span></td>
         <td data-label="登录时间">${fmtTime(x.createdAt)}</td>
         <td data-label="最后活动">${fmtTime(x.lastSeenAt)}</td>
@@ -207,6 +208,12 @@ function bindSessions() {
     } catch (x) { toast(x.message, 'err'); }
   });
   const r = document.querySelector('#btnSessRefresh'); if (r) r.addEventListener('click', loadSessions);
+  const all = document.querySelector('#btnSessRevokeAll');
+  if (all) all.addEventListener('click', async () => {
+    if (!confirm('退出全部设备？包括你现在这台，之后所有人都要重新登录。')) return;
+    try { const d = await api('/api/sessions/revoke-all', { method: 'POST' }); toast(`已退出 ${d.revoked} 个会话，正在跳转登录…`); setTimeout(() => { location.href = '/login'; }, 700); }
+    catch (x) { toast(x.message, 'err'); }
+  });
   const k = document.querySelector('#btnSessKickOthers');
   if (k) k.addEventListener('click', async () => {
     if (!confirm('把除当前设备以外所有登录都踢掉？')) return;
@@ -263,6 +270,12 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const d = await api('/api/panel-auth', { method: 'POST', body: { user, pass } });
       $('#panelPass').value = '';
+      if (d.relogin) {
+        $('#authMsg').textContent = '口令已更新，所有登录已失效，正在跳转登录页…';
+        toast(`口令已更新，已踢掉 ${d.revoked} 个会话`, 'ok');
+        setTimeout(() => { location.href = '/login'; }, 900);
+        return;
+      }
       $('#authMsg').textContent = d.authEnabled ? '已开启登录（刷新后浏览器会要密码）' : '已关闭登录';
       toast(d.authEnabled ? '已开启面板登录' : '已关闭面板登录', 'ok');
     } catch (e) {
@@ -276,7 +289,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const d = await api('/api/viewer', { method: 'POST', body: { user, pass } });
       $('#viewerPass').value = '';
-      $('#viewerMsg').textContent = d.viewer.user ? `只读账号 ${d.viewer.user} 已生效` : '已关闭只读账号';
+      $('#viewerMsg').textContent = d.viewer.user ? `只读账号 ${d.viewer.user} 已生效${d.relogin ? '（旧会话已全部失效）' : ''}` : '已关闭只读账号';
       toast(d.viewer.user ? '只读账号已保存' : '只读账号已关闭', 'ok');
       loadNotifyHist();
     } catch (e) {

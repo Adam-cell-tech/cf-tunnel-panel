@@ -11,6 +11,8 @@ const QRCode=require('qrcode'); const bcrypt=require('bcryptjs');
 
 const { log } = require('./util');
 const session = require('./session');
+const audit = require('./audit');
+const { notify } = require('./notify');
 const _state = require('./state');
 const state = _state.stateProxy;
 function authOk(req) {
@@ -26,6 +28,18 @@ function checkAuth(req) {
   const sess = session.fromReq(req);
   if (sess) {
     session.touch(sess.id);
+    // 同一个会话突然换 IP：cookie 被复制到别处、或者手机切了网络。
+    // 不拦（拦了正常用户换 Wi-Fi 就进不来），但记审计 + 推一条通知，让你知道有人手里有你的 cookie。
+    const ipNow = clientIpOf(req);
+    if (ipNow && sess.ip && sess.ip !== ipNow && ipNow !== 'unknown') {
+      const prev = sess.ip;
+      sess.ip = ipNow;
+      sess.prevIp = prev;
+      sess.ipChangedAt = Date.now();
+      audit.record({ actor: `${sess.user}（会话）`, ip: ipNow, method: req.method, path: String(req.url || ''), status: 200, action: '会话来源 IP 变更', target: `${prev} → ${ipNow}` });
+      log(`会话 ${sess.id.slice(0, 8)} 的来源 IP 变化：${prev} → ${ipNow}`, 'panel');
+      notify('sessionIp', '面板会话换了 IP', `账号：${sess.user}\n原 IP：${prev}\n新 IP：${ipNow}\n时间：${new Date().toLocaleString('zh-CN')}\n\n如果不是你本人切换网络，说明这个 cookie 被复制走了，去「设置 → 登录会话」把它踢掉。`).catch(() => {});
+    }
     const ro = sess.role === 'viewer';
     return { ok: true, tried: false, readonly: ro, who: `${sess.user}（${ro ? '只读·会话' : '会话'}）`, via: 'session', sid: sess.id, session: sess };
   }

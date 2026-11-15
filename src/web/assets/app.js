@@ -152,17 +152,40 @@ function dictLookup(raw) {
   return null;
 }
 
-const LANG_SEL = 'h1,h2,h3,button,th,label,legend,summary,option,.tag,.exit-item .nm';
+const LANG_SKIP = /^(SCRIPT|STYLE|PRE|CODE|TEXTAREA)$/;
+const translated = new WeakSet();
 
-function translateTree(root) {
+/** 把文本节点按字典换掉：整段精确匹配才翻，匹配不到就保持原文（不机翻）。 */
+function translateText(root) {
   if (LANG !== 'en') return;
-  const scope = root && root.querySelectorAll ? root : document;
-  scope.querySelectorAll(LANG_SEL).forEach((el) => {
-    if (el.children.length && !/^(BUTTON|OPTION|SUMMARY)$/.test(el.tagName)) return;
-    const hit = dictLookup(el.textContent);
-    if (hit && hit !== el.textContent) el.textContent = hit;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const jobs = [];
+  let n = walker.nextNode();
+  while (n) {
+    if (!translated.has(n)) {
+      const p = n.parentElement;
+      if (p && !LANG_SKIP.test(p.tagName)) {
+        const raw = n.nodeValue || '';
+        const key = raw.replace(/\s+/g, ' ').trim();
+        const en = key.length > 1 ? DICT[key] : null;
+        if (en && en !== key) jobs.push([n, raw, en]);
+        else translated.add(n);
+      }
+    }
+    n = walker.nextNode();
+  }
+  jobs.forEach(([node, raw, en]) => {
+    const lead = (raw.match(/^\s*/) || [''])[0];
+    const tail = (raw.match(/\s*$/) || [''])[0];
+    node.nodeValue = lead + en + tail;
+    translated.add(node);
   });
-  scope.querySelectorAll('[title],[placeholder],[aria-label]').forEach((el) => {
+}
+
+/** 属性也翻：title / placeholder / aria-label / value（按钮文字走文本节点） */
+function translateAttrs(root) {
+  if (LANG !== 'en') return;
+  root.querySelectorAll('[title],[placeholder],[aria-label]').forEach((el) => {
     ['title', 'placeholder', 'aria-label'].forEach((attr) => {
       const v = el.getAttribute(attr);
       if (!v) return;
@@ -170,6 +193,12 @@ function translateTree(root) {
       if (hit && hit.trim() !== v.trim()) el.setAttribute(attr, hit);
     });
   });
+}
+
+function translateTree(root) {
+  if (LANG !== 'en') return;
+  translateText(root && root.nodeType ? root : document);
+  translateAttrs(root && root.querySelectorAll ? root : document);
 }
 
 function setLang(lang) {

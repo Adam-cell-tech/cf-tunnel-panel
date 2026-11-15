@@ -2,6 +2,13 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.11.0
+
+- 帮助文案全部中英双语（171 条页面文案入库，字典共 229 条），翻译改为文本节点级 + 属性级扫描。
+- 会话换来源 IP 告警：审计 + 通知 + 会话表红标。
+- 「退出全部设备」；改面板口令 / 改只读账号自动踢掉所有会话并跳登录页。
+- 测试：API 107 项、DOM 72 项。
+
 ## v0.10.0
 - 会话式登录：`/login` 页 + `cfp_sid` cookie（HttpOnly/SameSite=Lax/HTTPS 自动 Secure），7 天有效、12 小时闲置失效；Basic 认证保留给脚本与 Prometheus。
 - 会话管理：`GET /api/sessions`、`POST /api/sessions/revoke`、`POST /api/sessions/revoke-others`；设置页「登录会话」表格显示账号/角色/IP/设备/时间，可逐个踢掉。会话只存内存，重启即失效。

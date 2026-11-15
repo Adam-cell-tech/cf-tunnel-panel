@@ -83,6 +83,13 @@ function revoke(id) {
   return true;
 }
 
+/** 全踢（含自己）。改密码、或点「退出全部设备」时用。 */
+function revokeAll() {
+  const n = sessions.size;
+  sessions.clear();
+  return n;
+}
+
 /** 保留 keepId（当前会话），其余全踢；返回踢掉的数量 */
 function revokeOthers(keepId) {
   let n = 0;
@@ -107,6 +114,8 @@ function list(currentId) {
       ua: s.ua,
       createdAt: s.createdAt,
       lastSeenAt: s.lastSeenAt,
+      prevIp: s.prevIp || '',
+      ipChangedAt: s.ipChangedAt || 0,
       current: s.id === currentId,
     }));
 }
@@ -137,4 +146,4 @@ function isSecure(req) {
   return !!(req.socket && req.socket.encrypted);
 }
 
-module.exports = { COOKIE, TTL_MS, IDLE_MS, sessions, parseCookies, create, get, touch, fromReq, revoke, revokeOthers, list, resolveId, cookieHeader, clearCookieHeader, isSecure, prune };
+module.exports = { COOKIE, TTL_MS, IDLE_MS, sessions, parseCookies, create, get, touch, fromReq, revoke, revokeAll, revokeOthers, list, resolveId, cookieHeader, clearCookieHeader, isSecure, prune };

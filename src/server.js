@@ -193,6 +193,12 @@ async function handler(req, res) {
     if (isSelf) res.setHeader('Set-Cookie', session.clearCookieHeader());
     return sendJson(res, 200, { ok: true, self: isSelf });
   }
+  if (p === '/api/sessions/revoke-all' && req.method === 'POST') {
+    const n = session.revokeAll();
+    res.setHeader('Set-Cookie', session.clearCookieHeader());
+    auditRecord({ actor: auth.who, ip: clientIpOf(req), method: 'POST', path: p, status: 200, action: '退出全部登录会话', target: `${n} 个` });
+    return sendJson(res, 200, { ok: true, revoked: n });
+  }
   if (p === '/api/sessions/revoke-others' && req.method === 'POST') {
     const n = session.revokeOthers(auth.sid);
     return sendJson(res, 200, { ok: true, revoked: n });
@@ -469,7 +475,14 @@ async function handler(req, res) {
     state.panel.user = String(body.user || '').trim();
     state.panel.pass = String(body.pass || '');
     saveState('panel-auth');
-    return sendJson(res, 200, { ok: true, authEnabled: !!state.panel.user });
+    // 改口令等于「我不相信现在所有还登着的设备」：全踢，让所有人重新登录。
+    const kicked = state.panel.user ? session.revokeAll() : 0;
+    if (kicked) {
+      res.setHeader('Set-Cookie', session.clearCookieHeader());
+      log(`面板口令已更新，已踢掉 ${kicked} 个登录会话`, 'panel');
+      auditRecord({ actor: auth.who, ip: clientIpOf(req), method: 'POST', path: p, status: 200, action: '改面板口令并踢掉所有会话', target: `${kicked} 个` });
+    }
+    return sendJson(res, 200, { ok: true, authEnabled: !!state.panel.user, relogin: kicked > 0, revoked: kicked });
   }
 
   if (p === '/api/qr' && req.method === 'GET') {
@@ -624,8 +637,10 @@ async function handler(req, res) {
         if (!state.viewer.pass) throw new Error('只读账号还要给一个密码');
       }
       saveState('viewer');
+      const kickedViewer = session.revokeAll();
+      if (kickedViewer) res.setHeader('Set-Cookie', session.clearCookieHeader());
       log(user ? `已设置只读账号 ${user}` : '已关闭只读账号', 'panel');
-      return sendJson(res, 200, { ok: true, viewer: { user: state.viewer.user, hasPass: !!state.viewer.pass } });
+      return sendJson(res, 200, { ok: true, viewer: { user: state.viewer.user, hasPass: !!state.viewer.pass }, relogin: kickedViewer > 0, revoked: kickedViewer });
     } catch (e) {
       return sendJson(res, 400, { ok: false, error: e.message });
     }

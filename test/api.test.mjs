@@ -340,6 +340,35 @@ const sZh = await rawFetch(B + '/', { headers: { Authorization: basic } });
 const sZhText = await sZh.text();
 ok('中文模式：html lang=zh-CN + 导航中文', sZhText.includes('lang="zh-CN"') && sZhText.includes('<span>总览</span>'), '');
 
+// ---- 会话换 IP 告警 ----
+const ipA = '198.51.100.31', ipB = '198.51.100.32';
+const loginA = await fetch(B + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ipA }, body: JSON.stringify({ user: USER, pass: PASS }) });
+const sidA = (String(loginA.headers.get('set-cookie') || '').match(/cfp_sid=([^;]+)/) || [])[1] || '';
+ok('换 IP 测试：先登录拿到会话', !!sidA, '');
+const moved = await fetch(B + '/api/sessions', { headers: { Cookie: `cfp_sid=${sidA}`, 'X-Forwarded-For': ipB } });
+const movedD = await moved.json().catch(() => ({}));
+const cur = (movedD.sessions || []).find((x) => x.current) || {};
+ok('同一会话换 IP 后记录 prevIp 与时间', !!cur.ipChangedAt && cur.prevIp === ipA && cur.ip === ipB, `${cur.prevIp} → ${cur.ip}`);
+const auIp = await j('/api/audit?q=' + encodeURIComponent('会话来源'));
+ok('换 IP 被写进审计', (auIp.d.rows || []).some((r) => r.action === '会话来源 IP 变更'), String((auIp.d.rows || []).length));
+
+// ---- 改口令踢掉所有会话 ----
+const kick = await fetch(B + '/api/panel-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: USER, pass: PASS }) });
+const kickD = await kick.json().catch(() => ({}));
+ok('改口令后返回 relogin 且踢掉会话', kick.status === 200 && kickD.relogin === true && kickD.revoked >= 1, `revoked=${kickD.revoked}`);
+const dead = await fetch(B + '/api/sessions', { headers: { Cookie: `cfp_sid=${sidA}` } });
+const deadD = await dead.json().catch(() => ({}));
+ok('改口令后旧 cookie 失效', dead.status === 401 || (deadD.sessions || []).length === 0, String(dead.status));
+const stillBasic = await rawFetch(B + '/healthz');
+ok('改口令后 Basic 认证仍可用', stillBasic.status === 200, '');
+
+// ---- 退出全部设备 ----
+const loginC = await fetch(B + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '198.51.100.33' }, body: JSON.stringify({ user: USER, pass: PASS }) });
+const sidC = (String(loginC.headers.get('set-cookie') || '').match(/cfp_sid=([^;]+)/) || [])[1] || '';
+const all = await fetch(B + '/api/sessions/revoke-all', { method: 'POST', headers: { Cookie: `cfp_sid=${sidC}`, 'Sec-Fetch-Site': 'same-origin' } });
+const allD = await all.json().catch(() => ({}));
+ok('退出全部设备：返回踢掉数量并清 cookie', all.status === 200 && allD.ok === true && allD.revoked >= 1 && /Max-Age=0/.test(String(all.headers.get('set-cookie') || '')), `revoked=${allD.revoked}`);
+
 // 清理临时探针规则
 try {
   const cur = (await j('/api/state')).d.state.routes || [];
