@@ -78,6 +78,8 @@ function defaultState() {
     shares: [],
     panel: { user: '', pass: '' },
     viewer: { user: '', pass: '' },
+    operator: { user: '', pass: '' },
+    totp: { enabled: false, secret: '', pending: '', recovery: [] },
   };
 }
 
@@ -281,6 +283,9 @@ function publicSettings() {
   const s = JSON.parse(JSON.stringify(state.settings));
   s.cf = { accountId: s.cf.accountId, zoneId: s.cf.zoneId, hasToken: !!s.cf.token };
   s.viewer = { user: (state.viewer && state.viewer.user) || '', hasPass: !!(state.viewer && state.viewer.pass) };
+  s.operator = { user: (state.operator && state.operator.user) || '', hasPass: !!(state.operator && state.operator.pass) };
+  s.totp = { enabled: !!(state.totp && state.totp.enabled), recoveryLeft: ((state.totp && state.totp.recovery) || []).length };
+  delete s.totp.secret;
   s.notify = {
     format: s.notify.format,
     events: s.notify.events,

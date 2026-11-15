@@ -529,6 +529,43 @@ Twelve items that turn a "config web page" into a small operations console. Ever
 
 Two things were deliberately **not** done in this release, and they are still open in the roadmap: TOTP second factor, and per-role permission sets beyond admin/read-only.
 
+
+## 15. What's new in v0.13.0
+
+Two features that were deliberately left out of 0.12, plus the test that was missing.
+
+### 15.1 Two-factor login (TOTP)
+
+Settings → *Two-factor (TOTP)* → **Generate QR** → scan with Google Authenticator / 1Password / Authy → type the 6 digits → **Confirm**.
+
+- The login page becomes two steps: password, then a 6-digit code. The code field is only revealed after the password is accepted, so nobody learns whether the password was right without one.
+- **10 recovery codes** are shown exactly once. Each one logs you in and is then deleted. Lose the phone *and* the codes and you are editing `data/state.json` on the host.
+- Clock drift: ±1 step (±30 s) is accepted, so a slightly fast phone still works.
+- The secret never leaves the server except in the QR/secret you just generated: `/api/state` exposes only `{enabled, recoveryLeft}`.
+- **Basic auth still bypasses TOTP** — deliberately. It is the machine credential (curl, Prometheus, scripts). If you need TOTP everywhere, do not use Basic; issue a session by logging in through the browser.
+- Turning it off requires a current code or a recovery code, so a stolen cookie cannot quietly disable your second factor.
+
+### 15.2 Roles: admin / operator / viewer
+
+Settings → *Operator account*. Three roles, whitlist-based:
+
+| | admin | operator | viewer |
+| --- | --- | --- | --- |
+| See all pages and state | ✅ | ✅ | ✅ |
+| Change tunnels / rules / shares / maintenance | ✅ | ✅ | — |
+| Add or remove public hostnames | ✅ | ✅ | — |
+| Notify, Cloudflare credentials, panel password | ✅ | — | — |
+| Import / roll back a whole config | ✅ | — | — |
+| Kick other sessions, TOTP settings | ✅ | — | — |
+
+`operator` is a **whitelist of write endpoints** (`src/core/perm.js`): anything new is closed to it by default, and the 403 says *why* ("panel password is admin-only") instead of a bare "forbidden".
+
+### 15.3 CI now runs a real Caddy
+
+`test/e2e-caddy.mjs` plus an `e2e` job in CI: it starts `caddy:2.11.9-alpine` with admin on `:20190`, boots the panel against it, pushes a probe route, fetches through Caddy, and asserts the proxied response **and** that an unmatched path still returns 404. This is the only test that can catch a wrong key in the generated Caddy JSON (`load_balancing.selection` vs `selection_policy` cost us an afternoon once).
+
+The script snapshots the route table to `/tmp` before touching it and restores from the snapshot in a `finally` path — a previous version restored from live state and therefore deleted every rule when a run died in the middle.
+
 ## License
 
 [MIT](LICENSE) — use it, change it, ship it commercially; keep the copyright notice.

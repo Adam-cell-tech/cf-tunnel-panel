@@ -5,6 +5,20 @@
 
 ---
 
+## ✅ v0.13.0 — 二次验证 + 角色细分 + 真 Caddy 的 CI
+
+| 方向 | 实现要点 | 实测 |
+| --- | --- | --- |
+| TOTP | `core/totp.js` 自实现 base32/HOTP/TOTP（±1 步窗口）、`newRecovery(10)` 一次性恢复码只存 sha256 | 19 项端到端：生成→扫→开启→两段登录→恢复码→关闭 |
+| 两段登录 | `login()` 返回 `{needTotp, challenge}`（HMAC-SHA256 签名、5 分钟），`completeTotp()` 校验验证码/恢复码后建会话 | 口令对但不发会话；错码 401；恢复码用掉后余量 -1 |
+| 登录页 | 验证码框默认隐藏，口令通过才显示；新增「记住这台设备」 | DOM 测试 75/75 |
+| 角色 | `core/perm.js` 白名单：operator 可改隧道/规则/分享/curl/主机名/退出，其余 403 并说明原因；viewer 只读 | operator 改规则 200、改设置/口令/导入/回滚全 403 |
+| 运维账号 | `POST /api/operator`（用户名正则、密码 ≥6、留空关闭），保存即 `session.revokeAll()` | 设置后可读可改规则、关闭后 Basic 立刻 401 |
+| CI e2e | `test/e2e-caddy.mjs` + `.github/workflows/ci.yml` 的 `e2e` 作业：真 caddy:2.11.9-alpine（admin :20190） | 本地 8/8；抓 `load_balancing` 之类字段错 |
+| 脚本健壮性 | e2e 先把规则快照到 `/tmp`，finally 还原 | 已验证「还原规则表 5 vs 5」 |
+
+**测试**：API 141/141、DOM 75/75、e2e 8/8。
+
 ## ✅ v0.12.0 — 从配置页到小运维台
 
 | 方向 | 实现要点 | 实测 |

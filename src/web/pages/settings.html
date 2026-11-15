@@ -111,6 +111,59 @@
     </div>
   </div>
 
+  <div class="card">
+    <div class="hd"><h2>二次验证（TOTP）</h2><div class="sub">手机验证器 App 的 6 位数字，登录时多一道关</div></div>
+    <div class="bd">
+      <div class="hint" id="totpMsg">开启后，浏览器登录要先输口令、再输验证器里的 6 位数字。curl / 脚本仍可用 Basic（当作机器凭证），所以别把账号口令写进公共脚本。</div>
+      <div id="totpOff">
+        <div class="row" style="margin-top:10px"><button class="sm" id="btnTotpSetup">生成二维码</button><span class="muted">用 Google Authenticator / 1Password / Authy 扫码</span></div>
+        <div id="totpBox" class="hidden" style="margin-top:12px">
+          <div class="row" style="align-items:flex-start;gap:16px">
+            <img id="totpQr" alt="TOTP 二维码" width="180" height="180" style="background:#fff;border-radius:8px;padding:6px" />
+            <div style="flex:1;min-width:220px">
+              <div class="field"><label>手动输入密钥（扫码失败时用）</label><input id="totpSecret" readonly class="mono" /></div>
+              <div class="field"><label>输入 App 当前显示的 6 位数字</label><input id="totpCode" inputmode="numeric" maxlength="6" placeholder="123456" /></div>
+              <div class="row"><button class="sm primary" id="btnTotpEnable">确认开启</button><span class="muted" id="totpSetupMsg"></span></div>
+            </div>
+          </div>
+          <div id="totpRecoveryBox" class="hidden" style="margin-top:12px">
+            <div class="hint warn">这些恢复码只显示这一次，请立刻抄到安全的地方（每张纸只能救一次命）。</div>
+            <pre class="mono" id="totpRecovery" style="white-space:pre-wrap"></pre>
+          </div>
+        </div>
+      </div>
+      <div id="totpOn" class="hidden">
+        <div class="row" style="margin-top:10px;align-items:center">
+          <span class="tag ok">已开启</span>
+          <span class="muted" id="totpLeft"></span>
+          <input id="totpDisableCode" inputmode="numeric" placeholder="当前验证码或恢复码" style="max-width:220px" />
+          <button class="sm ghost" id="btnTotpDisable">关闭二次验证</button>
+          <span class="muted" id="totpDisableMsg"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="hd"><h2>运维账号（operator）</h2><div class="sub">能改隧道和规则，但碰不到凭证类设置</div></div>
+    <div class="bd">
+      <div class="form-grid">
+        <div class="field"><label>运维用户名（留空 = 关闭）</label><input id="operUser" autocomplete="off" /></div>
+        <div class="field"><label>运维密码</label><input id="operPass" type="password" autocomplete="new-password" placeholder="留空 = 不修改" /></div>
+      </div>
+      <div class="row" style="margin-top:12px"><button class="sm" id="btnOper">保存运维账号</button><span class="muted" id="operMsg"></span></div>
+      <div class="tbl-wrap" style="margin-top:12px"><table class="stackable"><thead><tr><th>能力</th><th>admin</th><th>operator</th><th>viewer</th></tr></thead><tbody>
+        <tr><td data-label="能力">看所有页面与状态</td><td data-label="admin">✅</td><td data-label="operator">✅</td><td data-label="viewer">✅</td></tr>
+        <tr><td data-label="能力">改隧道 / 规则 / 分享 / 维护模式</td><td data-label="admin">✅</td><td data-label="operator">✅</td><td data-label="viewer">—</td></tr>
+        <tr><td data-label="能力">公共主机名增删</td><td data-label="admin">✅</td><td data-label="operator">✅</td><td data-label="viewer">—</td></tr>
+        <tr><td data-label="能力">通知 / Cloudflare 凭证 / 面板口令</td><td data-label="admin">✅</td><td data-label="operator">—</td><td data-label="viewer">—</td></tr>
+        <tr><td data-label="能力">导入、回滚整份配置</td><td data-label="admin">✅</td><td data-label="operator">—</td><td data-label="viewer">—</td></tr>
+        <tr><td data-label="能力">踢别人的会话 / 二次验证</td><td data-label="admin">✅</td><td data-label="operator">—</td><td data-label="viewer">—</td></tr>
+      </tbody></table></div>
+      <div class="hint">角色是白名单式的：operator 只放行列出的写接口，新增接口默认对它关闭。</div>
+    </div>
+  </div>
+
   <div class="card flush">
     <div class="hd"><h2>通知发送记录</h2><div class="sub">最近 50 条，包含被静默/冷却拦下的</div><div class="right"><button class="sm ghost" id="btnNotifyHist">刷新</button></div></div>
     <div class="bd tight" id="notifyHist"><div class="empty">读取中…</div></div>

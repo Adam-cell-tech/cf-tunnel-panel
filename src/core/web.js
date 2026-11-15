@@ -86,6 +86,8 @@ function loginPage({ next = '/', error = '', lang = 'zh' } = {}) {
   <h1 style="font-size:18px;margin:0 0 12px">${i18n.t(lang, '登录面板')}</h1>
   <div class="field"><label for="u">${i18n.t(lang, '用户名')}</label><input id="u" name="username" autocomplete="username" required autofocus></div>
   <div class="field"><label for="p">${i18n.t(lang, '密码')}</label><input id="p" name="password" type="password" autocomplete="current-password" required></div>
+  <div class="field hidden" id="tWrap"><label for="t">${i18n.t(lang, '二次验证码')}</label><input id="t" name="otp" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="9"><div class="muted" style="font-size:12px;margin-top:4px">${i18n.t(lang, '输入验证器 App 里的 6 位数字；也可以用恢复码（XXXX-XXXX）')}</div></div>
+  <label class="chk" style="margin:2px 0 8px;font-size:13px"><input type="checkbox" id="rem" checked> ${i18n.t(lang, '记住这台设备（30 天）')}</label>
   <div class="hint err hidden" id="err">${error ? error : ''}</div>
   <button class="primary" type="submit" style="width:100%;margin-top:10px">${i18n.t(lang, '登录')}</button>
   <p class="muted" style="font-size:12px;margin:12px 0 0">登录后 7 天内免登录；在「设置 → 登录会话」里可以查看并踢掉其它设备。</p>
@@ -94,6 +96,7 @@ function loginPage({ next = '/', error = '', lang = 'zh' } = {}) {
 (function () {
   var f = document.getElementById('loginForm');
   var err = document.getElementById('err');
+  var rem = document.getElementById('rem');
   if (err.textContent) err.classList.remove('hidden');
   f.addEventListener('submit', async function (e) {
     e.preventDefault();
@@ -101,11 +104,27 @@ function loginPage({ next = '/', error = '', lang = 'zh' } = {}) {
     var btn = f.querySelector('button');
     btn.disabled = true; var old = btn.textContent; btn.textContent = '登录中…';
     try {
-      var r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'cfp' }, body: JSON.stringify({ user: document.getElementById('u').value, pass: document.getElementById('p').value }) });
+      var tw = document.getElementById('tWrap');
+      var tIn = document.getElementById('t');
+      var need = tw && !tw.classList.contains('hidden');
+      var payload = need
+        ? { challenge: f.dataset.challenge, code: tIn.value, remember: rem.checked }
+        : { user: document.getElementById('u').value, pass: document.getElementById('p').value, remember: rem.checked };
+      var r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'cfp' }, body: JSON.stringify(payload) });
       var d = await r.json().catch(function () { return {}; });
+      if (d && d.needTotp) {
+        f.dataset.challenge = d.challenge;
+        tw.classList.remove('hidden');
+        tIn.focus();
+        btn.disabled = false; btn.textContent = '${i18n.t(lang, '下一步')}';
+        document.getElementById('u').readOnly = true;
+        document.getElementById('p').readOnly = true;
+        return;
+      }
       if (r.ok && d.ok) { location.href = ${JSON.stringify(safeNext)}; return; }
       err.textContent = d.error || '登录失败';
       err.classList.remove('hidden');
+      btn.disabled = false; btn.textContent = old;
     } catch (x) {
       err.textContent = '网络错误：' + x.message;
       err.classList.remove('hidden');

@@ -42,13 +42,15 @@ const _registry = require('./core/registry');
 const { firstTunnel, publicUrlOf, runtimes, tunnelById, tunnelRt } = _registry;
 
 const _auth = require('./core/auth');
-const { clearBasicCache, AUTH_BLOCK_MS, AUTH_FAIL_LIMIT, AUTH_FAIL_WINDOW, authBlockedFor, authFails, authOk, checkAuth, clearAuthFail, clientIpOf, noteAuthFail, login } = _auth;
+const { clearBasicCache, AUTH_BLOCK_MS, AUTH_FAIL_LIMIT, AUTH_FAIL_WINDOW, authBlockedFor, authFails, authOk, checkAuth, clearAuthFail, clientIpOf, noteAuthFail, login , completeTotp } = _auth;
 
 const _session = require('./core/session');
 const session = _session;
 
 const secret = require('./core/secret');
 const ident = require('./core/ident');
+const totp = require('./core/totp');
+const perm = require('./core/perm');
 
 const _caddy = require('./core/caddy');
 const { buildCaddyConfig, buildMatch, buildRouteHandlers, caddy, cloudflareRanges, lastSkipped, maintPage, tunnelHostOf } = _caddy;
@@ -128,19 +130,42 @@ async function handler(req, res) {
     if (wait > 0) return sendJson(res, 429, { ok: false, error: `尝试次数过多，${Math.ceil(wait / 60)} 分钟后再试`, retryAfter: wait });
     let body = {};
     try { body = await readBody(req); } catch { body = {}; }
-    const s = login({ user: body.user, pass: body.pass, ip: clientIpOf(req), ua: req.headers['user-agent'] || '' });
-    if (!s) {
+    const ip = clientIpOf(req);
+    const ua = req.headers['user-agent'] || '';
+
+    // 第二段：口令已过，等验证码（或恢复码）
+    if (body.challenge) {
+      const r = completeTotp({ challenge: body.challenge, code: body.code, ip, ua, remember: !!body.remember });
+      if (!r.ok) {
+        noteAuthFail(req);
+        log(`二次验证失败（${ip}）：${r.error}`, 'panel');
+        auditRecord({ actor: `(二次验证)`, ip, method: 'POST', path: '/api/login', status: 401, action: '二次验证失败', target: String(r.error || ''), ok: false });
+        return sendJson(res, 401, { ok: false, error: r.error });
+      }
+      clearAuthFail(req);
+      auditRecord({ actor: r.session.user, ip, method: 'POST', path: '/api/login', status: 200, action: r.usedRecovery ? '登录成功（恢复码）' : '登录成功（二次验证）', target: r.session.role });
+      res.setHeader('Set-Cookie', session.cookieHeader(r.session.rawId || r.session.id || '', { secure: session.isSecure(req), remember: !!body.remember }));
+      return sendJson(res, 200, { ok: true, user: r.session.user, role: r.session.role, usedRecovery: !!r.usedRecovery });
+    }
+
+    const s2 = login({ user: body.user, pass: body.pass, ip, ua, remember: !!body.remember });
+    if (!s2) {
       noteAuthFail(req);
-      const st = authFails.get(clientIpOf(req)) || {};
+      const st = authFails.get(ip) || {};
       const left = Math.max(0, AUTH_FAIL_LIMIT - (st.count || 0));
-      log(`面板登录失败（${clientIpOf(req)}，本窗口还剩 ${left} 次机会）`, 'panel');
-      auditRecord({ actor: `${String(body.user || '(空)')}（口令错误）`, ip: clientIpOf(req), method: 'POST', path: '/api/login', status: 401, action: '登录失败', target: String(body.user || ''), ok: false });
+      log(`面板登录失败（${ip}，本窗口还剩 ${left} 次机会）`, 'panel');
+      auditRecord({ actor: `${String(body.user || '(空)')}（口令错误）`, ip, method: 'POST', path: '/api/login', status: 401, action: '登录失败', target: String(body.user || ''), ok: false });
       return sendJson(res, 401, { ok: false, error: left > 0 ? `用户名或密码不对（还剩 ${left} 次机会）` : '错误次数过多，已临时锁定', left });
     }
+    if (s2.needTotp) {
+      log(`口令通过，等二次验证码（${ip}，${s2.user}）`, 'panel');
+      return sendJson(res, 200, { ok: false, needTotp: true, challenge: s2.challenge, role: s2.role });
+    }
     clearAuthFail(req);
-    log(`面板登录成功（${clientIpOf(req)}，${s.user}${s.role === 'viewer' ? ' 只读' : ''}）`, 'panel');
-    res.setHeader('Set-Cookie', session.cookieHeader(s.rawId || s.id || '', { secure: session.isSecure(req), remember: !!(body && body.remember) }));
-    return sendJson(res, 200, { ok: true, user: s.user, role: s.role });
+    log(`面板登录成功（${ip}，${s2.user}${s2.role === 'viewer' ? ' 只读' : s2.role === 'operator' ? ' 运维' : ''}）`, 'panel');
+    auditRecord({ actor: s2.user, ip, method: 'POST', path: '/api/login', status: 200, action: '登录成功', target: s2.role });
+    res.setHeader('Set-Cookie', session.cookieHeader(s2.rawId || s2.id || '', { secure: session.isSecure(req), remember: !!(body && body.remember) }));
+    return sendJson(res, 200, { ok: true, user: s2.user, role: s2.role });
   }
   if (p === '/api/logout' && req.method === 'POST') {
     const s = session.fromReq(req);
@@ -151,9 +176,10 @@ async function handler(req, res) {
 
   const auth = checkAuth(req);
   req.__who = auth.who || '(未登录)';
-  // 只读账号：能看不能改
-  if (auth.ok && auth.readonly && req.method !== 'GET' && req.method !== 'HEAD') {
-    return sendJson(res, 403, { ok: false, error: '当前是只读账号，不能修改任何配置' });
+  // 角色权限矩阵：admin 全通；operator 只能碰运维类写接口；viewer 只读
+  if (auth.ok) {
+    const gate = perm.check(auth.role || 'admin', req.method, p);
+    if (!gate.ok) return sendJson(res, 403, { ok: false, error: gate.error, code: gate.code || 'forbidden' });
   }
   if (!auth.ok) {
     const wait = authBlockedFor(req);
@@ -535,6 +561,64 @@ async function handler(req, res) {
   if (p === '/api/tunnel/stop' && req.method === 'POST') { stopAll(); return sendJson(res, 200, { ok: true }); }
 
   if (p === '/api/caddy/push' && req.method === 'POST') { const c = await pushCaddy(); return sendJson(res, 200, { ok: c.ok, caddy: c }); }
+
+  // ---------- 运维账号（admin 专属，perm 已挡） ----------
+  if (p === '/api/operator' && req.method === 'POST') {
+    const body = await readBody(req);
+    const oUser = String(body.user || '').trim();
+    const oPass = String(body.pass || '');
+    if (oUser && !/^[\w.@-]{1,40}$/.test(oUser)) return sendJson(res, 400, { ok: false, error: '账号只能是字母数字和 . _ @ -' });
+    if (oUser && oPass && oPass.length < 6) return sendJson(res, 400, { ok: false, error: '运维账号密码至少 6 位' });
+    state.operator.user = oUser;
+    if (!oUser) state.operator.pass = '';
+    else if (oPass) state.operator.pass = secret.hash(oPass);
+    saveState('operator');
+    clearBasicCache();
+    const kicked = oUser ? session.revokeAll() : 0;
+    if (kicked) res.setHeader('Set-Cookie', session.clearCookieHeader());
+    log(oUser ? `运维账号已设置：${oUser}（旧会话已全部失效）` : '运维账号已关闭', 'panel');
+    return sendJson(res, 200, { ok: true, operator: { user: oUser, hasPass: !!state.operator.pass }, revoked: kicked, relogin: kicked > 0 });
+  }
+
+  // ---------- 二次验证 TOTP（admin 专属） ----------
+  if (p === '/api/totp/setup' && req.method === 'POST') {
+    const s3 = totp.newSecret();
+    state.totp.pending = s3;
+    saveState('totp-setup');
+    const otpauth = totp.otpauthUrl({ secret: s3, label: state.panel.user || 'admin', issuer: 'cf-tunnel-panel' });
+    let qr = '';
+    try { qr = await QRCode.toDataURL(otpauth, { margin: 1, width: 240 }); } catch { qr = ''; }
+    log('已生成 TOTP 密钥，等待验证码确认', 'panel');
+    return sendJson(res, 200, { ok: true, secret: s3, otpauth, qr });
+  }
+  if (p === '/api/totp/enable' && req.method === 'POST') {
+    const body = await readBody(req);
+    const pending = (state.totp && state.totp.pending) || '';
+    if (!pending) return sendJson(res, 400, { ok: false, error: '先点「生成二维码」，用手机 App 扫一下' });
+    if (totp.verify(pending, body.code) === null) return sendJson(res, 400, { ok: false, error: '验证码不对：确认手机时间准确，再输入当前 6 位数字' });
+    const rec = totp.newRecovery(10);
+    state.totp = { enabled: true, secret: pending, pending: '', recovery: rec.hashed };
+    saveState('totp-enable');
+    auditRecord({ actor: auth.who, ip: clientIpOf(req), method: 'POST', path: p, status: 200, action: '开启二次验证', target: 'TOTP' });
+    log('二次验证已开启（下次登录需要 6 位验证码）', 'panel');
+    return sendJson(res, 200, { ok: true, enabled: true, recoveryCodes: rec.plain });
+  }
+  if (p === '/api/totp/disable' && req.method === 'POST') {
+    const body = await readBody(req);
+    const conf = state.totp || {};
+    let okCode = false;
+    if (conf.secret && /^\d{6}$/.test(String(body.code || '').trim())) okCode = totp.verify(conf.secret, body.code) !== null;
+    if (!okCode && body.code) {
+      const h = totp.hashRecovery(body.code);
+      okCode = ((conf.recovery || []).indexOf(h) >= 0);
+    }
+    if (!okCode) return sendJson(res, 400, { ok: false, error: '要关掉二次验证，得先输入一个当前验证码或恢复码' });
+    state.totp = { enabled: false, secret: '', pending: '', recovery: [] };
+    saveState('totp-disable');
+    auditRecord({ actor: auth.who, ip: clientIpOf(req), method: 'POST', path: p, status: 200, action: '关闭二次验证', target: '' });
+    log('二次验证已关闭', 'panel');
+    return sendJson(res, 200, { ok: true, enabled: false });
+  }
 
   if (p === '/api/panel-auth' && req.method === 'POST') {
     const body = await readBody(req);

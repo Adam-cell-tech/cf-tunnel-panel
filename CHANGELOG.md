@@ -12,6 +12,21 @@
 - `package.json` 增加 `engines.node >= 20`。
 - 测试：API 113、DOM 75。
 
+## v0.13.0
+
+### 新增
+- **二次验证（TOTP，RFC 6238）**：自实现（只依赖 node:crypto），登录两段式；10 个一次性恢复码；允许 ±30 秒时钟偏移；关闭需当前验证码或恢复码；密钥不出现在 `/api/state`。
+- **角色细分 admin / operator / viewer**：`src/core/perm.js` 用写接口白名单，operator 可管隧道/规则/分享/维护模式/主机名，碰不到凭证类设置与导入回滚；403 带具体原因。
+- **运维账号**：`POST /api/operator`，保存即踢掉所有旧会话。
+- **真 Caddy 端到端测试**：`test/e2e-caddy.mjs` + CI `e2e` 作业（caddy:2.11.9-alpine，admin :20190），验证下发的配置真能加载、真能转发、未命中仍是 404。
+- 登录页新增「记住这台设备（30 天）」勾选与二次验证码输入框（口令通过后才显示）。
+
+### 变更
+- 登录接口 `POST /api/login` 支持两段：第一段返回 `{needTotp, challenge}`（5 分钟有效、HMAC 签名），第二段带 `challenge + code` 换会话。
+- `/healthz` 之外的写权限判断统一走角色矩阵（readonly 判断被 `perm.check` 取代）。
+
+### 修复
+- e2e 脚本还原逻辑改为从 `/tmp` 快照还原（原来从当前 state 还原，中途崩溃会把线上规则清空）。
 ## v0.12.0
 
 **面板从「配置页」变成「小运维台」：会话登录、踢设备、单实例锁、主机名管理、按规则统计、更多告警、PWA、YAML 导出、GHCR 镜像。**

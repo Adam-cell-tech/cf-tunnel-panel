@@ -378,6 +378,13 @@ document.addEventListener('DOMContentLoaded', () => {
   loadState().then((d) => {
     ST = d; fill();
     const v = (d.state.settings || {}).viewer || {};
+    const tp = (S.settings && S.settings.totp) || {};
+    const on = !!tp.enabled;
+    const eOn = $('#totpOn'), eOff = $('#totpOff');
+    if (eOn && eOff) { eOn.classList.toggle('hidden', !on); eOff.classList.toggle('hidden', on); }
+    if ($('#totpLeft')) $('#totpLeft').textContent = on ? `剩余恢复码 ${tp.recoveryLeft || 0} 个` : '';
+    const op = (S.settings && S.settings.operator) || {};
+    if ($('#operUser')) { $('#operUser').value = op.user || ''; $('#operUser').placeholder = op.hasPass ? `当前运维账号：${op.user}` : '不填 = 不开启'; }
     $('#viewerUser').value = v.user || '';
     $('#viewerUser').placeholder = v.hasPass ? '当前只读账号：' + v.user : '不填 = 不开启只读账号';
   }).catch(() => {});
@@ -389,3 +396,61 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 })();
+
+// ---- 二次验证 TOTP ----
+$('#btnTotpSetup').addEventListener('click', async () => {
+  const b = $('#btnTotpSetup'); b.disabled = true;
+  try {
+    const d = await api('/api/totp/setup', { method: 'POST', body: {} });
+    if (!d.ok) throw new Error(d.error || '生成失败');
+    $('#totpSecret').value = d.secret;
+    if (d.qr) $('#totpQr').src = d.qr;
+    $('#totpBox').classList.remove('hidden');
+    $('#totpCode').focus();
+  } catch (e) { $('#totpMsg').textContent = '生成失败：' + e.message; }
+  b.disabled = false;
+});
+
+$('#btnTotpEnable').addEventListener('click', async () => {
+  const code = ($('#totpCode').value || '').trim();
+  if (!/^\d{6}$/.test(code)) { $('#totpSetupMsg').textContent = '请输入 6 位数字'; return; }
+  try {
+    const d = await api('/api/totp/enable', { method: 'POST', body: { code } });
+    if (!d.ok) throw new Error(d.error || '开启失败');
+    $('#totpRecovery').textContent = (d.recoveryCodes || []).join('\n');
+    $('#totpRecoveryBox').classList.remove('hidden');
+    $('#totpSetupMsg').textContent = '已开启，下次登录需要验证码';
+    toast('二次验证已开启', 'ok');
+    await refresh();
+  } catch (e) { $('#totpSetupMsg').textContent = e.message; }
+});
+
+$('#btnTotpDisable').addEventListener('click', async () => {
+  const code = ($('#totpDisableCode').value || '').trim();
+  if (!code) { $('#totpDisableMsg').textContent = '要先输入一个验证码或恢复码'; return; }
+  if (!confirm('确定关闭二次验证？关闭后只用口令就能登录。')) return;
+  try {
+    const d = await api('/api/totp/disable', { method: 'POST', body: { code } });
+    if (!d.ok) throw new Error(d.error || '关闭失败');
+    toast('二次验证已关闭', 'ok');
+    $('#totpDisableCode').value = '';
+    $('#totpBox').classList.add('hidden');
+    await refresh();
+  } catch (e) { $('#totpDisableMsg').textContent = e.message; }
+});
+
+// ---- 运维账号 ----
+$('#btnOper').addEventListener('click', async () => {
+  const user = ($('#operUser').value || '').trim();
+  const pass = $('#operPass').value || '';
+  if (user && !pass) { $('#operMsg').textContent = '首次设置运维账号要同时给密码'; return; }
+  try {
+    const d = await api('/api/operator', { method: 'POST', body: { user, pass } });
+    if (!d.ok) throw new Error(d.error || '保存失败');
+    $('#operPass').value = '';
+    $('#operMsg').textContent = user ? '已保存（旧会话已全部失效）' : '已关闭运维账号';
+    toast('运维账号已更新', 'ok');
+    await refresh();
+  } catch (e) { $('#operMsg').textContent = e.message; }
+});
+

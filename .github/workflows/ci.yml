@@ -57,3 +57,50 @@ jobs:
       - name: 失败时打印服务端日志
         if: failure()
         run: tail -50 /tmp/panel.log
+
+  e2e:
+    name: 真 Caddy 端到端
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 启动真 Caddy（2.11.9，admin 20190）
+        run: |
+          docker run -d --name caddy --network host \
+            -v "$PWD/test/caddy.e2e.json:/etc/caddy/caddy.json:ro" \
+            caddy:2.11.9-alpine caddy run --config /etc/caddy/caddy.json
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:20190/config/ >/dev/null && break || sleep 1
+          done
+          curl -sf http://127.0.0.1:20190/config/ >/dev/null && echo "caddy admin ready"
+
+      - name: 装依赖
+        run: npm install --no-audit --no-fund
+
+      - name: 启动面板（无口令，仅本地）
+        env:
+          DATA_DIR: ${{ github.workspace }}/.e2e-data
+          CADDY_ADMIN: http://127.0.0.1:20190
+          CADDY_LOG_DIR: ${{ github.workspace }}/.e2e-data/logs
+          PORT: '8090'
+        run: |
+          mkdir -p "$DATA_DIR/logs"
+          node src/server.js > /tmp/panel.log 2>&1 &
+          for i in $(seq 1 40); do
+            curl -sf http://127.0.0.1:8090/healthz >>/dev/null && break || sleep 1
+          done
+          curl -sf http://127.0.0.1:8090/healthz || (cat /tmp/panel.log; exit 1)
+
+      - name: 端到端断言（下发配置 → 真 Caddy 转发 → 还原）
+        env:
+          PANEL_URL: http://127.0.0.1:8090
+          PANEL_PASS: ''
+          CADDY_PORT: '8080'
+        run: node test/e2e-caddy.mjs
+
+      - name: 失败时打印日志
+        if: failure()
+        run: docker logs caddy --tail 50; tail -50 /tmp/panel.log

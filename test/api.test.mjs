@@ -209,8 +209,20 @@ ok('state 带 shadowed 列表', Array.isArray(stNew.d.runtime.caddy.shadowed), `
 ok('state 带上游健康列表', Array.isArray(stNew.d.runtime.upstreams) && stNew.d.runtime.upstreams.length > 0, (stNew.d.runtime.upstreams || []).map((u) => (u.ok ? '1' : '0')).join(''));
 ok('上游健康全部在线', (stNew.d.runtime.upstreams || []).every((u) => u.ok), '');
 
-const bad = await j('/api/match', { method: 'POST', body: { path: '/site/x', host: 'nope.invalid', method: 'GET' } });
-ok('模拟匹配：专属出口规则不会串到别的域名', !(bad.d.matched && bad.d.rule && bad.d.rule.path === '/site'), (bad.d.rule || {}).path || 'no-match');
+// 出口专属规则不能串域名：自己造一条绑在 main 出口的规则来测，不依赖用户当前的规则表
+{
+  const cur = (await j('/api/state')).d.state.routes;
+  const withProbe = [{ id: 'qa-scope', name: 'QA 专属规则', path: '/qascope', host: '', upstream: 'http://127.0.0.1:8091', strip: true, tunnelId: 'main' }, ...cur.filter((r) => r.id !== 'qa-scope')];
+  await j('/api/routes', { method: 'POST', body: { routes: withProbe } });
+  const mainUrl = (await j('/api/state')).d.runtime.tunnels.find((t) => t.id === 'main') || {};
+  const mainHost = String(mainUrl.publicUrl || mainUrl.url || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  const other = await j('/api/match', { method: 'POST', body: { path: '/qascope/x', host: 'nope.invalid', method: 'GET' } });
+  ok('模拟匹配：专属出口规则不会串到别的域名', !(other.d.rule && other.d.rule.id === 'qa-scope'), (other.d.rule || {}).path || 'no-match');
+  const own = await j('/api/match', { method: 'POST', body: { path: '/qascope/x', host: mainHost, method: 'GET' } });
+  ok('模拟匹配：专属出口规则在自己的域名上命中', !!(own.d.rule && own.d.rule.id === 'qa-scope'), JSON.stringify(own.d).slice(0, 80));
+  const back = (await j('/api/state')).d.state.routes.filter((r) => r.id !== 'qa-scope');
+  await j('/api/routes', { method: 'POST', body: { routes: back } });
+}
 
 const root = await j('/');
 ok('页面有 CSP 头', (root.headers.get('content-security-policy') || '').includes("default-src 'self'"), '');
@@ -397,6 +409,75 @@ ok('退出全部设备：返回踢掉数量并清 cookie', all.status === 200 &&
   const d4 = await r4.json().catch(() => ({}));
   ok('清空密钥不影响格式与冷却', r4.status === 200 && d4.settings.notify.format === 'dingtalk' && d4.settings.notify.cooldownSec === 300 && d4.settings.notify.hasSecret === false, JSON.stringify(d4.settings.notify));
   await nail({ notify: { clearUrl: true, format: 'generic' } });
+}
+
+
+// ========== 二次验证 TOTP（v0.13.0）==========
+{
+  const { totp: gen } = await import('file://' + process.cwd() + '/src/core/totp.js');
+  const su = await j('/api/totp/setup', { method: 'POST', body: {} });
+  ok('TOTP：生成密钥', su.status === 200 && /^[A-Z2-7]{32}$/.test(su.d.secret || ''), String(su.status));
+  ok('TOTP：二维码是 dataURL', /^data:image\/png;base64,/.test(su.d.qr || ''));
+  const secret = su.d.secret;
+  const code = () => gen(secret);
+  const bad = await j('/api/totp/enable', { method: 'POST', body: { code: '000000' } });
+  ok('TOTP：错误验证码不能开启', bad.status === 400, String(bad.status));
+  const en = await j('/api/totp/enable', { method: 'POST', body: { code: code() } });
+  ok('TOTP：开启并给 10 个恢复码', en.status === 200 && (en.d.recoveryCodes || []).length === 10, String(en.status));
+  const recovery = (en.d.recoveryCodes || [])[0];
+  const st1 = await j('/api/state');
+  ok('TOTP：状态可读（enabled + 恢复码余量）', st1.d.state.settings.totp.enabled === true && st1.d.state.settings.totp.recoveryLeft === 10);
+  ok('TOTP：密钥不出现在 /api/state', !JSON.stringify(st1.d).includes(secret));
+
+  const l1 = await rawFetch(B + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: USER, pass: PASS }) });
+  const l1d = await l1.json();
+  ok('TOTP：口令对但不发会话', l1.status === 200 && l1d.needTotp === true && !!l1d.challenge, JSON.stringify(l1d).slice(0, 80));
+  const l2 = await rawFetch(B + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challenge: l1d.challenge, code: code() }) });
+  const ck = (l2.headers.getSetCookie ? l2.headers.getSetCookie() : [l2.headers.get('set-cookie')]).join(';').split(';')[0];
+  const l2d = await l2.json();
+  ok('TOTP：验证码换到会话', l2.status === 200 && l2d.ok === true && /cfp_sid=/.test(ck), String(l2.status));
+  const viaSess = await rawFetch(B + '/api/state', { headers: { Cookie: ck } });
+  ok('TOTP：会话可直接访问', viaSess.status === 200, String(viaSess.status));
+  const l3 = await rawFetch(B + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challenge: l1d.challenge, code: '111111' }) });
+  ok('TOTP：错误验证码不发会话', l3.status === 401, String(l3.status));
+  const c2 = await (await rawFetch(B + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: USER, pass: PASS }) })).json();
+  const l4 = await rawFetch(B + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challenge: c2.challenge, code: recovery }) });
+  const l4d = await l4.json();
+  ok('TOTP：恢复码可登录且一次性', l4.status === 200 && l4d.usedRecovery === true, JSON.stringify(l4d).slice(0, 80));
+  const st2 = await j('/api/state');
+  ok('TOTP：恢复码用掉后余量 -1', st2.d.state.settings.totp.recoveryLeft === 9, String(st2.d.state.settings.totp.recoveryLeft));
+  const dis = await j('/api/totp/disable', { method: 'POST', body: { code: code() } });
+  ok('TOTP：可关闭', dis.status === 200 && dis.d.ok === true, String(dis.status));
+  const st3 = await j('/api/state');
+  ok('TOTP：关闭后 enabled=false', st3.d.state.settings.totp.enabled === false);
+}
+
+// ========== 角色：operator / viewer ==========
+{
+  const setOp = await j('/api/operator', { method: 'POST', body: { user: 'qa-oper', pass: 'qapass123' } });
+  ok('operator：账号可设置', setOp.status === 200 && setOp.d.ok === true, JSON.stringify(setOp.d).slice(0, 80));
+  const OP = 'Basic ' + Buffer.from('qa-oper:qapass123').toString('base64');
+  const gs = await rawFetch(B + '/api/state', { headers: { Authorization: OP } });
+  ok('operator：能读状态', gs.status === 200, String(gs.status));
+  const routesNow = (await j('/api/state')).d.state.routes;
+  const wr = await rawFetch(B + '/api/routes', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: OP }, body: JSON.stringify({ routes: routesNow }) });
+  ok('operator：能改规则', wr.status === 200, String(wr.status));
+  const ws = await rawFetch(B + '/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: OP }, body: JSON.stringify({ panelTitle: 'x' }) });
+  const wsd = await ws.json().catch(() => ({}));
+  ok('operator：不能改设置（403 且说明原因）', ws.status === 403 && /权限/.test(wsd.error || ''), String(ws.status) + ' ' + (wsd.error || ''));
+  const wp = await rawFetch(B + '/api/panel-auth', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: OP }, body: JSON.stringify({ user: USER, pass: 'hack12345' }) });
+  ok('operator：不能改面板口令', wp.status === 403, String(wp.status));
+  const wi = await rawFetch(B + '/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: OP }, body: '{}' });
+  ok('operator：不能导入配置', wi.status === 403, String(wi.status));
+  const wb = await rawFetch(B + '/api/backups/restore', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: OP }, body: JSON.stringify({ file: 'x.json' }) });
+  ok('operator：不能回滚配置', wb.status === 403, String(wb.status));
+  const rd = await rawFetch(B + '/api/state', { headers: { Authorization: 'Basic ' + Buffer.from('admin:wrongpass').toString('base64') } });
+  ok('operator：不影响管理员口令', rd.status === 401, String(rd.status));
+  ok('operator：仍可登录（Basic 可用）', (await rawFetch(B + '/api/tunnels', { headers: { Authorization: OP } })).status === 200);
+  const off = await j('/api/operator', { method: 'POST', body: { user: '', pass: '' } });
+  ok('operator：可关闭', off.status === 200 && off.d.ok === true);
+  const after = await rawFetch(B + '/api/state', { headers: { Authorization: OP } });
+  ok('operator：关闭后该账号失效', after.status === 401, String(after.status));
 }
 
 // 清理临时探针规则
