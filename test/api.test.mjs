@@ -237,6 +237,16 @@ const st2 = (await j('/api/state')).d.state.settings.notify;
 ok('静默时段/冷却可保存', quietOk.d.ok !== false && st2.quietHours === '23:00-07:00' && st2.cooldownSec === 120, JSON.stringify(st2));
 await j('/api/settings', { method: 'POST', body: { notify: { quietHours: '', cooldownSec: 300 } } });
 
+// ---- 设置回包脱敏 ----
+{
+  const r = await j('/api/settings', { method: 'POST', body: { panelTitle: 'cf-tunnel-panel' } });
+  const d = r.d || {};
+  const cf = (d.settings && d.settings.cf) || {};
+  const notify = (d.settings && d.settings.notify) || {};
+  ok('保存设置不回显 Cloudflare token', d.ok === true && !('token' in cf) && !/cfat_|eyJ/.test(JSON.stringify(d)), JSON.stringify(cf));
+  ok('保存设置不回显通知 URL', !('url' in notify), JSON.stringify(notify));
+}
+
 // ---- 登录防爆破 ----
 // 用「伪造来源 IP + 错误密码」的方式触发锁，不去改线上口令（改口令一旦中途崩溃会把面板锁在临时的测试账号上）
 const spoof = '198.51.100.7';

@@ -2032,7 +2032,7 @@ async function handler(req, res) {
       }
       saveState('settings');
       await pushCaddy();
-      return sendJson(res, 200, { ok: true, settings: state.settings, caddy });
+      return sendJson(res, 200, { ok: true, settings: publicSettings(), caddy });
     } catch (e) {
       return sendJson(res, 400, { ok: false, error: e.message });
     }

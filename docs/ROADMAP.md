@@ -5,6 +5,16 @@
 
 ---
 
+## ✅ v0.8.1 — 安全修补 + 工程底座
+
+| 项 | 内容 |
+| --- | --- |
+| 安全 | 修 `POST /api/settings` 回包把 Cloudflare token / webhook URL 明文回显（`/api/state` 早已脱敏，这个回包漏了）→ 统一 `publicSettings()`；新增 2 条接口断言 |
+| 运行身份 | 面板容器改 `user: "${PUID:-1000}:${PGID:-1000}"`，`data/state.json` 不再 root 属主（实测 chown 后 POST 设置可写） |
+| 镜像 | `Dockerfile` 基础镜像锁版本 + `--build-arg` 可覆盖；`caddy:2.11.9-alpine` 锁版本（生成的 JSON 依赖其字段名） |
+| 文档 | `README.md` 改英文默认、原中文版改名 `README.zh-CN.md`，两页顶部互相切换；新增「更新时要 rebuild，否则 compose up 会把代码退回镜像版本」警告（实测踩到：面板自己退回 v0.5.0） |
+| 工程 | 新增 `CHANGELOG.md`、`.github/workflows/ci.yml`（语法检查 + 无 Caddy 冒烟：healthz/6 页面/静态资源/badge/metrics） |
+
 ## ✅ v0.8.0 — 体验补齐（P0→P3 全量）
 
 | 档 | 项 | 落地 |

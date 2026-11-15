@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  smoke:
+    name: 语法检查 + 冒烟
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 安装依赖
+        run: npm install --omit=optional --no-audit --no-fund
+
+      - name: 语法检查（全部 JS）
+        run: |
+          for f in src/server.js src/web/assets/*.js test/*.mjs test/*.cjs; do
+            node --check "$f"
+          done
+
+      - name: 启动面板（无 Caddy，只验能起来）
+        run: |
+          mkdir -p /tmp/cfp-data
+          PORT=8199 DATA_DIR=/tmp/cfp-data CADDY_ADMIN=http://127.0.0.1:2019 \
+            node src/server.js > /tmp/panel.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8199/healthz > /tmp/health.json && break
+            sleep 1
+          done
+          cat /tmp/health.json
+          grep -q '"ok":true' /tmp/health.json
+
+      - name: 页面与静态资源
+        run: |
+          for p in / /tunnels /rules /tools /observe /settings /legacy /assets/app.css /assets/app.js /badge.svg /metrics; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8199$p")
+            echo "$p -> $code"
+            [ "$code" = "200" ]
+          done
+
+      - name: 失败时打印服务端日志
+        if: failure()
+        run: tail -50 /tmp/panel.log

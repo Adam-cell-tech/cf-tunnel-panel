@@ -8,6 +8,9 @@ services:
     image: cf-tunnel-panel:local
     container_name: cf-tunnel-panel
     network_mode: host
+    # 以宿主机用户身份运行，避免 data/state.json 变成 root 属主（宿主机读不了、备份脚本写不了）
+    # 首次启用前先把数据目录交给同一个 uid：docker exec -u 0 cf-tunnel-panel chown -R 1000:1000 /data
+    user: "${PUID:-1000}:${PGID:-1000}"
     restart: unless-stopped
     volumes:
       - ./data:/data
@@ -26,7 +29,8 @@ services:
       # CADDY_RATELIMIT: "1"
 
   caddy:
-    image: caddy:2-alpine
+    # 锁版本：面板生成的 JSON 依赖 2.11 的字段名（例如 load_balancing.selection_policy）
+    image: caddy:2.11.9-alpine
     container_name: cf-tunnel-caddy
     network_mode: host
     restart: unless-stopped
