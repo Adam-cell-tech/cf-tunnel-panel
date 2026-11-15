@@ -28,7 +28,7 @@ jobs:
       - name: 启动面板（无 Caddy，只验能起来）
         run: |
           mkdir -p /tmp/cfp-data
-          PORT=8199 DATA_DIR=/tmp/cfp-data CADDY_ADMIN=http://127.0.0.1:2019 \
+          PORT=8199 DATA_DIR=/tmp/cfp-data CADDY_ADMIN=http://127.0.0.1:9999 \
             node src/server.js > /tmp/panel.log 2>&1 &
           for i in $(seq 1 30); do
             curl -fsS http://127.0.0.1:8199/healthz > /tmp/health.json && break
