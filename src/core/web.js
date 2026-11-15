@@ -10,6 +10,7 @@ const path=require('path'); const os=require('os'); const { spawn }=require('chi
 const QRCode=require('qrcode'); const bcrypt=require('bcryptjs');
 
 const { PAGES, PAGE_DIR } = require('./paths');
+const i18n = require('./i18n');
 const _state = require('./state');
 const state = _state.stateProxy;
 function readPage(file) {
@@ -21,33 +22,35 @@ function readPage(file) {
 }
 
 // 整页外壳：左侧导航 + 顶部标题栏 + 页面主体
-function pageShell(active, body) {
+function pageShell(active, body, lang = 'zh') {
   const title = state.settings.panelTitle || 'Cloudflare 隧道面板';
   const nav = PAGES.map((pg) => {
     const on = pg.path === active ? ' active' : '';
-    return `<a class="${on ? 'active' : ''}" href="${pg.path}"><span class="ico">${pg.ico}</span><span>${pg.title}</span></a>`;
+    return `<a class="${on ? 'active' : ''}" href="${pg.path}"><span class="ico">${pg.ico}</span><span>${i18n.t(lang, pg.title)}</span></a>`;
   }).join('');
   const activePage = PAGES.find((x) => x.path === active) || PAGES[0];
   return `<!doctype html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="${lang === 'en' ? 'en' : 'zh-CN'}" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${activePage.title} · ${title}</title>
+<title>${i18n.t(lang, activePage.title)} · ${title}</title>
 <link rel="stylesheet" href="/assets/app.css">
 <link rel="icon" href="/badge.svg" type="image/svg+xml">
 </head>
 <body>
-<a class="skip-link" href="#main">跳到主内容</a>
+<a class="skip-link" href="#main">${i18n.t(lang, '跳到主内容')}</a>
 <div class="shell">
   <aside class="side" aria-label="侧边导航">
     <div class="brand"><span class="logo" aria-hidden="true">CF</span><div><div class="nm">${title}</div><div class="ver">v${VERSION}</div></div></div>
     <nav class="nav" aria-label="页面导航">${nav}</nav>
     <div class="side-foot">
-      <div class="row"><span class="dot" id="healthDot" aria-hidden="true"></span><span class="muted" id="healthText" role="status">检测中…</span></div>
+      <div class="row"><span class="dot" id="healthDot" aria-hidden="true"></span><span class="muted" id="healthText" role="status">${i18n.t(lang, '检测中…')}</span></div>
       <div class="row"><button class="sm ghost" id="btnTheme" title="切换深色 / 浅色" aria-label="切换深色或浅色主题">🌙</button>
       <button class="sm ghost" id="btnPalette" title="命令面板（Ctrl+K）" aria-label="打开命令面板">⌘K</button>
-      <a class="sm ghost" href="/legacy" target="_blank" rel="noreferrer" title="旧版单页面">旧版</a></div>
+      <a class="sm ghost" href="/legacy" target="_blank" rel="noreferrer" title="${i18n.t(lang, '旧版')}">${i18n.t(lang, '旧版')}</a>
+      <button class="sm ghost" id="btnLang" title="${i18n.t(lang, '切换语言')}" aria-label="${i18n.t(lang, '切换语言')}">${lang === 'en' ? '中' : 'EN'}</button>
+      <button class="sm ghost" id="btnLogout" title="${i18n.t(lang, '退出登录')}" aria-label="${i18n.t(lang, '退出登录')}">${i18n.t(lang, '退出')}</button></div>
       <div class="muted" style="font-size:11px">© <span id="year"></span> cf-tunnel-panel</div>
     </div>
   </aside>
@@ -55,8 +58,60 @@ function pageShell(active, body) {
 ${body}
   </main>
 </div>
+<script>window.__CFP_LANG=${JSON.stringify(lang === 'en' ? 'en' : 'zh')};window.__CFP_DICT=${i18n.clientDict()};</script>
 <script src="/assets/app.js"></script>
 <script src="/assets/${activePage.file}.js"></script>
+</body>
+</html>`;
+}
+
+/** 独立登录页：不套外壳（没登录时不该看到导航），自带一点样式。 */
+function loginPage({ next = '/', error = '', lang = 'zh' } = {}) {
+  const title = (state.settings && state.settings.panelTitle) || 'Cloudflare 隧道面板';
+  const safeNext = String(next || '/').startsWith('/') ? String(next || '/') : '/';
+  return `<!doctype html>
+<html lang="${lang === 'en' ? 'en' : 'zh-CN'}" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${i18n.t(lang, '登录')} · ${title}</title>
+<link rel="stylesheet" href="/assets/app.css">
+<link rel="icon" href="/badge.svg" type="image/svg+xml">
+</head>
+<body class="login-body">
+<form class="login-card" id="loginForm" autocomplete="on">
+  <div class="brand" style="padding:0 0 14px"><span class="logo" aria-hidden="true">CF</span><div><div class="nm">${title}</div><div class="ver">v${VERSION}</div></div></div>
+  <h1 style="font-size:18px;margin:0 0 12px">${i18n.t(lang, '登录面板')}</h1>
+  <div class="field"><label for="u">${i18n.t(lang, '用户名')}</label><input id="u" name="username" autocomplete="username" required autofocus></div>
+  <div class="field"><label for="p">${i18n.t(lang, '密码')}</label><input id="p" name="password" type="password" autocomplete="current-password" required></div>
+  <div class="hint err hidden" id="err">${error ? error : ''}</div>
+  <button class="primary" type="submit" style="width:100%;margin-top:10px">${i18n.t(lang, '登录')}</button>
+  <p class="muted" style="font-size:12px;margin:12px 0 0">登录后 7 天内免登录；在「设置 → 登录会话」里可以查看并踢掉其它设备。</p>
+</form>
+<script>
+(function () {
+  var f = document.getElementById('loginForm');
+  var err = document.getElementById('err');
+  if (err.textContent) err.classList.remove('hidden');
+  f.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    err.classList.add('hidden');
+    var btn = f.querySelector('button');
+    btn.disabled = true; var old = btn.textContent; btn.textContent = '登录中…';
+    try {
+      var r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'cfp' }, body: JSON.stringify({ user: document.getElementById('u').value, pass: document.getElementById('p').value }) });
+      var d = await r.json().catch(function () { return {}; });
+      if (r.ok && d.ok) { location.href = ${JSON.stringify(safeNext)}; return; }
+      err.textContent = d.error || '登录失败';
+      err.classList.remove('hidden');
+    } catch (x) {
+      err.textContent = '网络错误：' + x.message;
+      err.classList.remove('hidden');
+    }
+    btn.disabled = false; btn.textContent = old;
+  });
+})();
+</script>
 </body>
 </html>`;
 }
@@ -92,4 +147,4 @@ const uiHtml = () => fs.readFileSync(UI_FILE, 'utf8');
 const { UI_FILE, VERSION } = require('./paths');
 const { SEC_HEADERS } = require('./util');
 
-module.exports = { uiHtml, pageShell, readPage, serveText };
+module.exports = { uiHtml, pageShell, readPage, serveText, loginPage };

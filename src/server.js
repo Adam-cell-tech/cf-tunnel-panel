@@ -23,7 +23,7 @@ const QRCode = require('qrcode');
 const bcrypt = require('bcryptjs');
 
 const _audit = require('./core/audit');
-const { record: auditRecord, list: auditList, stats: auditStats, actionOf } = _audit;
+const { record: auditRecord, list: auditList, stats: auditStats, byHour: auditByHour, actionOf } = _audit;
 
 const _paths = require('./core/paths');
 const { ACCESS_LOG_FILE, ASSET_DIR, ASSET_TYPES, BACKUP_DIR, CADDY_ADMIN, CADDY_LOG_DIR, CLOUDFLARED, CLOUDFLARE_DEFAULT_RANGES, DATA_DIR, LB_POLICIES, LOGLEVELS, LOG_MAX, METHODS, PAGES, PAGE_DIR, PORT, PROTOCOLS, STATE_FILE, UI_FILE, VERSION, WEB_DIR, accessLogPathForCaddy, pkgVersion } = _paths;
@@ -41,7 +41,10 @@ const _registry = require('./core/registry');
 const { firstTunnel, publicUrlOf, runtimes, tunnelById, tunnelRt } = _registry;
 
 const _auth = require('./core/auth');
-const { AUTH_BLOCK_MS, AUTH_FAIL_LIMIT, AUTH_FAIL_WINDOW, authBlockedFor, authFails, authOk, checkAuth, clearAuthFail, clientIpOf, noteAuthFail } = _auth;
+const { AUTH_BLOCK_MS, AUTH_FAIL_LIMIT, AUTH_FAIL_WINDOW, authBlockedFor, authFails, authOk, checkAuth, clearAuthFail, clientIpOf, noteAuthFail, login } = _auth;
+
+const _session = require('./core/session');
+const session = _session;
 
 const _caddy = require('./core/caddy');
 const { buildCaddyConfig, buildMatch, buildRouteHandlers, caddy, cloudflareRanges, lastSkipped, maintPage, tunnelHostOf } = _caddy;
@@ -67,8 +70,11 @@ const { cfApi, dockerApi, dockerContainers, pickWebPort } = _integrations;
 const _notify = require('./core/notify');
 const { inQuietHours, notify, notifyHistory, recordNotify } = _notify;
 
+const _i18n = require('./core/i18n');
+const { langOf } = _i18n;
+
 const _web = require('./core/web');
-const { uiHtml, pageShell, readPage, serveText } = _web;
+const { uiHtml, pageShell, readPage, serveText, loginPage } = _web;
 
 const _monitor = require('./core/monitor');
 const { seenCaddyOk, shareJanitor, shareUrl, startMonitor } = _monitor;
@@ -99,6 +105,39 @@ async function handler(req, res) {
     return res.end(metricsText());
   }
 
+  // ---------- 登录页与会话接口（必须在鉴权门之前）----------
+  const wantsPage = req.method === 'GET' && (p === '/' || PAGES.some((x) => x.path === p || x.path === p.replace(/\/$/, '')));
+  if (p === '/login' && req.method === 'GET') {
+    const cur = session.fromReq(req);
+    if (cur) { res.writeHead(302, { Location: url.searchParams.get('next') || '/' }); return res.end(); }
+    return serveText(req, res, loginPage({ next: url.searchParams.get('next') || '/', error: url.searchParams.get('e') || '', lang: langOf(req) }), 'text/html; charset=utf-8', 'no-store');
+  }
+  if (p === '/api/login' && req.method === 'POST') {
+    const wait = authBlockedFor(req);
+    if (wait > 0) return sendJson(res, 429, { ok: false, error: `尝试次数过多，${Math.ceil(wait / 60)} 分钟后再试`, retryAfter: wait });
+    let body = {};
+    try { body = await readBody(req); } catch { body = {}; }
+    const s = login({ user: body.user, pass: body.pass, ip: clientIpOf(req), ua: req.headers['user-agent'] || '' });
+    if (!s) {
+      noteAuthFail(req);
+      const st = authFails.get(clientIpOf(req)) || {};
+      const left = Math.max(0, AUTH_FAIL_LIMIT - (st.count || 0));
+      log(`面板登录失败（${clientIpOf(req)}，本窗口还剩 ${left} 次机会）`, 'panel');
+      auditRecord({ actor: `${String(body.user || '(空)')}（口令错误）`, ip: clientIpOf(req), method: 'POST', path: '/api/login', status: 401, action: '登录失败', target: String(body.user || ''), ok: false });
+      return sendJson(res, 401, { ok: false, error: left > 0 ? `用户名或密码不对（还剩 ${left} 次机会）` : '错误次数过多，已临时锁定', left });
+    }
+    clearAuthFail(req);
+    log(`面板登录成功（${clientIpOf(req)}，${s.user}${s.role === 'viewer' ? ' 只读' : ''}）`, 'panel');
+    res.setHeader('Set-Cookie', session.cookieHeader(s.id, { secure: session.isSecure(req) }));
+    return sendJson(res, 200, { ok: true, user: s.user, role: s.role });
+  }
+  if (p === '/api/logout' && req.method === 'POST') {
+    const s = session.fromReq(req);
+    if (s) session.revoke(s.id);
+    res.setHeader('Set-Cookie', session.clearCookieHeader());
+    return sendJson(res, 200, { ok: true });
+  }
+
   const auth = checkAuth(req);
   req.__who = auth.who || '(未登录)';
   // 只读账号：能看不能改
@@ -119,10 +158,45 @@ async function handler(req, res) {
       res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="cf-tunnel-panel"', 'Content-Type': 'text/plain; charset=utf-8' });
       return res.end(left > 0 ? `用户名或密码不对（还剩 ${left} 次机会）` : '错误次数过多，已临时锁定');
     }
+    if (wantsPage) {
+      res.writeHead(302, { Location: `/login?next=${encodeURIComponent(p)}` });
+      return res.end();
+    }
     res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="cf-tunnel-panel"' });
     return res.end('需要登录');
   }
   if (auth.tried) clearAuthFail(req);
+
+  // 会话登录的写操作要防 CSRF：cookie 是浏览器自动带的，第三方页面能发起跨站表单 POST。
+  // SameSite=Lax 已经挡掉大部分，这里再要求同源标记，双保险。
+  if (auth.via === 'session' && !/^(GET|HEAD|OPTIONS)$/.test(req.method)) {
+    const site = String(req.headers['sec-fetch-site'] || '');
+    const origin = String(req.headers.origin || '');
+    const host = String(req.headers.host || '');
+    const sameOrigin = site === 'same-origin' || (origin && host && origin.replace(/^https?:\/\//, '') === host);
+    if (!sameOrigin && site) {
+      auditRecord({ actor: auth.who, ip: clientIpOf(req), method: req.method, path: p, status: 403, action: '跨站请求被拦下', ok: false });
+      return sendJson(res, 403, { ok: false, error: '跨站请求被拒绝（CSRF 防护）：请刷新页面后重试' });
+    }
+  }
+
+  // 会话管理
+  if (p === '/api/sessions' && req.method === 'GET') {
+    return sendJson(res, 200, { ok: true, cookie: session.COOKIE, sessions: session.list(auth.sid), ttlDays: Math.round(session.TTL_MS / 86400000) });
+  }
+  if (p === '/api/sessions/revoke' && req.method === 'POST') {
+    const body = await readBody(req).catch(() => ({}));
+    const full = session.resolveId(body && body.id);
+    if (!full) return sendJson(res, 404, { ok: false, error: '这个会话已经不存在了（可能已过期或被踢）' });
+    const isSelf = full === auth.sid;
+    session.revoke(full);
+    if (isSelf) res.setHeader('Set-Cookie', session.clearCookieHeader());
+    return sendJson(res, 200, { ok: true, self: isSelf });
+  }
+  if (p === '/api/sessions/revoke-others' && req.method === 'POST') {
+    const n = session.revokeOthers(auth.sid);
+    return sendJson(res, 200, { ok: true, revoked: n });
+  }
 
   // 前端静态资源
   if (p === '/__bench/ping') {
@@ -164,7 +238,7 @@ async function handler(req, res) {
   // 新版多页面
   const page = PAGES.find((x) => x.path === p || x.path === p.replace(/\/$/, ''));
   if (page) {
-    return serveText(req, res, pageShell(page.path, readPage(page.file)), 'text/html; charset=utf-8', 'no-store');
+    return serveText(req, res, pageShell(page.path, readPage(page.file), langOf(req)), 'text/html; charset=utf-8', 'no-store');
   }
 
   // 旧版单页（保留以便随时回退）
@@ -176,6 +250,10 @@ async function handler(req, res) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       return res.end('旧版页面已移除');
     }
+  }
+
+  if (p === '/api/audit/trend' && req.method === 'GET') {
+    return sendJson(res, 200, { ok: true, buckets: auditByHour(url.searchParams.get('hours') || 12) });
   }
 
   if (p === '/api/audit' && req.method === 'GET') {

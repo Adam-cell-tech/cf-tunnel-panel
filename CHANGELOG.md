@@ -2,6 +2,15 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.10.0
+- 会话式登录：`/login` 页 + `cfp_sid` cookie（HttpOnly/SameSite=Lax/HTTPS 自动 Secure），7 天有效、12 小时闲置失效；Basic 认证保留给脚本与 Prometheus。
+- 会话管理：`GET /api/sessions`、`POST /api/sessions/revoke`、`POST /api/sessions/revoke-others`；设置页「登录会话」表格显示账号/角色/IP/设备/时间，可逐个踢掉。会话只存内存，重启即失效。
+- CSRF：会话 cookie 的写请求要求同源（`Sec-Fetch-Site`/`Origin`），跨站写 403 并记审计。
+- 变更趋势图：概览页新增第三张柱状图，`GET /api/audit/trend?hours=` 按小时聚合写操作（失败叠红）。
+- 界面中英双语：`cfp_lang` cookie + 左下角 `EN`/`中` 切换，字典按「中文原文→英文」精确替换，服务端渲染 `<html lang>` 与导航文案。
+- 未登录访问页面跳转 `/login?next=`（API 仍返回 401 JSON）。
+- 测试：API 100 项 + 页面 70 项。
+
 ## v0.9.0
 
 - **Backend split**: `src/server.js` 2543 → ~800 lines; logic moved into 15 focused modules under `src/core/`

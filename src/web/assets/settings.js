@@ -171,6 +171,50 @@ async function save() {
   }
 }
 
+
+/* ---------------- 登录会话 ---------------- */
+async function loadSessions() {
+  const tb = document.querySelector('#sessTable tbody');
+  if (!tb) return;
+  try {
+    const d = await api('/api/sessions');
+    const rows = d.sessions || [];
+    tb.innerHTML = rows.length ? rows.map((x) => `<tr>
+        <td data-label="账号">${esc(x.user)}${x.current ? ' <span class="tag ok">当前</span>' : ''}</td>
+        <td data-label="角色">${x.role === 'viewer' ? '只读' : '管理员'}</td>
+        <td data-label="来源 IP"><span class="mono">${esc(x.ip || '-')}</span></td>
+        <td data-label="设备"><span class="muted" style="font-size:12px">${esc(String(x.ua || '-').slice(0, 48))}</span></td>
+        <td data-label="登录时间">${fmtTime(x.createdAt)}</td>
+        <td data-label="最后活动">${fmtTime(x.lastSeenAt)}</td>
+        <td data-label=""><button class="sm ghost" data-kick="${esc(x.id)}">踢掉</button></td>
+      </tr>`).join('') : '<tr><td colspan="7" class="muted">没有活动中的会话（可能是用 Basic 认证或脚本访问）</td></tr>';
+  } catch (e) {
+    tb.innerHTML = `<tr><td colspan="7" class="hint err">${esc(e.message)}</td></tr>`;
+  }
+}
+
+function bindSessions() {
+  const tb = document.querySelector('#sessTable tbody');
+  if (tb) tb.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-kick]');
+    if (!b) return;
+    if (!confirm('踢掉这个会话？那台设备需要重新登录。')) return;
+    try {
+      const d = await api('/api/sessions/revoke', { method: 'POST', body: { id: b.dataset.kick } });
+      if (d.self) { location.href = '/login'; return; }
+      toast('已踢掉');
+      loadSessions();
+    } catch (x) { toast(x.message, 'err'); }
+  });
+  const r = document.querySelector('#btnSessRefresh'); if (r) r.addEventListener('click', loadSessions);
+  const k = document.querySelector('#btnSessKickOthers');
+  if (k) k.addEventListener('click', async () => {
+    if (!confirm('把除当前设备以外所有登录都踢掉？')) return;
+    try { const d = await api('/api/sessions/revoke-others', { method: 'POST' }); toast(`已踢掉 ${d.revoked} 个会话`); loadSessions(); }
+    catch (x) { toast(x.message, 'err'); }
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   $('#btnSave').addEventListener('click', save);
   $('#btnBackupRefresh').addEventListener('click', loadBackups);
@@ -277,6 +321,8 @@ document.addEventListener('DOMContentLoaded', () => {
   loadBackups();
   loadNotifyHist();
   loadSystem();
+  bindSessions();
+  loadSessions();
 });
 
 })();

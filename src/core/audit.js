@@ -102,6 +102,38 @@ function matches(rec, q) {
     .some((v) => String(v || '').toLowerCase().includes(s));
 }
 
+/**
+ * 按整点聚合「变更频率」：观测页趋势图用它画第二根柱子。
+ * 只统计写操作与失败调用（record 本来就只记这些），所以这就是"谁在什么时候动过手"的密度。
+ */
+function byHour(hours = 12) {
+  const n = Math.min(Math.max(Number(hours) || 12, 1), 72);
+  let rows = buffer.slice();
+  if (!rows.length) rows = readFileTail();
+  const now = new Date();
+  const buckets = [];
+  const index = new Map();
+  for (let i = n - 1; i >= 0; i -= 1) {
+    const d = new Date(now);
+    d.setHours(d.getHours() - i, 0, 0, 0);
+    const k = d.getTime();
+    const b = { t: k, total: 0, ok: 0, err: 0 };
+    buckets.push(b);
+    index.set(k, b);
+  }
+  const from = buckets.length ? buckets[0].t : 0;
+  for (const r of rows) {
+    if (!r || !r.at || r.at < from) continue;
+    const d = new Date(r.at);
+    d.setMinutes(0, 0, 0);
+    const b = index.get(d.getTime());
+    if (!b) continue;
+    b.total += 1;
+    if (r.ok) b.ok += 1; else b.err += 1;
+  }
+  return buckets;
+}
+
 /** 读审计：内存优先；进程刚重启时回落到文件 */
 function list({ limit = 100, q = '' } = {}) {
   const n = Math.min(Math.max(Number(limit) || 100, 1), 500);
@@ -124,4 +156,4 @@ function stats() {
   return { count: buffer.length, fileBytes: size, file: AUDIT_FILE };
 }
 
-module.exports = { record, list, stats, actionOf, AUDIT_FILE, AUDIT_MAX };
+module.exports = { record, list, stats, byHour, actionOf, AUDIT_FILE, AUDIT_MAX };

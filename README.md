@@ -84,6 +84,8 @@ rules), `./caddy.bootstrap.json` (initial Caddy config, replaced at runtime).
 
 `/legacy` still serves the old single-page UI, in case you ever need it.
 
+> **Interface language:** the panel ships Chinese + English. Click the `EN` / `中` button at the bottom-left to switch; the choice is a cookie (`cfp_lang`) and also drives `<html lang>`.
+
 ## 3. Quick start (5 minutes)
 
 ### 3.1 Requirements
@@ -301,7 +303,37 @@ Every state-changing request (`POST`/`PUT`/`DELETE`) and every failed `/api` cal
 - `GET /api/audit?limit=200&q=keyword` — search by person, IP, action or path.
 - Plain `GET` reads are **not** recorded, so browsing the panel never floods the log.
 
+### 8.5 Change trend (audit in the overview)
+The overview page draws a second bar chart: how many **write actions** hit the panel each hour
+(rule edits, exit start/stop, settings changes…), with failures stacked in red.
+It reads `GET /api/audit/trend?hours=6|12|24`, which is built from the same audit log as §8.4 —
+so it answers "when was the panel last touched, and did it succeed", which a backup list cannot.
+
 ## 9. Security
+
+### 9.0 Sign-in and sessions
+Two ways in, and they coexist:
+
+| Method | Who it is for | How |
+| --- | --- | --- |
+| **Session cookie** | browsers | open `/login`, sign in once → `cfp_sid` cookie, 7 days, 12 h idle timeout |
+| **HTTP Basic** | `curl`, scripts, Prometheus | `curl -u user:pass http://host:8090/...` |
+
+Why sessions exist: Basic auth re-sends the password on every request, lives in the browser's
+credential store forever, and **cannot be revoked** — with only Basic, the only way to lock
+someone out is changing the password, which kicks you out too. With sessions you get a table
+(Settings → Sessions) showing every device: account, role, source IP, user agent, signed-in
+time, last activity — and a per-row **Kick** button plus *Sign out other devices*.
+
+Details worth knowing:
+
+- Sessions live in memory: restarting the panel signs everyone out (nothing to leak on disk).
+- Cookie is `HttpOnly; SameSite=Lax`, plus `Secure` when the request came over HTTPS.
+- Every state-changing request made with a session cookie is checked for same-origin
+  (`Sec-Fetch-Site` / `Origin`). Cross-site writes are rejected with 403 and audited.
+- Failed logins feed the same brute-force counter as Basic (8 tries / 10 min → 10 min lock).
+- Read-only accounts also get sessions; their writes are refused with 403.
+
 
 - **Panel login**: HTTP Basic. 8 wrong attempts from one IP → 10 minute lock (correct credentials still work).
 - **Read-only account**: sees everything, writes nothing (403), for showing status to other people.

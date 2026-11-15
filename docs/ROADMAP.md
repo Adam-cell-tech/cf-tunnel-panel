@@ -5,6 +5,16 @@
 
 ---
 
+### ✅ v0.10.0 — 会话登录 / 变更趋势 / 中英界面
+| 项 | 实现 |
+| --- | --- |
+| 会话式登录 | `/login` + `cfp_sid`（HttpOnly、SameSite=Lax、HTTPS 加 Secure），7 天 / 12 小时闲置失效；Basic 保留 |
+| 会话可见可踢 | `/api/sessions`、`/api/sessions/revoke`、`/api/sessions/revoke-others`，设置页表格 + 逐行踢掉 |
+| CSRF | 会话写请求校验 `Sec-Fetch-Site`/`Origin`，跨站 403 并记审计 |
+| 变更趋势 | `/api/audit/trend` + 概览第三张柱状图（失败叠红） |
+| 中英界面 | `cfp_lang` cookie、左下角切换、服务端 `<html lang>` 与导航翻译，前端 161 条字典精确替换 |
+| 未登录跳转 | 页面 302 → `/login?next=`，API 保持 401 JSON |
+
 ## ✅ v0.9.0 — 拆模块 + 审计日志
 
 | 项 | 结果 |

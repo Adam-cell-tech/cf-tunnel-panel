@@ -240,6 +240,34 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('设置: 无脚本错误', errors.length === 0, errors.join(' | ').slice(0, 160));
   }
 
+  // ---- 变更趋势（审计）----
+  {
+    const { doc, errors } = await open('/', 1600);
+    chk('概览: 有变更趋势卡', !!doc.querySelector('#auditBox'), '');
+    chk('概览: 变更趋势画出了 SVG', !!doc.querySelector('#auditBox svg'), String(!!doc.querySelector('#auditBox svg')));
+    chk('概览: 有变更趋势时间范围选择', !!doc.querySelector('#auditHours'), '');
+    chk('概览: 变更趋势无脚本错误', errors.length === 0, errors.join(' | ').slice(0, 160));
+  }
+
+  // ---- 会话与语言 ----
+  {
+    const { doc, win, errors } = await open('/settings', 1400);
+    chk('设置: 有登录会话表', !!doc.querySelector('#sessTable'), '');
+    chk('设置: 有踢掉其它设备按钮', !!doc.querySelector('#btnSessKickOthers'), '');
+    chk('设置: 会话表渲染出行', !!doc.querySelector('#sessTable tbody tr'), (doc.querySelector('#sessTable tbody') || {}).textContent ? 'y' : '');
+    chk('外壳: 有语言切换按钮', !!doc.querySelector('#btnLang'), (doc.querySelector('#btnLang') || {}).textContent || '');
+    chk('外壳: 有退出登录按钮', !!doc.querySelector('#btnLogout'), '');
+    chk('会话/语言: 无脚本错误', errors.length === 0, errors.join(' | ').slice(0, 160));
+  }
+
+  // ---- 登录页（独立页，不套外壳）----
+  {
+    const { doc, errors } = await open('/login', 600);
+    chk('登录页: 有表单与两个输入框', !!doc.querySelector('#loginForm') && !!doc.querySelector('#u') && !!doc.querySelector('#p'), '');
+    chk('登录页: 不出现侧边导航', !doc.querySelector('.side .nav'), '');
+    chk('登录页: 无脚本错误', errors.length === 0, errors.join(' | ').slice(0, 160));
+  }
+
   let bad = 0;
   for (const [ok, name, extra] of results) {
     if (!ok) bad++;

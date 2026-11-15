@@ -125,10 +125,73 @@ function applyTheme(v) {
   const b = $('#btnTheme');
   if (b) b.textContent = document.documentElement.dataset.theme === 'light' ? '☀️' : '🌙';
 }
+/** 退出登录：清掉服务端会话再回登录页。 */
+async function doLogout() {
+  try { await fetch('/api/logout', { method: 'POST', headers: { 'X-Requested-With': 'cfp' } }); } catch {}
+  location.href = '/login';
+}
+
+/* ---------------- 界面语言（中 / 英） ----------------
+ * 服务端把 <html lang> 与 window.__CFP_LANG / __CFP_DICT 注进来；
+ * 这里按「中文原文 → 英文」精确匹配替换文本与常用属性。
+ * 翻译不到的保留中文，避免机翻翻车。
+ */
+const LANG = window.__CFP_LANG === 'en' ? 'en' : 'zh';
+const DICT = window.__CFP_DICT || {};
+const LANG_COOKIE = 'cfp_lang';
+
+function t(zh) { return LANG === 'en' ? (DICT[zh] || zh) : zh; }
+
+function dictLookup(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return null;
+  if (DICT[s]) return DICT[s];
+  // 「🔄 刷新」「＋ 添加规则」这类带前缀符号的，剥掉符号再查
+  const stripped = s.replace(/^[^\p{L}\p{N}]+/u, '').trim();
+  if (stripped && DICT[stripped]) return (s.slice(0, s.length - stripped.length) + DICT[stripped]);
+  return null;
+}
+
+const LANG_SEL = 'h1,h2,h3,button,th,label,legend,summary,option,.tag,.exit-item .nm';
+
+function translateTree(root) {
+  if (LANG !== 'en') return;
+  const scope = root && root.querySelectorAll ? root : document;
+  scope.querySelectorAll(LANG_SEL).forEach((el) => {
+    if (el.children.length && !/^(BUTTON|OPTION|SUMMARY)$/.test(el.tagName)) return;
+    const hit = dictLookup(el.textContent);
+    if (hit && hit !== el.textContent) el.textContent = hit;
+  });
+  scope.querySelectorAll('[title],[placeholder],[aria-label]').forEach((el) => {
+    ['title', 'placeholder', 'aria-label'].forEach((attr) => {
+      const v = el.getAttribute(attr);
+      if (!v) return;
+      const hit = dictLookup(v);
+      if (hit && hit.trim() !== v.trim()) el.setAttribute(attr, hit);
+    });
+  });
+}
+
+function setLang(lang) {
+  document.cookie = `${LANG_COOKIE}=${lang}; path=/; max-age=31536000; samesite=lax`;
+  location.reload();
+}
+
+function initLang() {
+  const b = $('#btnLang');
+  if (b) b.addEventListener('click', () => setLang(LANG === 'en' ? 'zh' : 'en'));
+  translateTree(document);
+  // 各页会不停重画局部区域，简单起见按固定节奏补扫一遍（只做文本比对，开销很小）
+  setInterval(() => translateTree(document), 700);
+}
+
 function initTheme() {
   const saved = localStorage.getItem(THEME_KEY);
   if (saved) applyTheme(saved);
   else applyTheme(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  initLang();
+  const lo = $('#btnLogout');
+  if (lo) lo.addEventListener('click', doLogout);
   const pal = $('#btnPalette');
   if (pal) pal.addEventListener('click', () => openPalette());
   const b = $('#btnTheme');

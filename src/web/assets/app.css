@@ -304,3 +304,10 @@ pre.log .l-system{color:#a0a8b4}
   .chart{height:96px}
   .pal-wrap{padding-top:6vh}
 }
+
+/* 登录页：不套外壳，居中一张卡 */
+.login-body{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.login-card{width:100%;max-width:360px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px}
+.login-card .brand{display:flex;gap:10px;align-items:center}
+.login-card h1{font-weight:600}
+.login-card input{width:100%}

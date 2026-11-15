@@ -127,6 +127,35 @@ function drawHist(points) {
     </svg>`;
 }
 
+function drawAudit(buckets) {
+  const box = $('#auditBox');
+  if (!box) return;
+  const n = buckets.length;
+  if (!n) { box.innerHTML = '<div class="empty">还没有变更记录</div>'; return; }
+  const max = Math.max(1, ...buckets.map((b) => b.total));
+  const W = 100, H = 42, bw = W / n;
+  const bars = buckets.map((b, i) => {
+    const h = (b.total / max) * H;
+    const eh = (b.err / max) * H;
+    const x = i * bw;
+    return `<rect x="${x + bw * 0.12}" y="${H - h}" width="${bw * 0.76}" height="${h}" rx="0.8" fill="var(--warn)" opacity="0.85"></rect>`
+      + (eh > 0 ? `<rect x="${x + bw * 0.12}" y="${H - eh}" width="${bw * 0.76}" height="${eh}" rx="0.8" fill="var(--err)"></rect>` : '');
+  }).join('');
+  const labels = buckets.map((b, i) => {
+    if (n > 8 && i % 2) return '';
+    return `<text x="${i * bw + bw / 2}" y="${H + 6.5}" font-size="3.6" text-anchor="middle" fill="var(--dim)">${new Date(b.t).getHours()}:00</text>`;
+  }).join('');
+  const total = buckets.reduce((a, b) => a + b.total, 0);
+  const err = buckets.reduce((a, b) => a + b.err, 0);
+  box.innerHTML = `<div class="row" style="gap:8px;margin-bottom:6px">
+      <span class="tag">合计 ${total} 次改动</span>
+      <span class="tag err">失败 ${err} 次</span>
+      <span class="tag">${total === 0 ? '这段时间没人动过' : '峰值 ' + max + '/小时'}</span>
+      <a class="sm" href="/observe">看明细 →</a>
+    </div>
+    <svg class="chart" viewBox="0 0 ${W} ${H + 10}" preserveAspectRatio="none" role="img" aria-label="每小时变更次数">${bars}${labels}</svg>`;
+}
+
 async function paintCharts() {
   const hours = Number($('#trendHours').value || 12);
   try {
@@ -140,6 +169,12 @@ async function paintCharts() {
     drawHist(h.points || []);
   } catch (e) {
     $('#histBox').innerHTML = `<div class="hint warn">${esc(e.message)}</div>`;
+  }
+  try {
+    const a = await api('/api/audit/trend?hours=' + Number(($('#auditHours') || {}).value || 12));
+    drawAudit(a.buckets || []);
+  } catch (e) {
+    if ($('#auditBox')) $('#auditBox').innerHTML = `<div class="hint warn">${esc(e.message)}</div>`;
   }
 }
 
@@ -172,6 +207,8 @@ document.addEventListener('DOMContentLoaded', () => {
   logEl = $('#logBox');
   $('#btnRefresh').addEventListener('click', refresh);
   $('#trendHours').addEventListener('change', paintCharts);
+  const ah = $('#auditHours');
+  if (ah) ah.addEventListener('change', paintCharts);
   refresh();
   setInterval(refresh, 5000);
   openLogStream(appendLog);

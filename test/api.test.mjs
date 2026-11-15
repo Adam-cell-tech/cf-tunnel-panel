@@ -298,6 +298,48 @@ ok('审计不记 GET /api/state（查看类不刷屏）', !(au.d.rows || []).som
 const auq = await j('/api/audit?q=' + encodeURIComponent('settings'));
 ok('审计支持关键字搜索', auq.d.ok && (auq.d.rows || []).every((r) => [r.action, r.path, r.actor, r.ip].join(' ').toLowerCase().includes('settings')), String((auq.d.rows || []).length));
 
+// ---- 审计趋势 ----
+const sTr = await j('/api/audit/trend?hours=3');
+ok('/api/audit/trend 可用', sTr.d.ok === true && Array.isArray(sTr.d.buckets) && sTr.d.buckets.length === 3, JSON.stringify((sTr.d.buckets || []).map((b) => b.total)));
+ok('审计趋势分桶字段齐全', (sTr.d.buckets || []).every((b) => 'total' in b && 'ok' in b && 'err' in b), '');
+
+// ---- 会话登录 ----
+const sLp = await rawFetch(B + '/login');
+const sLpText = await sLp.text();
+ok('登录页 200 且有表单', sLp.status === 200 && sLpText.includes('id="loginForm"'), String(sLp.status));
+const sBad = await fetch(B + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '198.51.100.21' }, body: JSON.stringify({ user: USER, pass: 'wrong-' + Date.now() }) });
+const sBadD = await sBad.json().catch(() => ({}));
+ok('错口令登录被拒（401 且提示剩余次数）', sBad.status === 401 && sBadD.ok === false && /还剩|锁定/.test(sBadD.error || ''), sBadD.error || '');
+const sGood = await fetch(B + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '198.51.100.21' }, body: JSON.stringify({ user: USER, pass: PASS }) });
+const sGoodD = await sGood.json().catch(() => ({}));
+const sSetCookie = String(sGood.headers.get('set-cookie') || '');
+const sSid = (sSetCookie.match(/cfp_sid=([^;]+)/) || [])[1] || '';
+ok('正确口令登录拿到会话 cookie', sGood.status === 200 && sGoodD.ok === true && !!sSid, sGoodD.role || '');
+ok('cookie 带 HttpOnly 与 SameSite', /HttpOnly/i.test(sSetCookie) && /SameSite=Lax/i.test(sSetCookie), sSetCookie.length + ' 字节');
+const sSess = await fetch(B + '/api/sessions', { headers: { Cookie: `cfp_sid=${sSid}` } });
+const sSessD = await sSess.json().catch(() => ({}));
+ok('/api/sessions 列出当前会话', sSess.status === 200 && sSessD.ok && (sSessD.sessions || []).some((x) => x.current === true), String((sSessD.sessions || []).length));
+const sRo = await fetch(B + '/api/sessions/revoke-others', { method: 'POST', headers: { Cookie: `cfp_sid=${sSid}`, 'Sec-Fetch-Site': 'same-origin' } });
+const sRoD = await sRo.json().catch(() => ({}));
+ok('踢掉其它设备可用', sRo.status === 200 && sRoD.ok === true && typeof sRoD.revoked === 'number', String(sRoD.revoked));
+const sCsrf = await fetch(B + '/api/settings', { method: 'POST', headers: { Cookie: `cfp_sid=${sSid}`, 'Content-Type': 'application/json', Origin: 'https://evil.example', 'Sec-Fetch-Site': 'cross-site' }, body: JSON.stringify({ panelTitle: 'hacked' }) });
+ok('会话鉴权的跨站写请求被拦（CSRF）', sCsrf.status === 403, String(sCsrf.status));
+const sSame = await fetch(B + '/api/sessions', { headers: { Cookie: `cfp_sid=${sSid}`, 'Sec-Fetch-Site': 'same-origin' } });
+ok('同源请求正常放行', sSame.status === 200, '');
+const sLo = await fetch(B + '/api/logout', { method: 'POST', headers: { Cookie: `cfp_sid=${sSid}`, 'Sec-Fetch-Site': 'same-origin' } });
+ok('/api/logout 返回 200 且清 cookie', sLo.status === 200 && /Max-Age=0/.test(String(sLo.headers.get('set-cookie') || '')), '');
+const sAfter = await fetch(B + '/api/sessions', { headers: { Cookie: `cfp_sid=${sSid}` } });
+const sAfterD = await sAfter.json().catch(() => ({}));
+ok('登出后 cookie 失效（会话已销毁）', sAfter.status === 401 || (sAfterD.sessions || []).length === 0, String(sAfter.status));
+
+// ---- 界面语言 ----
+const sEn = await rawFetch(B + '/', { headers: { Authorization: basic, Cookie: 'cfp_lang=en' } });
+const sEnText = await sEn.text();
+ok('英文模式：html lang=en + 导航英文', sEnText.includes('lang="en"') && /<span>(Overview|Routes|Settings)<\/span>/.test(sEnText), '');
+const sZh = await rawFetch(B + '/', { headers: { Authorization: basic } });
+const sZhText = await sZh.text();
+ok('中文模式：html lang=zh-CN + 导航中文', sZhText.includes('lang="zh-CN"') && sZhText.includes('<span>总览</span>'), '');
+
 // 清理临时探针规则
 try {
   const cur = (await j('/api/state')).d.state.routes || [];

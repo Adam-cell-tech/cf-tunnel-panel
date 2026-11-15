@@ -60,6 +60,13 @@
       <div class="hd"><h2>出口在线历史</h2><div class="sub">每分钟采样，最多 4 小时</div></div>
       <div class="bd" id="histBox"><div class="empty">读取中…</div></div>
     </div>
+    <div class="card flush">
+      <div class="hd"><h2>变更趋势</h2><div class="sub">每小时面板被改动几次</div>
+        <div class="right"><select id="auditHours" style="width:auto" aria-label="变更趋势时间范围">
+          <option value="6">最近 6 小时</option><option value="12" selected>最近 12 小时</option><option value="24">最近 24 小时</option>
+        </select></div></div>
+      <div class="bd" id="auditBox"><div class="empty">读取中…</div></div>
+    </div>
   </div>
 
   <div class="card flush">
