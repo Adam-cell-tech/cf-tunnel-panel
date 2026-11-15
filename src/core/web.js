@@ -32,7 +32,10 @@ function pageShell(active, body, lang = 'zh') {
 <html lang="${lang === 'en' ? 'en' : 'zh-CN'}" data-theme="dark">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="/assets/manifest.webmanifest" />
+  <link rel="icon" href="/assets/icon.svg" type="image/svg+xml" />
+  <meta name="theme-color" content="#1b7f5a" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${i18n.t(lang, activePage.title)} · ${title}</title>
 <link rel="stylesheet" href="/assets/app.css">
 <link rel="icon" href="/badge.svg" type="image/svg+xml">
@@ -45,9 +48,9 @@ function pageShell(active, body, lang = 'zh') {
     <nav class="nav" aria-label="页面导航">${nav}</nav>
     <div class="side-foot">
       <div class="row"><span class="dot" id="healthDot" aria-hidden="true"></span><span class="muted" id="healthText" role="status">${i18n.t(lang, '检测中…')}</span></div>
-      <div class="row"><button class="sm ghost" id="btnTheme" title="切换深色 / 浅色" aria-label="切换深色或浅色主题">🌙</button>
+      <div class="row"><span class="tag warn hidden" id="unsaved" title="有改动还没保存">未保存</span>
+      <button class="sm ghost" id="btnTheme" title="切换深色 / 浅色" aria-label="切换深色或浅色主题">🌙</button>
       <button class="sm ghost" id="btnPalette" title="命令面板（Ctrl+K）" aria-label="打开命令面板">⌘K</button>
-      <a class="sm ghost" href="/legacy" target="_blank" rel="noreferrer" title="${i18n.t(lang, '旧版')}">${i18n.t(lang, '旧版')}</a>
       <button class="sm ghost" id="btnLang" title="${i18n.t(lang, '切换语言')}" aria-label="${i18n.t(lang, '切换语言')}">${lang === 'en' ? '中' : 'EN'}</button>
       <button class="sm ghost" id="btnLogout" title="${i18n.t(lang, '退出登录')}" aria-label="${i18n.t(lang, '退出登录')}">${i18n.t(lang, '退出')}</button></div>
       <div class="muted" style="font-size:11px">© <span id="year"></span> cf-tunnel-panel</div>
@@ -140,9 +143,8 @@ function serveText(req, res, body, type, cache = 'no-cache') {
   return res.end(buf);
 }
 
-const uiHtml = () => fs.readFileSync(UI_FILE, 'utf8');
 
-const { UI_FILE, VERSION } = require('./paths');
+const { VERSION } = require('./paths');
 const { SEC_HEADERS } = require('./util');
 
-module.exports = { uiHtml, pageShell, readPage, serveText, loginPage };
+module.exports = { pageShell, readPage, serveText, loginPage };

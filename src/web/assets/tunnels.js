@@ -161,6 +161,7 @@ async function act(card, action) {
       if (msg) msg.textContent = '保存中…';
       await api('/api/tunnels/' + id, { method: 'POST', body: collect(card) });
       toast('已保存并重启该出口', 'ok');
+      if (window.__cfpSetUnsaved) window.__cfpSetUnsaved('tunnels', false);
       await refresh(true);
       return;
     }
@@ -227,6 +228,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const nc = $('#newCard');
     if (nc && nc.scrollIntoView) nc.scrollIntoView({ behavior: 'smooth', block: 'center' });
     $('#newName').focus();
+  });
+  // 出口卡片里任何输入都算「未保存」，保存成功后由 saveTunnel 清掉
+  document.addEventListener('input', (e) => {
+    if (e.target.closest && e.target.closest('#tunnelList, #newTunnel')) {
+      if (window.__cfpSetUnsaved) window.__cfpSetUnsaved('tunnels', true);
+    }
   });
   $('#newMode').addEventListener('change', (e) => {
     $('#newNamedBox').classList.toggle('hidden', e.target.value !== 'named');

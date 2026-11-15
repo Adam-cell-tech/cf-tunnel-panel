@@ -163,6 +163,7 @@ function renderWarns() {
 
 function markDirty() {
   dirty = true;
+  if (window.__cfpSetUnsaved) window.__cfpSetUnsaved('rules', true);
   $('#rulesDirty').classList.remove('hidden');
 }
 
@@ -197,6 +198,7 @@ async function save() {
     const d = await api('/api/routes', { method: 'POST', body: { routes: rules } });
     rules = d.routes;
     dirty = false;
+    if (window.__cfpSetUnsaved) window.__cfpSetUnsaved('rules', false);
     $('#rulesDirty').classList.add('hidden');
     toast(`已保存 ${rules.length} 条规则` + (d.caddy && d.caddy.ok ? '' : '（Caddy 下发失败，看日志）'), d.caddy && d.caddy.ok ? 'ok' : 'err');
     await refresh(true);

@@ -5,7 +5,27 @@
 
 ---
 
-### ✅ v0.11.1 — 通知格式与加签
+## ✅ v0.12.0 — 从配置页到小运维台
+
+| 方向 | 实现要点 | 实测 |
+| --- | --- | --- |
+| 会话登录 | `core/session.js` 重写：cookie 值只存 sha256、落盘防抖、`remember` 30 天 / 普通 7 天、空闲 12h 过期 | 重启容器后带同一 cookie 仍 200；磁盘上无明文 id |
+| 踢设备 | `GET /api/sessions`、`POST /api/sessions/revoke`、`/revoke-others`、`/revoke-all`；改口令自动踢光 | 改口令后旧 cookie 401、返回 `relogin/revoked` |
+| 未保存守卫 | `app.js` 全局 `unsaved` + `beforeunload` + 站内 `<a>` 拦截；三个页面 `__cfpSetUnsaved` 联动 | DOM 测试：输入后 6s 轮询不丢、出现「未保存」 |
+| 单实例锁 | `state.acquireLock()`：pid + `/proc/<pid>/cmdline` 校验，`exit` 释放 | 第二个实例打印 `[fatal] 已有面板实例在运行` 并退出 1 |
+| Caddy admin | 端口 2019 → 20190，`ADMIN_LISTEN` 跟随 `CADDY_ADMIN`，`pusher` 多地址回退（含各自 Origin） | 迁移后 `20190` 200、`2019` 关闭，6 条路由正常 |
+| 主机名管理 | `GET .../ingress`、`POST .../hostnames`、`POST .../hostnames/delete`，保留兜底 `http_status:404`，可选建/删 CNAME | 加 `demo2.jianghugs.shop` → 12s 后公网 200；删除后 404 |
+| 按规则统计 | `GET /api/routes/stats`：用 `simulateMatch` 归属日志行，输出 count/err4/err5/upgraded/p50/p95/max/bytes + 未命中 | 面板规则 134 次 0 错误；ttyd 9 次全是 WS 101（`upgraded`） |
+| 更多告警 | `monitor.js` 每 5 分钟体检：5xx 占比 ≥10%（样本 ≥20）、10 分钟内登录失败 ≥5，事件 `errorSpike`/`loginFail` | 事件键已进默认 state 与设置页复选框 |
+| YAML 导出 | `GET /api/export.yaml`：自写小 YAML 序列化器，只输出 settings/tunnels/routes 的公开字段 | 导出含 `routes:` 且无 `pass:` / `$2b$` / `cfat_` |
+| PWA | `assets/manifest.webmanifest` + `icon.svg` + `sw.js`（只缓存 `/assets/*`），`app.js` 在 https 下注册 | 三个静态资源 200 |
+| GHCR | `.github/workflows/release.yml`：`v*` 标签构建 amd64+arm64 推 ghcr.io | 工作流已入库 |
+| 删旧页 | 移除 `/legacy` 路由、入口与 `src/ui.html`（96KB） | 测试改为断言 `/legacy` 返回 404 |
+
+**测试**：`test/api.test.mjs` 116/116、`test/dom.test.cjs` 75/75。
+**未做（留在下一批）**：TOTP 二次验证；admin / 只读之外的角色权限细分；CI 里跑真 Caddy 的端到端。
+
+## ✅ v0.11.1 — 通知格式与加签
 
 | 项 | 说明 |
 | --- | --- |

@@ -1,0 +1,16 @@
+{
+  "name": "cf-tunnel-panel",
+  "short_name": "CF 面板",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1216",
+  "theme_color": "#1b7f5a",
+  "icons": [
+    {
+      "src": "/assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

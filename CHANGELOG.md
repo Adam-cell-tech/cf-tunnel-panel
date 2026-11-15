@@ -12,6 +12,31 @@
 - `package.json` 增加 `engines.node >= 20`。
 - 测试：API 113、DOM 75。
 
+## v0.12.0
+
+**面板从「配置页」变成「小运维台」：会话登录、踢设备、单实例锁、主机名管理、按规则统计、更多告警、PWA、YAML 导出、GHCR 镜像。**
+
+### 新增
+- 会话登录：cookie `cfp_sid`（HttpOnly / SameSite=Lax）、记住我 30 天、空闲 12 小时过期；会话落盘 `data/sessions.json`（只存 cookie 值的 SHA-256），重启不掉线。
+- 设置 → 登录会话：列出会话（IP / UA / 最后活跃 / 换过 IP 标记），支持单个踢、全部踢；改面板口令或只读账号会踢掉全部会话。
+- 未保存改动守卫：标脏 + 顶栏「未保存」徽标 + 站内跳转确认 + `beforeunload`。
+- 单实例锁 `data/.state.lock`：pid + `/proc/<pid>/cmdline` 双重确认，第二个实例直接退出。
+- 公共主机名管理：`GET /api/cf/tunnels/<id>/ingress`、`POST .../hostnames`、`POST .../hostnames/delete`，自动建/删 CNAME。
+- 按规则统计 `GET /api/routes/stats`：命中数、错误率、P50/P95/最慢、字节数、未命中请求。
+- 新告警事件 `errorSpike`（5xx 尖峰）、`loginFail`（登录失败集中），沿用冷却与静默时段。
+- `GET /api/export.yaml`：无密钥的单文件配置快照。
+- PWA：manifest + 图标 + service worker（只缓存 `/assets/*`）。
+- `.github/workflows/release.yml`：打 tag 构建多架构镜像推 GHCR。
+
+### 变更
+- Caddy admin 默认从 `127.0.0.1:2019` 改到 `127.0.0.1:20190`，监听地址跟随 `CADDY_ADMIN`；下发改多地址回退。
+- 移除 `/legacy` 旧单页（96KB）及其入口。
+
+### 修复
+- 会话 `resolveKey` 不认原始 cookie 值，导致「登出」不生效、退出全部设备返回 undefined。
+- 会话换 IP 分支读 `sess.id`（不存在）抛错，使 `/api/sessions` 500。
+- 规则命中统计的索引错位（`simulateMatch` 返回 1-based），1xx（WebSocket 101）被漏计。
+
 ## v0.11.1
 
 - 通知按格式校验地址（钉钉/飞书/Bark 填错当场 400，不再静默不送达）。

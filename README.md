@@ -507,6 +507,28 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) (Chinese) for the version-by-version plan
 limits — including why the panel is built this way: Caddy in front (not cloud-side ingress rules), host
 networking, zero-dependency Node, hand-written SVG charts.
 
+
+## 14. What's new in v0.12.0
+
+Twelve items that turn a "config web page" into a small operations console. Every one of them is wired into the automated tests (116 API + 75 DOM assertions).
+
+| Area | What changed | Why it matters |
+| --- | --- | --- |
+| **Login sessions** | Cookie sessions (`cfp_sid`, HttpOnly, SameSite=Lax) with `remember me` (30 days) and a 12-hour idle timeout. Sessions are **persisted to `data/sessions.json`** — a container restart no longer logs you out. Only SHA-256 hashes of the cookie values are stored. | Basic auth is fine for curl, terrible for a browser: no logout, no device list, no way to revoke. |
+| **Kick devices** | Settings → *Login sessions* lists every session (IP, UA, last seen, whether it changed IP) with **kick** and **kick all**. Changing the panel password kicks everything and forces a re-login. | If a cookie leaks, you can kill it from your phone in five seconds. |
+| **Unsaved-changes guard** | Any edit on Tunnels / Rules / Settings marks the page dirty, shows a `未保存` badge in the top bar, blocks in-page navigation with a confirm, and hooks `beforeunload`. | The 5-second polling used to eat your typing. That is fixed, and now you also cannot lose it by clicking a nav link. |
+| **Single-instance lock** | `data/.state.lock` with pid + `/proc/<pid>/cmdline` verification. A second instance exits with a clear message. | Two panels writing `state.json` overwrite each other; worse, one can push its own Caddy config over the live one (this really happened in CI). |
+| **Caddy admin hardening** | The admin API moved off the well-known `:2019` to **`127.0.0.1:20190`**, and the generated config now derives its listen address from `CADDY_ADMIN` instead of hard-coding it. The pusher falls back across addresses so an upgrade cannot leave you stranded. | `:2019` is the default every Caddy tutorial and tool assumes; a non-default loopback port is one less free win for anything else running on the box. |
+| **Hostname manager** | Tools → *Public hostnames*: list, add, and delete a tunnel's ingress rules, with the matching CNAME created (or deleted) automatically. `addDns:false` skips DNS. | Adding a public hostname used to mean a trip to the Cloudflare dashboard. Now it is one form, and it is written through the same API the dashboard uses. |
+| **Per-route stats** | Observe → *Route hit stats*: for each rule, how many requests, error rate, P50/P95/max latency, bytes — computed by attributing real access-log lines through the same matcher the engine uses. Requests that matched nothing are reported separately. | "Which rule is slow / broken" used to be a `grep`. |
+| **More alerts** | Two new notify events: **5xx spike** (>10% of requests in 5 min, min 20 samples) and **repeated login failures** (≥5 in 10 min, with source IPs). Both honour the existing cooldown and quiet hours. | The panel already told you when a tunnel died. Now it tells you when it is up but failing. |
+| **YAML export** | `GET /api/export.yaml` — a secret-free, single-file snapshot for git (`settings` / `tunnels` / `routes`). | JSON exports are diff-hostile. This one is meant to be committed. |
+| **PWA** | Manifest + icon + service worker. Install it from the browser; the shell works offline, **only `/assets/*` is cached** (pages and `/api` never are). | On a phone the panel is now an app on the home screen instead of a bookmark. |
+| **GHCR images** | `.github/workflows/release.yml` builds multi-arch images (`amd64` + `arm64`) on a `v*` tag and pushes to `ghcr.io/<owner>/cf-tunnel-panel`. | No more "build it yourself to get a fix". |
+| **Legacy page removed** | The 96 KB single-file UI at `/legacy` is gone. | Two UIs drifted apart; keeping the old one cost more than it helped. |
+
+Two things were deliberately **not** done in this release, and they are still open in the roadmap: TOTP second factor, and per-role permission sets beyond admin/read-only.
+
 ## License
 
 [MIT](LICENSE) — use it, change it, ship it commercially; keep the copyright notice.

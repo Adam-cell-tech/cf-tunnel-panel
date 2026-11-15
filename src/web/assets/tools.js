@@ -59,7 +59,7 @@ async function loadCf() {
           <td>${t.status ? `<span class="tag ${t.status === 'healthy' ? 'ok' : t.status === 'down' ? 'err' : ''}">${esc(t.status)}</span>` : '—'}</td>
           <td>${t.connections ? `<span class="tag">${t.connections} 条</span>` : '<span class="muted">0（没跑 connector）</span>'}</td>
           <td class="mono muted" style="font-size:11px">${esc(t.id)}</td>
-          <td><button class="mini" data-cfget="${esc(t.id)}">复制 token</button> <button class="mini" data-cfdel="${esc(t.id)}">删除</button></td></tr>`).join('')}</tbody></table></div>`
+          <td><button class="mini" data-cfhost="${esc(t.id)}">主机名</button> <button class="mini" data-cfget="${esc(t.id)}">复制 token</button> <button class="mini" data-cfdel="${esc(t.id)}">删除</button></td></tr>`).join('')}</tbody></table></div>`
       : '<div class="empty">云端还没有隧道</div>';
     const sel = $('#cfDnsTunnel');
     if (sel) {
@@ -197,12 +197,75 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) { msg.textContent = 'DNS 操作失败：' + e.message; }
   }
 
+
+/* ---------------- 公共主机名（隧道 ingress 直改） ---------------- */
+let hostTunnelId = '';
+
+async function loadHostnames(id) {
+  hostTunnelId = id;
+  $('#hostBox').classList.remove('hidden');
+  $('#hostTun').textContent = id ? `· ${String(id).slice(0, 8)}…` : '';
+  const box = $('#hostList');
+  $('#hostMsg').textContent = '';
+  box.innerHTML = '<div class="muted">读取中…</div>';
+  try {
+    const d = await api('/api/cf/tunnels/' + id + '/ingress');
+    const rows = d.ingress || [];
+    box.innerHTML = rows.length
+      ? rows.map((x) => `<div class="row" style="justify-content:space-between;align-items:center;gap:8px">
+          <div><span class="mono">${esc(x.hostname)}</span> <span class="muted">→</span> <span class="mono">${esc(x.service || '')}</span></div>
+          <button class="mini ghost" data-hostdel="${esc(x.hostname)}">删除</button>
+        </div>`).join('')
+      : '<div class="empty">还没有公共主机名（只有兜底 404）</div>';
+    if (rows.length && !$('#hostSvc').value) $('#hostSvc').value = rows[0].service || '';
+  } catch (e) {
+    box.innerHTML = `<div class="hint err">${esc(e.message)}</div>`;
+  }
+}
+
+async function addHostname() {
+  const hostname = $('#hostName').value.trim();
+  const service = $('#hostSvc').value.trim();
+  const msg = $('#hostMsg');
+  if (!hostname || !service) { msg.textContent = '域名和上游都要填'; return; }
+  msg.textContent = '提交中…';
+  try {
+    await api(`/api/cf/tunnels/${hostTunnelId}/hostnames`, { method: 'POST', body: { hostname, service } });
+    msg.textContent = '已添加，DNS 也建好了';
+    $('#hostName').value = '';
+    toast(`已添加 ${hostname}`, 'ok');
+    await loadHostnames(hostTunnelId);
+    loadCf();
+  } catch (e) { msg.textContent = e.message; }
+}
+
+function bindHostnames() {
+  const list = $('#hostList');
+  if (list) list.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-hostdel]');
+    if (!b) return;
+    if (!confirm(`删除 ${b.dataset.hostdel}？会同时删掉它的 CNAME。`)) return;
+    try {
+      await api(`/api/cf/tunnels/${hostTunnelId}/hostnames/delete`, { method: 'POST', body: { hostname: b.dataset.hostdel } });
+      toast('已删除', 'ok');
+      await loadHostnames(hostTunnelId);
+    } catch (err) { toast(err.message, 'err'); }
+  });
+  const addBtn = $('#btnHostAdd');
+  if (addBtn) addBtn.addEventListener('click', addHostname);
+  const close = $('#btnHostClose');
+  if (close) close.addEventListener('click', () => $('#hostBox').classList.add('hidden'));
+}
+
   $('#btnCfVerify').addEventListener('click', cfVerify);
+  bindHostnames();
   $('#btnCfDnsAdd').addEventListener('click', () => cfDns(true));
   $('#btnCfDnsList').addEventListener('click', () => cfDns(false));
   $('#cfList').addEventListener('click', async (e) => {
     const z = e.target.closest('[data-cfzone]');
     if (z) { $('#cfZone').value = z.dataset.cfzone; toast('已填入 Zone ID，记得点「保存 API 配置」'); return; }
+    const h = e.target.closest('[data-cfhost]');
+    if (h) { loadHostnames(h.dataset.cfhost); return; }
     const got = e.target.closest('[data-cfget]');
     if (got) {
       try {

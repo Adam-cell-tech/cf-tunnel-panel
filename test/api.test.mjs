@@ -179,10 +179,20 @@ const badge = await rawFetch(B + '/badge.svg');
 ok('徽章免鉴权', badge.status === 200, String(badge.status));
 
 // 其他端点
-for (const p of ['/metrics', '/badge.svg', '/legacy']) {
+for (const p of ['/metrics', '/badge.svg']) {
   const r = await fetch(B + p);
   ok(`${p} 200`, r.status === 200, String(r.status));
 }
+// v0.12.0 起旧单页已下线，/legacy 应该 404（不再是 96KB 的重复界面）
+const lg = await fetch(B + '/legacy');
+ok('/legacy 已下线（404）', lg.status === 404, String(lg.status));
+// 新增：规则命中统计 / 配置导出 YAML
+const rs = await j('/api/routes/stats?limit=200');
+ok('/api/routes/stats 可用', rs.status === 200 && Array.isArray(rs.d.routes), JSON.stringify(rs.d).slice(0, 60));
+const yaml = await fetch(B + '/api/export.yaml', { headers: { Authorization: basic } });
+const ytext = await yaml.text();
+ok('/api/export.yaml 返回 YAML', yaml.status === 200 && ytext.includes('routes:') && /yaml/.test(yaml.headers.get('content-type') || ''), String(yaml.status));
+ok('YAML 不含明文口令/密钥', !/^\s*pass:/mi.test(ytext) && !/\$2[aby]\$/.test(ytext) && !/cfat_/.test(ytext), ytext.slice(0, 40));
 const sse = await fetch(B + '/api/logs/stream');
 ok('SSE 日志流可连接', sse.status === 200 && (sse.headers.get('content-type') || '').includes('text/event-stream'), sse.headers.get('content-type'));
 sse.body.cancel();

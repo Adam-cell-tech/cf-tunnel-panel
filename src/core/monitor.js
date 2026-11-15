@@ -13,13 +13,38 @@ const { saveState } = require('./state');
 const { publicUrlOf, tunnelRt } = require('./registry');
 const { caddy } = require('./caddy');
 const { pushCaddy } = require('./pusher');
-const { sampleHistory } = require('./insight');
+const { readAccess, sampleHistory } = require('./insight');
+const audit = require('./audit');
 const { notify } = require('./notify');
 let seenCaddyOk = true;
-let histTick = 0; // 采样节拍：每 12 次（12×5s=60s）落一个点
+let histTick = 0;
+let lastSpike = 0;      // 上次 5xx 告警时间（防刷屏）
+let lastLoginAlert = 0; // 采样节拍：每 12 次（12×5s=60s）落一个点
 function startMonitor() {
   setInterval(() => {
     histTick += 1;
+    // 每 5 分钟体检一次：5xx 尖峰 + 登录失败集中，命中就发通知（notify 自带冷却/静默）
+    if (histTick % 60 === 0) {
+      try {
+        const now = Date.now();
+        const acc = readAccess(600);
+        const rows = (acc && acc.rows) || [];
+        const recent = rows.filter((r) => now - (r.at || 0) < 5 * 60 * 1000);
+        const bad = recent.filter((r) => Number(r.status) >= 500);
+        if (recent.length >= 20 && bad.length / recent.length >= 0.1 && now - lastSpike > 15 * 60 * 1000) {
+          lastSpike = now;
+          notify('errorSpike', '面板：5 分钟内 5xx 比例偏高',
+            `${bad.length}/${recent.length} 个请求是 5xx（${Math.round((bad.length / recent.length) * 100)}%）\n主机：${os.hostname()}`);
+        }
+        const fails = (audit.list({ limit: 200 }).rows || []).filter((a) => a.action === '登录失败' && now - (a.at || 0) < 10 * 60 * 1000);
+        if (fails.length >= 5 && now - lastLoginAlert > 15 * 60 * 1000) {
+          lastLoginAlert = now;
+          const ips = [...new Set(fails.map((f) => f.ip))].slice(0, 3).join('、');
+          notify('loginFail', '面板：10 分钟内多次登录失败',
+            `${fails.length} 次失败，来源：${ips}\n如果不是你自己，建议改口令并开只读账号。`);
+        }
+      } catch {}
+    }
     if (histTick % 12 === 0) sampleHistory();
     for (const t of state.tunnels) {
       const rt = tunnelRt(t.id);

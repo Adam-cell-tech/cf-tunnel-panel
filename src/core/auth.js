@@ -27,7 +27,7 @@ function checkAuth(req) {
   if (!user) return { ok: true, tried: false, readonly: false, who: '(未设口令)', via: 'none' };
   const sess = session.fromReq(req);
   if (sess) {
-    session.touch(sess.id);
+    session.touch(sess.rawId || sess.id);
     // 同一个会话突然换 IP：cookie 被复制到别处、或者手机切了网络。
     // 不拦（拦了正常用户换 Wi-Fi 就进不来），但记审计 + 推一条通知，让你知道有人手里有你的 cookie。
     const ipNow = clientIpOf(req);
@@ -37,11 +37,11 @@ function checkAuth(req) {
       sess.prevIp = prev;
       sess.ipChangedAt = Date.now();
       audit.record({ actor: `${sess.user}（会话）`, ip: ipNow, method: req.method, path: String(req.url || ''), status: 200, action: '会话来源 IP 变更', target: `${prev} → ${ipNow}` });
-      log(`会话 ${sess.id.slice(0, 8)} 的来源 IP 变化：${prev} → ${ipNow}`, 'panel');
+      log(`会话 ${String(sess.rawId || sess.key || '').slice(0, 8)} 的来源 IP 变化：${prev} → ${ipNow}`, 'panel');
       notify('sessionIp', '面板会话换了 IP', `账号：${sess.user}\n原 IP：${prev}\n新 IP：${ipNow}\n时间：${new Date().toLocaleString('zh-CN')}\n\n如果不是你本人切换网络，说明这个 cookie 被复制走了，去「设置 → 登录会话」把它踢掉。`).catch(() => {});
     }
     const ro = sess.role === 'viewer';
-    return { ok: true, tried: false, readonly: ro, who: `${sess.user}（${ro ? '只读·会话' : '会话'}）`, via: 'session', sid: sess.id, session: sess };
+    return { ok: true, tried: false, readonly: ro, who: `${sess.user}（${ro ? '只读·会话' : '会话'}）`, via: 'session', sid: sess.rawId || sess.id || sess.key, session: sess };
   }
   const h = req.headers.authorization || '';
   if (!h.startsWith('Basic ')) return { ok: false, tried: false, readonly: false, who: '(未登录)', via: 'none' };
@@ -52,13 +52,13 @@ function checkAuth(req) {
 }
 
 /** 用账号口令换一个会话（登录接口用）。返回 null 表示口令不对。 */
-function login({ user, pass, ip = '', ua = '' }) {
+function login({ user, pass, ip = '', ua = '', remember = false }) {
   const admin = state.panel || {};
   const viewer = state.viewer || {};
   const u = String(user || '');
   const p = String(pass || '');
-  if (admin.user && u === admin.user && secret.verify(admin.pass, p)) return session.create({ user: u, role: 'admin', ip, ua });
-  if (viewer.user && u === viewer.user && secret.verify(viewer.pass, p)) return session.create({ user: u, role: 'viewer', ip, ua });
+  if (admin.user && u === admin.user && secret.verify(admin.pass, p)) return session.create({ user: u, role: 'admin', ip, ua, remember: !!remember });
+  if (viewer.user && u === viewer.user && secret.verify(viewer.pass, p)) return session.create({ user: u, role: 'viewer', ip, ua, remember: !!remember });
   return null;
 }
 

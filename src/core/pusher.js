@@ -35,13 +35,32 @@ async function pushCaddy() {
     return caddy;
   }
   try {
-    const res = await fetch(`${CADDY_ADMIN}/load`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Origin: CADDY_ADMIN },
-      body: JSON.stringify(cfg),
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    // admin 端口可能刚从旧地址搬过来（2019 → 20190）：挨个试，先成功的那条以后优先用
+    // 每项是 [admin 地址, 该地址允许的 Origin]：Caddy 会校验 Origin 是否在 admin.origins 里
+    const cands = [
+      [CADDY_ADMIN, CADDY_ADMIN],
+      ['http://127.0.0.1:2019', 'http://localhost:2019'],
+      ['http://localhost:2019', 'http://localhost:2019'],
+      ['http://127.0.0.1:20190', 'http://127.0.0.1:20190'],
+    ];
+    let res = null;
+    let lastErr = null;
+    for (const [base, origin] of cands) {
+      try {
+        const r = await fetch(`${base}/load`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Origin: origin },
+          body: JSON.stringify(cfg),
+          signal: AbortSignal.timeout(8000),
+        });
+        if (r.ok) { res = r; if (base !== CADDY_ADMIN) log(`Caddy admin 走备用地址 ${base}`, 'caddy'); break; }
+        lastErr = new Error(`HTTP ${r.status}: ${(await r.text()).slice(0, 300)}`);
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    if (!res) throw lastErr || new Error('Caddy admin 不可达');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     caddy.ok = true;
     caddy.error = null;
     caddy.lastPush = Date.now();

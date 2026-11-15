@@ -344,7 +344,46 @@ function paintHealth(d) {
   if (txt) txt.textContent = running ? `${running}/${list.length} 出口在线` : '没有出口在线';
 }
 
+
+// ---------------- 未保存改动：离开前提醒 ----------------
+// 各页面在 markDirty()/保存成功时调用 __cfpSetUnsaved('rules', true/false)。
+// 页面内跳转用 confirm 拦，关标签/刷新用 beforeunload 拦。
+const unsaved = { rules: false, tunnels: false, settings: false };
+function anyUnsaved() { return unsaved.rules || unsaved.tunnels || unsaved.settings; }
+function renderUnsaved() {
+  const b = $('#unsaved');
+  if (b) b.classList.toggle('hidden', !anyUnsaved());
+  document.body.classList.toggle('has-unsaved', anyUnsaved());
+}
+function setUnsaved(kind, val) {
+  if (!(kind in unsaved)) return;
+  unsaved[kind] = !!val;
+  renderUnsaved();
+}
+window.__cfpSetUnsaved = setUnsaved;
+window.__cfpAnyUnsaved = anyUnsaved;
+
+window.addEventListener('beforeunload', (e) => {
+  if (!anyUnsaved()) return undefined;
+  e.preventDefault();
+  e.returnValue = '';
+  return '';
+});
+document.addEventListener('click', (e) => {
+  const a = e.target.closest && e.target.closest('a[href]');
+  if (!a || !anyUnsaved()) return;
+  if (a.target === '_blank' || e.metaKey || e.ctrlKey) return;
+  if (!confirm('有还没保存的改动，离开这些改动会丢失。确定要走吗？')) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+}, true);
+
 document.addEventListener('DOMContentLoaded', () => {
+  // PWA：装上后像 App 一样打开；只缓存静态资源，配置类请求永不缓存
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('/assets/sw.js').catch(() => {});
+  }
   initTheme();
   const y = $('#year');
   if (y) y.textContent = new Date().getFullYear();

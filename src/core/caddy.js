@@ -10,6 +10,15 @@ const path=require('path');
  const bcrypt=require('bcryptjs');
 
 const { CLOUDFLARE_DEFAULT_RANGES, LB_POLICIES } = require('./paths');
+
+// admin 监听地跟着 CADDY_ADMIN 走（默认 20190，非常用端口），否则每次下发配置都会把 Caddy 拉回硬编码的 2019
+let ADMIN_PORT = '20190';
+let ADMIN_LISTEN = '127.0.0.1:20190';
+try {
+  const _a = new URL(require('./paths').CADDY_ADMIN);
+  ADMIN_PORT = _a.port || '20190';
+  ADMIN_LISTEN = `${_a.hostname}:${ADMIN_PORT}`;
+} catch {}
 const { log, parseCidrs, parseHeaderLines, parseUpstream } = require('./util');
 const _state = require('./state');
 const state = _state.stateProxy;
@@ -200,7 +209,9 @@ function buildCaddyConfig() {
   });
 
   return {
-    admin: { listen: '127.0.0.1:2019', origins: [CADDY_ADMIN, 'http://localhost:2019'] },
+    // admin 监听地跟着 CADDY_ADMIN 走：默认 20190（非常用端口），换了环境变量这里也跟着换，
+    // 否则每次下发配置都会把 Caddy 拉回硬编码的 2019。
+    admin: { listen: ADMIN_LISTEN, origins: [CADDY_ADMIN, `http://localhost:${ADMIN_PORT}`] },
     logging: {
       logs: {
         default: {

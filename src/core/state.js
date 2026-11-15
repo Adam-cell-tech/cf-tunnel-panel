@@ -29,7 +29,7 @@ function defaultState() {
       notify: {
         url: '', format: 'generic',
         secret: '',       // 钉钉/飞书「加签」密钥（可选），只在 URL 里有 sign 校验时才需要
-        events: { tunnelDown: true, urlChange: true, caddyFail: true, sessionIp: true },
+        events: { tunnelDown: true, urlChange: true, caddyFail: true, sessionIp: true, errorSpike: true, loginFail: true },
         cooldownSec: 300,  // 同一事件多少秒内不重复提醒（0 = 不冷却）
         quietHours: '',    // 静默时段，如 "23:00-07:00"，可逗号分隔多段
       },
@@ -181,6 +181,42 @@ function saveState(reason = 'save') {
   } catch {}
 }
 
+
+// ---------------------------------------------------------------- 单实例锁
+// 两个面板同时跑会互相覆盖 state.json，更糟的是其中一方可能把 Caddy 配置推成别人的版本
+// （CI 起第二个实例时就真发生过：线上路由被冲成 bootstrap 的 2 条）。
+// 锁文件里记 pid + 启动时间；判断"进程还活着"时同时核对 /proc/<pid>/cmdline，
+// 避免容器重启后 pid 被复用导致误判（容器里 PID 1 永远是 node，最容易踩）。
+let lockFile = '';
+
+function pidLooksLikePanel(pid) {
+  try {
+    const cmd = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8');
+    return cmd.includes('server.js');
+  } catch {
+    return false;
+  }
+}
+
+function acquireLock(file) {
+  lockFile = file;
+  try {
+    const prev = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (prev && prev.pid && prev.pid !== process.pid && pidLooksLikePanel(prev.pid)) {
+      return { ok: false, holder: prev };
+    }
+  } catch {}
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ pid: process.pid, at: Date.now(), host: require('os').hostname() }), { mode: 0o600 });
+  } catch (e) {
+    return { ok: false, holder: { error: e.message } };
+  }
+  const release = () => { try { fs.unlinkSync(lockFile); } catch {} };
+  process.on('exit', release);
+  return { ok: true };
+}
+
 // ---------------------------------------------------------------- 日志
 function validateRoutes(list, prevRoutes = []) {
   if (!Array.isArray(list)) throw new Error('routes 必须是数组');
@@ -279,4 +315,4 @@ const { LB_POLICIES, METHODS } = require('./paths');
  */
 function setState(next) { state = next; }
 
-module.exports = { stateProxy, setState, deepDefault, defaultOrigin, defaultState, loadState, migrateState, newTunnel, normalizeTunnels, publicRoute, publicSettings, saveState, state, validateRoutes };
+module.exports = { acquireLock, stateProxy, setState, deepDefault, defaultOrigin, defaultState, loadState, migrateState, newTunnel, normalizeTunnels, publicRoute, publicSettings, saveState, state, validateRoutes };

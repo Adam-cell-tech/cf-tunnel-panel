@@ -19,7 +19,7 @@ services:
     environment:
       TZ: Asia/Shanghai
       PORT: "8090"           # 面板 UI
-      CADDY_ADMIN: http://127.0.0.1:2019
+      CADDY_ADMIN: http://127.0.0.1:20190
       CADDY_LISTEN: ":8080"  # 代理入口（隧道应指向这里）
       LOG_STDOUT: "1"
       # 想用面板 HTTPS：先生成证书到 ./data/tls/panel.crt|panel.key，再打开下面两行

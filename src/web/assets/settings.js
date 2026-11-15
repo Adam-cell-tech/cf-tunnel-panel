@@ -165,6 +165,8 @@ function fill() {
   $('#evUrl').checked = !!(n.events && n.events.urlChange);
   $('#evCaddy').checked = !!(n.events && n.events.caddyFail);
   if ($('#evSessionIp')) $('#evSessionIp').checked = !!(n.events && n.events.sessionIp);
+  if ($('#evErrorSpike')) $('#evErrorSpike').checked = !!(n.events && n.events.errorSpike);
+  if ($('#evLoginFail')) $('#evLoginFail').checked = !!(n.events && n.events.loginFail);
   $('#notifyCool').value = n.cooldownSec === undefined ? 300 : n.cooldownSec;
   $('#notifyQuiet').value = n.quietHours || '';
   $('#panelUser').value = (ST.state.panel && ST.state.panel.user) || '';
@@ -186,7 +188,9 @@ async function save() {
       url: $('#notifyUrl').value.trim(),
       format: $('#notifyFormat').value,
       secret: $('#notifySecret').value.trim(),
-      events: { tunnelDown: $('#evDown').checked, urlChange: $('#evUrl').checked, caddyFail: $('#evCaddy').checked, sessionIp: $('#evSessionIp') ? $('#evSessionIp').checked : true },
+      events: { tunnelDown: $('#evDown').checked, urlChange: $('#evUrl').checked, caddyFail: $('#evCaddy').checked, sessionIp: $('#evSessionIp') ? $('#evSessionIp').checked : true,
+        errorSpike: $('#evErrorSpike') ? $('#evErrorSpike').checked : true,
+        loginFail: $('#evLoginFail') ? $('#evLoginFail').checked : true },
       cooldownSec: Number($('#notifyCool').value) || 0,
       quietHours: $('#notifyQuiet').value.trim(),
     },
@@ -197,6 +201,7 @@ async function save() {
     const d = await loadState();
     ST = d;
     fill();
+    if (window.__cfpSetUnsaved) window.__cfpSetUnsaved('settings', false);
     loadBackups();
   } catch (e) {
     toast('保存失败：' + e.message, 'err');
@@ -254,6 +259,12 @@ function bindSessions() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  // 设置页：任何输入都标记「未保存」，保存成功后清掉
+  document.addEventListener('input', (e) => {
+    if (e.target.closest && e.target.closest('#settingsForm, .card') && e.target.matches('input,select,textarea')) {
+      if (window.__cfpSetUnsaved) window.__cfpSetUnsaved('settings', true);
+    }
+  });
   $('#btnSave').addEventListener('click', save);
   $('#btnBackupRefresh').addEventListener('click', loadBackups);
   $('#backupList').addEventListener('click', async (e) => {

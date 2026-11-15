@@ -167,8 +167,38 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#btnLogDownload').addEventListener('click', () => { location.href = '/api/logs/download'; });
 
   loadAccess();
+
+// ---------------- 规则命中统计 ----------------
+async function loadRouteStats() {
+  const box = $('#rstatBody');
+  const msg = $('#rstatMsg');
+  if (!box) return;
+  try {
+    const d = await api('/api/routes/stats?limit=2000');
+    msg.textContent = d.available ? `采样 ${d.sampled} 条` : '还没有访问日志';
+    if (!d.routes.length) { box.innerHTML = '<div class="empty">这个窗口里没有规则被命中</div>'; return; }
+    const rows = d.routes.map((r) => {
+      const errTag = r.err5 ? `<span class="tag err">${r.err5} 个 5xx</span>`
+        : r.err4 ? `<span class="tag warn">${r.err4} 个 4xx</span>` : '<span class="tag ok">正常</span>';
+      return `<tr>
+        <td><strong>${esc(r.name)}</strong><div class="muted mono" style="font-size:11px">${esc(r.path || '/')}${r.host ? ' · ' + esc(r.host) : ''}</div></td>
+        <td>${r.count}</td>
+        <td>${errTag}<div class="muted" style="font-size:11px">${r.errRate}% 错误</div></td>
+        <td>${r.p50} / <strong>${r.p95}</strong>${r.max ? ` / ${r.max}` : ''}</td>
+        <td>${(r.bytes / 1024).toFixed(0)} KB</td>
+      </tr>`;
+    }).join('');
+    box.innerHTML = `<div class="tbl-wrap"><table class="stackable"><thead><tr><th>规则</th><th>命中</th><th>结果</th><th>P50 / P95 / 最慢 (ms)</th><th>流量</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      + (d.unmatched.count ? `<div class="hint warn">另有 ${d.unmatched.count} 个请求没有命中任何规则（其中 ${d.unmatched.s4} 个 4xx、${d.unmatched.s5} 个 5xx），通常是被兜底 404 接住了。</div>` : '');
+  } catch (e) {
+    box.innerHTML = `<div class="hint warn">${esc(e.message)}</div>`;
+  }
+}
+
   loadAudit().catch(() => {});
   $('#btnAuditRefresh').addEventListener('click', () => loadAudit().catch((e) => toast(e.message)));
+  if ($('#btnRstatRefresh')) $('#btnRstatRefresh').addEventListener('click', () => loadRouteStats().catch((e) => toast(e.message)));
+  loadRouteStats().catch(() => {});
   let auditTimer = null;
   $('#auditQ').addEventListener('input', () => {
     clearTimeout(auditTimer);

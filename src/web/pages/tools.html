@@ -101,6 +101,23 @@
       </div>
       <div class="hint" id="cfTip">Token 权限只要 <b>Account · Cloudflare Tunnel · Edit</b> 和 <b>Zone · DNS · Edit</b> 两项就够；再加上 <b>Account · Account Settings · Read</b> 和 <b>Zone · Zone · Read</b>，面板才能自动列出账号和域名。</div>
       <div id="cfList"></div>
+      <!-- 公共主机名：直接读写隧道 ingress，不用再去 Cloudflare 后台点 -->
+      <div id="hostBox" class="hidden" style="margin-top:12px;border-top:1px dashed var(--line);padding-top:12px">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <strong>公共主机名 <span class="muted" id="hostTun"></span></strong>
+          <button class="mini ghost" id="btnHostClose">收起</button>
+        </div>
+        <div id="hostList" class="stack" style="margin-top:8px"></div>
+        <div class="form-grid" style="margin-top:10px">
+          <div class="field"><label>域名</label><input id="hostName" placeholder="app.jianghugs.shop" autocomplete="off" /></div>
+          <div class="field"><label>上游服务</label><input id="hostSvc" placeholder="http://127.0.0.1:8080 或 ssh://localhost:22" autocomplete="off" /></div>
+        </div>
+        <div class="row" style="margin-top:8px;gap:8px">
+          <button class="primary sm" id="btnHostAdd">加主机名（自动建 CNAME）</button>
+          <span class="muted" id="hostMsg"></span>
+        </div>
+        <div class="hint" style="margin-top:8px">加完 5~15 秒生效。<b>ssh://</b> 只做 TCP 转发，浏览器打不开，客户端用 <span class="mono">cloudflared access ssh --hostname 域名</span>。指向 <span class="mono">127.0.0.1:8090</span> 会绕开 Caddy，规则和认证全部失效，只建议给面板自己用。</div>
+      </div>
       <div class="row" style="margin-top:6px">
         <div class="field" style="flex:1"><label>域名</label><input id="cfDnsName" placeholder="panel.example.com" /></div>
         <div class="field" style="flex:1"><label>指向哪条隧道</label><select id="cfDnsTunnel"><option value="">最近创建的那条</option></select></div>

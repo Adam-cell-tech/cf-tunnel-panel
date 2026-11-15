@@ -26,12 +26,13 @@ const _audit = require('./core/audit');
 const { record: auditRecord, list: auditList, stats: auditStats, byHour: auditByHour, actionOf } = _audit;
 
 const _paths = require('./core/paths');
-const { ACCESS_LOG_FILE, ASSET_DIR, ASSET_TYPES, BACKUP_DIR, CADDY_ADMIN, CADDY_LOG_DIR, CLOUDFLARED, CLOUDFLARE_DEFAULT_RANGES, DATA_DIR, LB_POLICIES, LOGLEVELS, LOG_MAX, METHODS, PAGES, PAGE_DIR, PORT, PROTOCOLS, STATE_FILE, UI_FILE, VERSION, WEB_DIR, accessLogPathForCaddy, pkgVersion } = _paths;
+const { ACCESS_LOG_FILE, ASSET_DIR, ASSET_TYPES, BACKUP_DIR, CADDY_ADMIN, CADDY_LOG_DIR, CLOUDFLARED, CLOUDFLARE_DEFAULT_RANGES, DATA_DIR, LB_POLICIES, LOGLEVELS, LOG_MAX, METHODS, PAGES, PAGE_DIR, PORT, PROTOCOLS, STATE_FILE, VERSION, WEB_DIR, accessLogPathForCaddy, pkgVersion } = _paths;
 
 const _util = require('./core/util');
 const { SEC_HEADERS, log, logSeq, logs, parseCidrs, parseHeaderLines, parseUpstream, rateLimited, readBody, rid, rlHits, sendJson, sseClients } = _util;
 
 const _state = require('./core/state');
+const { acquireLock } = _state;
 const { stateProxy, setState, deepDefault, defaultOrigin, defaultState, loadState, migrateState, newTunnel, normalizeTunnels, publicRoute, publicSettings, saveState, validateRoutes } = _state;
 // 注意：必须是 stateProxy（指向模块内部同一个对象），直接把 state 解构出来会拿到
 // loadState() 之前那个默认对象，导致 /api/state 看到的路由/出口数量和真实的不一致。
@@ -77,7 +78,7 @@ const _i18n = require('./core/i18n');
 const { langOf } = _i18n;
 
 const _web = require('./core/web');
-const { uiHtml, pageShell, readPage, serveText, loginPage } = _web;
+const { pageShell, readPage, serveText, loginPage } = _web;
 
 const _monitor = require('./core/monitor');
 const { seenCaddyOk, shareJanitor, shareUrl, startMonitor } = _monitor;
@@ -138,12 +139,12 @@ async function handler(req, res) {
     }
     clearAuthFail(req);
     log(`面板登录成功（${clientIpOf(req)}，${s.user}${s.role === 'viewer' ? ' 只读' : ''}）`, 'panel');
-    res.setHeader('Set-Cookie', session.cookieHeader(s.id, { secure: session.isSecure(req) }));
+    res.setHeader('Set-Cookie', session.cookieHeader(s.rawId || s.id || '', { secure: session.isSecure(req), remember: !!(body && body.remember) }));
     return sendJson(res, 200, { ok: true, user: s.user, role: s.role });
   }
   if (p === '/api/logout' && req.method === 'POST') {
     const s = session.fromReq(req);
-    if (s) session.revoke(s.id);
+    if (s) session.revoke(s.rawId || s.key);
     res.setHeader('Set-Cookie', session.clearCookieHeader());
     return sendJson(res, 200, { ok: true });
   }
@@ -196,7 +197,7 @@ async function handler(req, res) {
   }
   if (p === '/api/sessions/revoke' && req.method === 'POST') {
     const body = await readBody(req).catch(() => ({}));
-    const full = session.resolveId(body && body.id);
+    const full = session.resolveKey(body && body.id);
     if (!full) return sendJson(res, 404, { ok: false, error: '这个会话已经不存在了（可能已过期或被踢）' });
     const isSelf = full === auth.sid;
     session.revoke(full);
@@ -258,16 +259,6 @@ async function handler(req, res) {
   }
 
   // 旧版单页（保留以便随时回退）
-  if (p === '/legacy' || p === '/index.html') {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-    try {
-      return res.end(uiHtml());
-    } catch {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      return res.end('旧版页面已移除');
-    }
-  }
-
   if (p === '/api/audit/trend' && req.method === 'GET') {
     return sendJson(res, 200, { ok: true, buckets: auditByHour(url.searchParams.get('hours') || 12) });
   }
@@ -329,6 +320,54 @@ async function handler(req, res) {
     } catch (e) {
       return sendJson(res, 400, { ok: false, error: e.message });
     }
+  }
+
+  // 按规则聚合访问日志：谁在被访问、谁在报错、哪条慢
+  if (p === '/api/routes/stats' && req.method === 'GET') {
+    const url = new URL(req.url, 'http://x');
+    const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 2000, 50), 8000);
+    const d = readAccess(limit);
+    const rows = (d && d.rows) || [];
+    const acc = new Map(); // index -> {count, s2, s3, s4, s5, durs, bytes}
+    const unmatched = { count: 0, s4: 0, s5: 0 };
+    for (const r of rows) {
+      const path = String(r.uri || '/').split('?')[0];
+      const m = simulateMatch(path, r.host || '', r.method || 'GET');
+      const idx = m && m.matched ? (m.ofIndex != null ? m.ofIndex : m.index - 1) : -1;
+      const st = Number(r.status) || 0;
+      if (idx < 0) {
+        unmatched.count += 1;
+        if (st >= 500) unmatched.s5 += 1; else if (st >= 400) unmatched.s4 += 1;
+        continue;
+      }
+      let a = acc.get(idx);
+      if (!a) { a = { count: 0, s1: 0, s2: 0, s3: 0, s4: 0, s5: 0, durs: [], bytes: 0 }; acc.set(idx, a); }
+      a.count += 1;
+      if (st >= 500) a.s5 += 1; else if (st >= 400) a.s4 += 1; else if (st >= 300) a.s3 += 1; else if (st >= 200) a.s2 += 1; else if (st >= 100) a.s1 += 1;
+      if (r.durMs) a.durs.push(r.durMs);
+      a.bytes += Number(r.size) || 0;
+    }
+    const pct = (arr, p) => {
+      if (!arr.length) return 0;
+      const q = arr.slice().sort((x, y) => x - y);
+      return q[Math.min(q.length - 1, Math.max(0, Math.round((p / 100) * (q.length - 1))))];
+    };
+    const list = [...acc.entries()].map(([idx, a]) => {
+      const rule = state.routes[idx] || {};
+      return {
+        index: idx, id: rule.id, name: rule.name || rule.path || '(未命名)', path: rule.path || '',
+        host: rule.host || '', tunnelId: rule.tunnelId || '',
+        count: a.count, ok: a.s2 + a.s3 + a.s1, err4: a.s4, err5: a.s5, upgraded: a.s1,
+        errRate: a.count ? Math.round(((a.s4 + a.s5) / a.count) * 1000) / 10 : 0,
+        p50: pct(a.durs, 50), p95: pct(a.durs, 95), max: a.durs.length ? Math.max(...a.durs) : 0,
+        avg: a.durs.length ? Math.round(a.durs.reduce((x, y) => x + y, 0) / a.durs.length) : 0,
+        bytes: a.bytes,
+      };
+    }).sort((a, b) => b.count - a.count);
+    return sendJson(res, 200, {
+      ok: true, available: !!d.available, sampled: rows.length, totalRoutes: state.routes.length,
+      unmatched, routes: list, note: d.note || '',
+    });
   }
 
   if (p === '/api/access' && req.method === 'GET') {
@@ -543,6 +582,48 @@ async function handler(req, res) {
   }
 
   // 导出/导入：整份配置（可脱敏）
+  // 配置即代码：把可公开的配置导成 YAML，方便进 git 做 diff / review
+  if (p === '/api/export.yaml' && req.method === 'GET') {
+    const scalar = (v) => (v === null || v === undefined ? 'null'
+      : typeof v === 'number' || typeof v === 'boolean' ? String(v)
+        : JSON.stringify(String(v)));
+    const toYaml = (v, ind = 0) => {
+      const pad = '  '.repeat(ind);
+      if (v === null || v === undefined || typeof v !== 'object') return scalar(v);
+      if (Array.isArray(v)) {
+        if (!v.length) return '[]';
+        return '\n' + v.map((x) => {
+          if (x && typeof x === 'object' && !Array.isArray(x)) {
+            const keys = Object.keys(x).filter((k) => x[k] !== undefined);
+            const first = keys.slice(0, 1).map((k) => `${k}: ${toYaml(x[k], ind + 2)}`).join('');
+            const rest = keys.slice(1).map((k) => {
+              const val = toYaml(x[k], ind + 2);
+              return pad + '  ' + k + ':' + (val.startsWith('\n') ? val : ' ' + val);
+            });
+            return [pad + '- ' + first, ...rest].join('\n');
+          }
+          return pad + '- ' + toYaml(x, ind + 1).replace(/^\n/, '');
+        }).join('\n');
+      }
+      const keys = Object.keys(v).filter((k) => v[k] !== undefined);
+      if (!keys.length) return '{}';
+      return '\n' + keys.map((k) => {
+        const val = toYaml(v[k], ind + 1);
+        return pad + k + ':' + (val.startsWith('\n') ? val : ' ' + val);
+      }).join('\n');
+    };
+    const dump = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      settings: publicSettings(),
+      tunnels: publicTunnels().map((t) => ({ id: t.id, name: t.name, mode: t.mode, enabled: t.enabled, origin: t.origin, publicHostname: t.publicHostname, protocol: t.protocol, loglevel: t.loglevel, metricsPort: t.metricsPort })),
+      routes: state.routes.map((r) => ({ id: r.id, name: r.name, path: r.path, host: r.host, upstream: r.upstream, strip: r.strip, tunnelId: r.tunnelId, methods: r.matchMethod, ipAllow: r.ipAllow, timeoutSec: r.timeoutSec, backupUpstream: r.backupUpstream, note: r.note })),
+    };
+    const body = '# cf-tunnel-panel 配置快照（不含任何密钥）\n' + toYaml(dump).replace(/^\n/, '');
+    res.writeHead(200, { 'Content-Type': 'application/yaml; charset=utf-8', 'Content-Disposition': 'attachment; filename="cf-tunnel-panel.yaml"' });
+    return res.end(body);
+  }
+
   if (p === '/api/export' && req.method === 'GET') {
     const full = url.searchParams.get('full') === '1';
     const copy = JSON.parse(JSON.stringify(state));
@@ -756,6 +837,91 @@ async function handler(req, res) {
   }
 
   // ---- Cloudflare API
+  // ---- 命名隧道的「公共主机名」管理（Cloudflare 隧道配置 API，v0.12 新增）----
+  // 以前这一步只能去 Cloudflare 后台点，面板只能提醒"只建 CNAME 会 1033"。
+  // 现在直接读写 cf d_tunnel/{id}/configurations：加/删主机名 = 改 ingress 规则。
+  const cfIngress = p.match(/^\/api\/cf\/tunnels\/([0-9a-fA-F-]{36})\/ingress$/);
+  if (cfIngress && req.method === 'GET') {
+    try {
+      const cf = state.settings.cf || {};
+      if (!cf.accountId) throw new Error('还没填 Account ID（设置 → Cloudflare API）');
+      const r = await cfApi(`/accounts/${cf.accountId}/cfd_tunnel/${cfIngress[1]}/configurations`);
+      const cfg = (r && r.config) || {};
+      const ingress = (cfg.ingress || []).filter((x) => x && x.hostname);
+      return sendJson(res, 200, { ok: true, ingress, raw: cfg });
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: e.message });
+    }
+  }
+
+  if (/^\/api\/cf\/tunnels\/[0-9a-fA-F-]{36}\/hostnames$/.test(p) && req.method === 'POST') {
+    try {
+      const tid = p.split('/')[4];
+      const body = await readBody(req);
+      const cf = state.settings.cf || {};
+      if (!cf.accountId) throw new Error('还没填 Account ID（设置 → Cloudflare API）');
+      const hostname = String(body.hostname || '').trim().toLowerCase();
+      if (!/^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/.test(hostname)) throw new Error('域名格式不对，例如 app.example.com');
+      const service = String(body.service || '').trim();
+      if (!/^(https?:\/\/|ssh:\/\/|tcp:\/\/)[^\s]{1,300}$/i.test(service)) {
+        throw new Error('上游要写成 http://127.0.0.1:8080 / ssh://localhost:22 这样的完整地址');
+      }
+      const cur = await cfApi(`/accounts/${cf.accountId}/cfd_tunnel/${tid}/configurations`);
+      const cfg = Object.assign({}, (cur && cur.config) || {});
+      const ingress = Array.isArray(cfg.ingress) && cfg.ingress.length ? cfg.ingress.slice() : [{ service: 'http_status:404' }];
+      if (ingress.some((x) => x && String(x.hostname || '').toLowerCase() === hostname)) {
+        throw new Error(`这条隧道已经有 ${hostname} 了；要改就删掉再加`);
+      }
+      // 兜底规则（没有 hostname 的那条）必须在最后，否则它会把后面的全吃掉
+      let tail = ingress.filter((x) => !x.hostname);
+      if (!tail.length) tail = [{ service: 'http_status:404' }];
+      const head = ingress.filter((x) => x.hostname);
+      const next = [...head, { hostname, service }, ...tail];
+      cfg.ingress = next;
+      await cfApi(`/accounts/${cf.accountId}/cfd_tunnel/${tid}/configurations`, { method: 'PUT', body: { config: cfg } });
+      let dns = null;
+      if (body.addDns !== false && cf.zoneId) {
+        dns = await cfApi(`/zones/${cf.zoneId}/dns_records`, {
+          method: 'POST',
+          body: { type: 'CNAME', name: hostname, content: `${tid}.cfargotunnel.com`, proxied: true, comment: 'created by cf-tunnel-panel' },
+        }).catch((e) => ({ error: e.message }));
+      }
+      log(`隧道 ${tid.slice(0, 8)} 新增公共主机名 ${hostname} → ${service}`, 'panel');
+      auditRecord({ actor: auth.who, ip: clientIpOf(req), method: 'POST', path: p, status: 200, action: '新增隧道公共主机名', target: `${hostname} → ${service}` });
+      return sendJson(res, 200, { ok: true, hostname, service, dns, ingress: head.concat({ hostname, service }) });
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: e.message });
+    }
+  }
+
+  if (/^\/api\/cf\/tunnels\/[0-9a-fA-F-]{36}\/hostnames\/delete$/.test(p) && req.method === 'POST') {
+    try {
+      const tid = p.split('/')[4];
+      const body = await readBody(req);
+      const cf = state.settings.cf || {};
+      if (!cf.accountId) throw new Error('还没填 Account ID');
+      const hostname = String(body.hostname || '').trim().toLowerCase();
+      if (!hostname) throw new Error('要删哪个域名？');
+      const cur = await cfApi(`/accounts/${cf.accountId}/cfd_tunnel/${tid}/configurations`);
+      const cfg = Object.assign({}, (cur && cur.config) || {});
+      const ingress = Array.isArray(cfg.ingress) ? cfg.ingress : [];
+      const next = ingress.filter((x) => String(x.hostname || '').toLowerCase() !== hostname);
+      cfg.ingress = next.length ? next : [{ service: 'http_status:404' }];
+      await cfApi(`/accounts/${cf.accountId}/cfd_tunnel/${tid}/configurations`, { method: 'PUT', body: { config: cfg } });
+      let dns = null;
+      if (body.removeDns !== false && cf.zoneId) {
+        const rec = await cfApi(`/zones/${cf.zoneId}/dns_records?name=${encodeURIComponent(hostname)}`).catch(() => null);
+        const hit = rec && Array.isArray(rec) ? rec.find((r) => r.type === 'CNAME' && /cfargotunnel\.com$/.test(r.content)) : null;
+        if (hit) dns = await cfApi(`/zones/${cf.zoneId}/dns_records/${hit.id}`, { method: 'DELETE' }).catch((e) => ({ error: e.message }));
+      }
+      log(`隧道 ${tid.slice(0, 8)} 删除公共主机名 ${hostname}`, 'panel');
+      auditRecord({ actor: auth.who, ip: clientIpOf(req), method: 'POST', path: p, status: 200, action: '删除隧道公共主机名', target: hostname });
+      return sendJson(res, 200, { ok: true, hostname, dns });
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: e.message });
+    }
+  }
+
   if (p === '/api/cf/tunnels' && req.method === 'GET') {
     try {
       const cf = state.settings.cf || {};
@@ -922,6 +1088,18 @@ async function handler(req, res) {
 
 // ---------------------------------------------------------------- 启动
 loadState();
+
+// 会话持久化：落盘的只是 cookie 值的哈希，「记住我」30 天，普通登录 7 天
+const _restored = session.init(require('path').join(DATA_DIR, 'sessions.json'));
+
+// 单实例：抢不到锁就退出，避免两个面板互相覆盖 state.json / 互相推 Caddy 配置
+const lockInfo = acquireLock(require('path').join(DATA_DIR, '.state.lock'));
+if (!lockInfo.ok) {
+  const h = lockInfo.holder || {};
+  console.error(`[fatal] 已有面板实例在运行（pid ${h.pid || '?'}，启动于 ${h.at ? new Date(h.at).toISOString() : '?'}）。`
+    + ' 同一个数据目录只能跑一个面板；确实要强启请先删掉 data/.state.lock。');
+  process.exit(1);
+}
 
 /**
  * 一次性把历史明文口令迁移成 bcrypt 哈希（v0.11.2 之前 state.json 里存的是明文）。

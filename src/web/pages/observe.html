@@ -35,6 +35,16 @@
 
   <div class="card">
     <div class="hd">
+      <h2>规则命中统计</h2>
+      <div class="right"><button class="sm ghost" id="btnRstatRefresh">刷新</button></div>
+    </div>
+    <p class="hint" style="margin:0 0 8px">按最近一段访问日志聚合：每条规则被打中多少次、错误率、P95 延迟。<span class="muted" id="rstatMsg"></span></p>
+    <div class="bd tight" id="rstatBody"><div class="empty">读取中…</div></div>
+  </div>
+
+
+  <div class="card">
+    <div class="hd">
       <h2>审计日志</h2>
       <div class="right">
         <input id="auditQ" placeholder="搜人 / IP / 动作…" style="width:170px" aria-label="搜索审计日志" />
