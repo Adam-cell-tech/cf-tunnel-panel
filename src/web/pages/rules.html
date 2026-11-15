@@ -1,0 +1,49 @@
+<div class="topbar">
+  <div class="t"><h1>代理规则</h1><div class="sub">决定「谁能看、去哪个服务」；顺序即优先级，第一条命中即停，没命中一律 404</div></div>
+  <div class="tools">
+    <select id="scopeSel" style="width:auto"></select>
+    <button class="sm ghost" id="btnSim">模拟匹配</button>
+    <button class="sm primary" id="btnSave">保存规则</button>
+  </div>
+</div>
+
+<div class="content stack">
+  <div id="warns" class="stack"></div>
+
+  <div class="card flush">
+    <div class="hd">
+      <h2>规则列表</h2>
+      <span class="sub" id="scopeTag"></span>
+      <div class="right">
+        <input id="ruleFilter" placeholder="搜名字 / 路径 / 上游 / 域名" style="width:190px" aria-label="过滤规则" />
+        <select id="tplSel" style="width:auto"><option value="">从模板添加…</option></select>
+        <button class="sm" id="btnAddRule">＋ 添加规则</button>
+        <button class="sm ghost" id="btnImport" aria-expanded="false">粘贴导入</button>
+        <span class="tag warn hidden" id="rulesDirty">有未保存的改动</span>
+      </div>
+    </div>
+    <div class="bd">
+      <div id="importBox" class="hidden" style="margin-bottom:10px">
+        <textarea id="importText" rows="5" placeholder='粘贴一条规则的 JSON，例如 {"name":"相册","path":"/photos","upstream":"http://127.0.0.1:2283"}' aria-label="规则 JSON"></textarea>
+        <div class="row" style="margin-top:8px">
+          <button class="sm primary" id="btnDoImport">导入到当前作用域</button>
+          <button class="sm ghost" id="btnCancelImport">取消</button>
+        </div>
+      </div>
+      <div id="ruleList"></div>
+    </div>
+  </div>
+
+  <div class="card" id="simCard">
+    <div class="hd"><h2>模拟匹配</h2><div class="sub">不改配置，先看一条请求会被哪条规则接住</div></div>
+    <div class="bd stack">
+      <div class="form-grid">
+        <div class="field"><label>路径</label><input id="simPath" value="/demo" /></div>
+        <div class="field"><label>域名（可留空）</label><input id="simHost" placeholder="dsh.example.com" /></div>
+        <div class="field"><label>方法</label><input id="simMethod" value="GET" /></div>
+      </div>
+      <div class="row"><button class="sm" id="btnSimRun">看命中哪条</button></div>
+      <div id="simOut"></div>
+    </div>
+  </div>
+</div>

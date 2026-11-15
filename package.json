@@ -1,0 +1,23 @@
+{
+  "name": "cf-tunnel-panel",
+  "version": "0.8.0",
+  "private": true,
+  "description": "可视化 Docker 面板：用 cloudflared 隧道 + Caddy 本地反代，把内网服务发布到公网",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "npm run test:api && npm run test:dom",
+    "test:api": "node test/api.test.mjs",
+    "test:dom": "node test/dom.test.cjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "jsdom": "^31.0.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

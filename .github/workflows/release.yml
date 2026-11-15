@@ -1,0 +1,119 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # 创建 Release 需要
+      packages: write      # 推 ghcr 镜像需要
+    steps:
+      - uses: actions/checkout@v4
+
+      # 回填的历史 tag 只需要 Release，不需要再为每个旧版本构建镜像：
+      # 只有「当前最高版本号」的 tag（或手动触发）才构建并推送镜像
+      - id: gate
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "手动触发 → 构建镜像"
+            exit 0
+          fi
+          latest="$(git ls-remote --tags --refs origin 'v*' | awk '{print $2}' | sed 's#refs/tags/##' | sort -V | tail -1)"
+          if [ "$latest" = "$GITHUB_REF_NAME" ]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "当前最高版本 $latest → 构建镜像"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "历史版本回填（最高版本是 $latest）→ 跳过镜像构建，只建 Release"
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.gate.outputs.build == 'true'
+
+      - uses: docker/login-action@v3
+        if: steps.gate.outputs.build == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        if: steps.gate.outputs.build == 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v6
+        if: steps.gate.outputs.build == 'true'
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 从 CHANGELOG.md 抽出本版本那一段，作为 Release 说明
+      - id: notes
+        env:
+          REPO: ${{ github.repository }}
+          BUILT: ${{ steps.gate.outputs.build }}
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+          python3 - "$ver" "$REPO" > release-notes.md <<'PY'
+          import os, re, sys
+
+          ver, repo = sys.argv[1], sys.argv[2]
+          body = ''
+          try:
+              text = open('CHANGELOG.md', encoding='utf-8').read()
+              m = re.search(r'^##\s+v?' + re.escape(ver) + r'\s*$(.*?)(?=^##\s|\Z)', text, re.S | re.M)
+              if m:
+                  body = m.group(1).strip()
+          except OSError:
+              pass
+
+          if body:
+              print(body)
+          else:
+              print('这个版本的详细变更见 [CHANGELOG.md](https://github.com/%s/blob/main/CHANGELOG.md)。' % repo)
+
+          if os.environ.get('BUILT') != 'true':
+              # 历史版本回填：没有对应的 ghcr 镜像，别给 user 一条会 404 的 docker pull
+              print()
+              print('> 历史版本补打的 tag：只记录该版本的发布点，未构建镜像。')
+              raise SystemExit(0)
+
+          print()
+          print('---')
+          print()
+          print('**镜像**（linux/amd64 + linux/arm64）')
+          print()
+          print('```bash')
+          print('docker pull ghcr.io/%s:%s' % (repo, ver))
+          print('docker pull ghcr.io/%s:latest' % repo)
+          print('```')
+          PY
+          echo "----- release-notes.md -----"
+          cat release-notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ steps.notes.outputs.ver }}
+          body_path: release-notes.md
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: false

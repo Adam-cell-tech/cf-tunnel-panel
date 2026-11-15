@@ -1,0 +1,47 @@
+<div class="topbar">
+  <div class="t"><h1>观测</h1><div class="sub">谁在访问、哪条规则在接、面板日志实时流</div></div>
+  <div class="tools">
+    <label class="inline"><input class="chk" type="checkbox" id="accessAuto" checked /> 自动刷新</label>
+    <button class="sm ghost" id="btnAccessRefresh">刷新</button>
+  </div>
+</div>
+
+<div class="content stack">
+  <div class="card flush">
+    <div class="hd">
+      <h2>访问统计</h2>
+      <div class="sub" id="accessMsg">—</div>
+      <div class="right">
+        <select id="accStatus" style="width:auto" aria-label="按状态码筛选">
+          <option value="">全部状态</option>
+          <option value="2">只看 2xx</option>
+          <option value="3">只看 3xx</option>
+          <option value="4">只看 4xx</option>
+          <option value="5">只看 5xx</option>
+          <option value="err">只看错误（4xx + 5xx）</option>
+        </select>
+        <input id="accPath" placeholder="路径包含…" style="width:150px" aria-label="按路径筛选" />
+        <select id="accRange" style="width:auto" aria-label="时间范围">
+          <option value="0">全部时间</option>
+          <option value="300">最近 5 分钟</option>
+          <option value="3600">最近 1 小时</option>
+          <option value="86400">最近 24 小时</option>
+        </select>
+      </div>
+    </div>
+    <div class="bd tight" id="accessBody"><div class="empty">读取中…</div></div>
+  </div>
+
+  <div class="card flush">
+    <div class="hd">
+      <h2>面板日志</h2>
+      <div class="right">
+        <input id="logFilter" placeholder="过滤关键字…" style="width:160px" aria-label="日志关键字过滤" />
+        <label class="inline"><input class="chk" type="checkbox" id="logOnlyErr" /> 只看错误</label>
+        <button class="sm ghost" id="btnLogPause" aria-pressed="false">暂停</button>
+        <button class="sm ghost" id="btnLogDownload">下载</button>
+      </div>
+    </div>
+    <pre class="log" id="logBox" aria-live="polite" style="border-radius:0 0 var(--radius) var(--radius)"></pre>
+  </div>
+</div>

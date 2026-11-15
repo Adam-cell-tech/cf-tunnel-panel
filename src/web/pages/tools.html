@@ -1,0 +1,127 @@
+<div class="topbar">
+  <div class="t"><h1>工具箱</h1><div class="sub">本机容器、一次性分享、链路自测、Cloudflare API</div></div>
+  <div class="tools"><a class="sm" href="/metrics" target="_blank" rel="noreferrer">指标</a><a class="sm" href="/badge.svg" target="_blank" rel="noreferrer">徽章</a></div>
+</div>
+
+<div class="content stack">
+  <div class="card flush">
+    <div class="hd">
+      <h2>本机 Docker 容器</h2>
+      <div class="sub">点「加规则」会把上游填好塞进规则列表，确认后再保存</div>
+      <div class="right"><button class="sm ghost" id="btnDockerRefresh">刷新</button></div>
+    </div>
+    <div class="bd tight" id="dockerBody"><div class="empty">读取中…</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="hd"><h2>一次性分享链接</h2><div class="sub">到期自动从 Caddy 摘掉</div></div>
+      <div class="bd stack">
+        <div class="form-grid">
+          <div class="field"><label>备注名</label><input id="shareName" placeholder="给谁看" /></div>
+          <div class="field"><label>上游</label><input id="shareUpstream" placeholder="http://127.0.0.1:8088" /></div>
+          <div class="field"><label>有效分钟</label><input id="shareMinutes" value="30" /></div>
+        </div>
+        <div class="row"><button class="primary" id="btnShareAdd">生成链接</button><span class="muted" id="shareMsg"></span></div>
+        <div id="shareList"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd"><h2>链路自测</h2><div class="sub">直接打本机 Caddy，验证规则和认证是否生效</div></div>
+      <div class="bd stack">
+        <div class="form-grid">
+          <div class="field"><label>路径</label><input id="curlPath" value="/demo" /></div>
+          <div class="field"><label>Host / 域名</label><input id="curlHost" placeholder="留空按默认" /></div>
+        </div>
+        <div class="row"><button class="sm" id="btnCurl">发请求</button></div>
+        <pre class="log" id="curlOut" style="min-height:120px;border-radius:8px"></pre>
+        <div class="hint">下面这项专门验证 WebSocket：经本机 Caddy 走一次真实的 WS 握手，能到 101 就说明这条规则能承载网页终端 / Jupyter / 实时面板。</div>
+        <div class="form-grid">
+          <div class="field"><label>WS 路径</label><input id="wsPath" value="/term/ws" placeholder="/term/ws" /></div>
+          <div class="field"><label>Host / 域名</label><input id="wsHost" placeholder="留空按默认" /></div>
+        </div>
+        <div class="row"><button class="sm" id="btnWsTest">测试 WebSocket 升级</button><span class="muted" id="wsMsg"></span></div>
+        <pre class="log" id="wsOut" style="min-height:80px;border-radius:8px"></pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="hd">
+      <h2>测速</h2>
+      <div class="sub">量的是「你现在这个页面到手上」的真实链路：延迟 + 下载带宽 + 落在哪个 Cloudflare 机房</div>
+      <div class="right"><button class="sm primary" id="btnBenchAll">一键测速</button></div>
+    </div>
+    <div class="bd stack">
+      <div class="row">
+        <label class="muted" style="font-size:12.5px">下载大小</label>
+        <select id="benchMb">
+          <option value="1">1 MB</option>
+          <option value="5" selected>5 MB</option>
+          <option value="20">20 MB</option>
+        </select>
+        <span class="muted" id="benchMsg"></span>
+      </div>
+      <div id="benchOut" class="muted">还没测过。点「一键测速」：会打 10 次小请求量延迟，再下载一个测试文件量带宽，最后问一次本机 Caddy 的延迟做对照。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="hd">
+      <h2>Cloudflare API（可选）</h2>
+      <div class="sub">填了 API Token，就能在面板里建隧道、建/删 DNS，不用来回切后台</div>
+      <div class="right"><button class="sm ghost" id="btnCfVerify">验证 Token / 拉账号与域名</button></div>
+    </div>
+    <div class="bd stack">
+      <div class="form-grid">
+        <div class="field"><label>API Token</label><input id="cfToken" type="password" placeholder="留空 = 不修改已保存的" autocomplete="off" /></div>
+        <div class="field"><label>Account ID</label><input id="cfAccount" placeholder="点右上「验证」自动带出" /></div>
+        <div class="field"><label>Zone ID</label><input id="cfZone" placeholder="点右上「验证」自动带出" /></div>
+      </div>
+      <div class="row">
+        <button class="primary" id="btnCfSave">保存 API 配置</button>
+        <button class="sm ghost" id="btnCfList">刷新云端隧道</button>
+        <button class="sm ghost" id="btnCfCreate" aria-expanded="false">新建隧道</button>
+        <span class="muted" id="cfMsg"></span>
+      </div>
+      <div id="newTunBox" class="hidden" style="border:1px solid var(--line);border-radius:10px;padding:12px">
+        <div class="form-grid">
+          <div class="field"><label>隧道名字</label><input id="newTunName" placeholder="home-nas" /></div>
+          <div class="field"><label>绑定的域名（可留空）</label><input id="newTunHost" placeholder="nas.example.com" /></div>
+          <div class="field"><label class="inline"><input class="chk" type="checkbox" id="newTunCname" checked /> 顺带建 CNAME</label></div>
+          <div class="field"><label class="inline"><input class="chk" type="checkbox" id="newTunLocal" checked /> 顺带在本机加一条出口</label></div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button class="sm primary" id="btnNewTunDo">创建</button>
+          <button class="sm ghost" id="btnNewTunCancel">取消</button>
+          <span class="muted" id="newTunMsg"></span>
+        </div>
+        <div class="hint">建完记得去 Cloudflare → 该隧道 → 路由 → 添加路由，把公共主机名指到本机 Caddy（HTTP → 127.0.0.1:8080）；只建 CNAME 会 1033。</div>
+      </div>
+      <div class="hint" id="cfTip">Token 权限只要 <b>Account · Cloudflare Tunnel · Edit</b> 和 <b>Zone · DNS · Edit</b> 两项就够；再加上 <b>Account · Account Settings · Read</b> 和 <b>Zone · Zone · Read</b>，面板才能自动列出账号和域名。</div>
+      <div id="cfList"></div>
+      <div class="row" style="margin-top:6px">
+        <div class="field" style="flex:1"><label>域名</label><input id="cfDnsName" placeholder="panel.example.com" /></div>
+        <div class="field" style="flex:1"><label>指向哪条隧道</label><select id="cfDnsTunnel"><option value="">最近创建的那条</option></select></div>
+        <button class="sm" id="btnCfDnsAdd">建 CNAME</button>
+        <button class="sm ghost" id="btnCfDnsList">按域名查记录</button>
+      </div>
+      <div id="cfDnsList"></div>
+      <div class="hint">注意：<b>公共主机名（Public Hostname）只能在 Cloudflare 后台加</b>。API 建 CNAME 只是把域名指向隧道，真正「这个域名走 127.0.0.1:8080」的映射还在后台 → 你的隧道 → 路由 → 添加路由。CNAME 建好但没加主机名时，打开域名会是 Cloudflare 1033 错误。</div>
+    </div>
+  </div>
+  </div>
+
+  <div class="card">
+    <div class="hd"><h2>生成的 Caddy 配置</h2><div class="sub">面板把规则翻译成的 Caddy JSON —— 排查“为什么没生效”时直接看这个</div></div>
+    <div class="bd stack">
+      <div class="row">
+        <button class="sm ghost" id="btnCaddyCfg">生成并查看</button>
+        <button class="sm ghost" id="btnCaddyCopy">复制</button>
+        <span class="muted" id="caddyCfgMsg"></span>
+      </div>
+      <pre class="log" id="caddyCfg" style="max-height:340px;display:none"></pre>
+    </div>
+  </div>
+</div>

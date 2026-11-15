@@ -1,0 +1,83 @@
+<div class="topbar">
+  <div class="t"><h1>概览</h1><div class="sub">隧道、规则、流量的实时状态</div></div>
+  <div class="tools">
+    <span class="tag" id="updAt">—</span>
+    <button class="sm ghost" id="btnRefresh">刷新</button>
+  </div>
+</div>
+
+<div class="content stack">
+  <div class="grid4">
+    <div class="card stat">
+      <div class="k">隧道出口</div>
+      <div class="v" id="statExits">–</div>
+      <div class="x" id="statExitsX">&nbsp;</div>
+    </div>
+    <div class="card stat">
+      <div class="k">生效规则</div>
+      <div class="v" id="statRules">–</div>
+      <div class="x" id="statRulesX">&nbsp;</div>
+    </div>
+    <div class="card stat">
+      <div class="k">Caddy 分流</div>
+      <div class="v" id="statCaddy">–</div>
+      <div class="x" id="statCaddyX">&nbsp;</div>
+    </div>
+    <div class="card stat">
+      <div class="k">最近请求</div>
+      <div class="v" id="statReq">–</div>
+      <div class="x" id="statReqX">&nbsp;</div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card flush">
+      <div class="hd"><h2>隧道出口</h2><div class="right"><a class="sm" href="/tunnels">管理 →</a></div></div>
+      <div class="bd tight" id="exitMini"></div>
+    </div>
+    <div class="card flush">
+      <div class="hd"><h2>代理规则</h2><div class="right"><a class="sm" href="/rules">编辑 →</a></div></div>
+      <div class="bd tight" id="ruleMini"></div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card flush">
+      <div class="hd">
+        <h2>流量趋势</h2>
+        <div class="sub">每小时请求数，红色是 4xx/5xx</div>
+        <div class="right">
+          <select id="trendHours" style="width:auto" aria-label="流量趋势时间范围">
+            <option value="6">最近 6 小时</option>
+            <option value="12" selected>最近 12 小时</option>
+            <option value="24">最近 24 小时</option>
+          </select>
+        </div>
+      </div>
+      <div class="bd" id="trendBox"><div class="empty">读取中…</div></div>
+    </div>
+    <div class="card flush">
+      <div class="hd"><h2>出口在线历史</h2><div class="sub">每分钟采样，最多 4 小时</div></div>
+      <div class="bd" id="histBox"><div class="empty">读取中…</div></div>
+    </div>
+  </div>
+
+  <div class="card flush">
+    <div class="hd"><h2>最近日志</h2><div class="sub">实时推送，最多保留 1500 行</div><div class="right"><a class="sm" href="/observe">全部 →</a></div></div>
+    <pre class="log" id="logBox"></pre>
+  </div>
+
+  <div class="card">
+    <div class="hd"><h2>快捷动作</h2></div>
+    <div class="bd">
+      <div class="row">
+        <a class="btn" href="/tunnels">＋ 新建出口</a>
+        <a class="btn" href="/rules">＋ 新建规则</a>
+        <a class="btn" href="/tools">一次性分享</a>
+        <a class="btn" href="/observe">访问统计</a>
+        <a class="btn" href="/settings">维护模式 / 备份</a>
+        <a class="btn" href="/metrics" target="_blank" rel="noreferrer">Prometheus 指标</a>
+      </div>
+    </div>
+  </div>
+</div>

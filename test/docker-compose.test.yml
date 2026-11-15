@@ -1,0 +1,35 @@
+# 仅用于测试：静态网页 / 数据库 Web 面板 / 网页终端
+name: cf-tunnel-panel-test
+services:
+  site:
+    image: nginx:alpine
+    container_name: t-site
+    ports: ["127.0.0.1:8088:80"]
+    volumes: ["./site:/usr/share/nginx/html:ro"]
+    restart: unless-stopped
+
+  db:
+    image: mariadb:11
+    container_name: t-db
+    ports: ["127.0.0.1:3307:3306"]
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpw
+      MARIADB_DATABASE: demo
+    restart: unless-stopped
+
+  adminer:
+    image: adminer:latest
+    container_name: t-adminer
+    ports: ["127.0.0.1:8082:8080"]
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    depends_on: [db]
+    restart: unless-stopped
+
+  # 网页终端（ttyd）：容器内跑 shell，用来验证 WebSocket 透传
+  term:
+    image: tsl0922/ttyd:latest
+    container_name: t-ttyd
+    ports: ["127.0.0.1:7682:7681"]
+    command: ["ttyd", "-p", "7681", "-c", "admin:term123", "bash"]
+    restart: unless-stopped

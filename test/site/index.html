@@ -1,0 +1,7 @@
+<!doctype html><meta charset="utf-8"><title>静态测试页</title>
+<style>body{font:16px/1.7 system-ui;margin:40px;background:#0d1117;color:#e6edf3}
+code{background:#161b22;padding:2px 6px;border-radius:4px}</style>
+<h1>✅ 静态网页通过隧道访问成功</h1>
+<p>这是 nginx 提供的一个纯静态页面，被 Caddy 从 <code>/site</code> 剥离前缀后转发到 <code>127.0.0.1:8088</code>。</p>
+<p>如果你能看到这段文字，说明：<b>公网 → cloudflared → Caddy → nginx</b> 整条链路和静态资源都没问题。</p>
+<img src="pixel.svg" alt="内联资源测试" width="120">

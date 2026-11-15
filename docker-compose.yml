@@ -1,0 +1,52 @@
+name: cf-tunnel-panel
+
+# 全部使用 host 网络：这样面板/caddy/cloudflared 都能直接访问 127.0.0.1:端口 的内网服务，
+# 也不用为每个服务搞 extra_hosts（与 cloudflared 官方建议一致）。
+services:
+  panel:
+    build: .
+    image: cf-tunnel-panel:local
+    container_name: cf-tunnel-panel
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+      # Docker 容器清单 → 面板「一键加规则」。只读挂载即可（API 走 unix socket）
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      TZ: Asia/Shanghai
+      PORT: "8090"           # 面板 UI
+      CADDY_ADMIN: http://127.0.0.1:2019
+      CADDY_LISTEN: ":8080"  # 代理入口（隧道应指向这里）
+      LOG_STDOUT: "1"
+      # 想用面板 HTTPS：先生成证书到 ./data/tls/panel.crt|panel.key，再打开下面两行
+      # PANEL_TLS_CERT: /data/tls/panel.crt
+      # PANEL_TLS_KEY: /data/tls/panel.key
+      # 限流：换成带 caddy-ratelimit 的 Caddy 镜像后设为 "1"（见 docs/RATELIMIT.md）
+      # CADDY_RATELIMIT: "1"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: cf-tunnel-caddy
+    network_mode: host
+    restart: unless-stopped
+    # 注意：JSON 配置是 Caddy 的原生格式，不能加 --adapter json（那只有 caddyfile 等适配器才有）
+    command: ["caddy", "run", "--config", "/etc/caddy/caddy.json"]
+    volumes:
+      - ./caddy.bootstrap.json:/etc/caddy/caddy.json:ro
+      # access log 落这个目录，面板只读同一份（./data/caddy-logs）做访问统计
+      - ./data/caddy-logs:/logs
+      - caddy_data:/data
+      - caddy_config:/config
+
+  # 演示上游：把请求头原样回显，用来验证「公网 -> 隧道 -> caddy -> 内网服务」整条链路
+  demo:
+    image: traefik/whoami:latest
+    container_name: cf-tunnel-demo
+    network_mode: host
+    restart: unless-stopped
+    command: ["--port=8091"]
+
+volumes:
+  caddy_data:
+  caddy_config:

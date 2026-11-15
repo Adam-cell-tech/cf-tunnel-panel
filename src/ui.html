@@ -1,0 +1,1727 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cloudflare 隧道面板</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --line:#2b3444; --line2:#222a36;
+    --fg:#e6edf3; --dim:#8b949e; --acc:#2f81f7; --ok:#3fb950; --warn:#d29922; --err:#f85149;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+  header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:9}
+  h1{font-size:16px;margin:0;font-weight:600}
+  .pills{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .pill{font-size:12px;padding:3px 10px;border-radius:99px;border:1px solid var(--line);background:var(--panel2);color:var(--dim);white-space:nowrap}
+  .pill.ok{color:var(--ok);border-color:#1f6f37;background:#0f2a17}
+  .pill.warn{color:var(--warn);border-color:#6b4e12;background:#2a2008}
+  .pill.err{color:var(--err);border-color:#7a2622;background:#2b0f0e}
+  main{padding:16px;display:grid;gap:16px;grid-template-columns:minmax(300px,360px) minmax(0,1fr);max-width:1560px;margin:0 auto;align-items:start}
+  @media (max-width:1080px){main{grid-template-columns:1fr}}
+  .leftcol{display:flex;flex-direction:column;gap:16px;min-width:0}
+  .leftcol .card{margin:0}
+  .leftcol details.card>summary{cursor:pointer;font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .leftcol .tn-grid{grid-template-columns:1fr}
+  #rulesCard{min-height:72vh}
+  .mini{width:100%;border-collapse:collapse;font-size:12px}
+  .mini th{text-align:left;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);padding:4px 6px;position:sticky;top:0;background:var(--panel)}
+  .mini td{border-bottom:1px solid var(--line);padding:3px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px}
+  .pager{display:flex;gap:6px;align-items:center;justify-content:flex-end;margin-top:8px;flex-wrap:wrap}
+  .pager .muted{margin-right:auto;font-size:12px}
+  .pager button[disabled]{opacity:.45;cursor:not-allowed}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+  .ok-hint{border-color:#2ea043;color:#8be9a4}
+  .probe{margin-top:8px}
+  /* ---- 出口 tab 条 ---- */
+  .tabsbar{grid-column:1/-1;display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 10px;min-width:0}
+  .tabs{display:flex;gap:6px;overflow-x:auto;min-width:0;flex:1;scrollbar-width:thin}
+  .tabs::-webkit-scrollbar{height:5px}
+  .tabs::-webkit-scrollbar-thumb{background:#2a3444;border-radius:9px}
+  .tab{display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:9px;border:1px solid transparent;color:var(--dim);font-size:13px;white-space:nowrap;cursor:pointer;transition:.15s;background:transparent;user-select:none}
+  .tab:hover{background:#161d28;color:var(--fg)}
+  .tab.active{background:#10243b;border-color:var(--acc);color:#fff;box-shadow:0 0 0 1px rgba(88,166,255,.15) inset}
+  .tab .dot{width:7px;height:7px;border-radius:50%;background:#4b5563;flex:none}
+  .tab .dot.ok{background:var(--ok)}
+  .tab .dot.warn{background:var(--warn)}
+  .tab .dot.err{background:var(--err)}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;background:#1a2230;color:var(--dim);border:1px solid var(--line);white-space:nowrap}
+  .tag.ok{color:#7ee2a8;border-color:#1f6f37;background:#0f2a17}
+  .tag.err{color:#ff9a91;border-color:#7a2622;background:#2b0f0e}
+  .tab .tag{font-size:11px;padding:0 6px;background:#151c27}
+  .tab.active .tag{background:#0b1a2b;color:#9dc1ea;border-color:#1d3a5c}
+  .guide>summary{cursor:pointer;font-size:13px;font-weight:600}
+  @media (max-width:720px){.tabsbar{flex-direction:column;align-items:stretch}.tabsbar .row{justify-content:flex-end}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--dim);margin:0 0 12px}
+  .full{grid-column:1/-1}
+  label{display:block;font-size:12px;color:var(--dim);margin:10px 0 4px}
+  input[type=text],input[type=password],input[type=number],select,textarea{width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:#0b0f16;color:var(--fg);font:inherit;outline:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--acc)}
+  textarea{resize:vertical;min-height:60px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+  button{cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--fg);padding:7px 12px;border-radius:8px;font:inherit;transition:.15s}
+  button:hover{border-color:var(--acc)}
+  button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+  button.danger{color:var(--err);border-color:#7a2622}
+  button.sm{padding:4px 9px;font-size:12px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  @media (max-width:720px){.grid2,.grid3{grid-template-columns:1fr}}
+  .grow{flex:1;min-width:140px}
+  .url{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;color:var(--ok);word-break:break-all}
+  .muted{color:var(--dim);font-size:12px}
+  .hint{font-size:12px;color:var(--dim);margin-top:10px;line-height:1.7;background:#0f141c;border:1px dashed var(--line2);border-radius:8px;padding:10px 12px}
+  .hint b{color:var(--fg)}
+  code{background:#0b0f16;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:12px}
+  .rule{border:1px solid var(--line2);border-radius:10px;padding:12px;margin-bottom:10px;background:#121823}
+  .rule.disabled{opacity:.55}
+  .rule-head{display:grid;grid-template-columns:1.1fr 1.1fr .8fr 1.3fr auto;gap:8px;align-items:end}
+  @media (max-width:860px){.rule-head{grid-template-columns:1fr 1fr}}
+  .rule-adv{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line2)}
+  .hidden{display:none}
+  .chk{width:16px;height:16px;accent-color:var(--acc)}
+  .switch{display:flex;gap:6px;align-items:center;color:var(--dim);font-size:12px;margin:0}
+  pre#log{height:320px;overflow:auto;background:#07090d;border:1px solid var(--line);border-radius:8px;padding:10px;margin:0;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all}
+  .l-cloudflared{color:#79c0ff}.l-caddy{color:#d2a8ff}.l-panel{color:#8b949e}
+  #qr{display:block;margin:10px auto 0;max-width:200px;background:#fff;padding:6px;border-radius:8px}
+  .err{color:var(--err);font-size:12px}
+  .badge{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;border:1px solid var(--line);color:var(--dim)}
+  ol.steps{margin:8px 0 0;padding-left:22px}
+  ol.steps li{margin:6px 0}
+  details summary{cursor:pointer;color:var(--acc);font-size:12px}
+  .guide{border:1px solid var(--line2);border-radius:10px;padding:10px 12px;margin-top:12px;background:#0b0f16}
+  .guide[open]{border-color:var(--acc)}
+  .guide ol,.guide ul{margin:6px 0 0;padding-left:20px}
+  .guide li{margin:4px 0;font-size:13px}
+  .guide table{border-collapse:collapse;width:100%;margin-top:8px;font-size:12px}
+  .guide th,.guide td{border:1px solid var(--line2);padding:5px 8px;text-align:left;vertical-align:top}
+  .guide th{background:var(--panel2);color:var(--dim);font-weight:600;white-space:nowrap}
+  .guide code{background:#0b0f16;border:1px solid var(--line2);border-radius:4px;padding:0 4px;font-size:12px}
+  .guide .warnline{color:var(--warn)}
+  /* —— 布局：隧道出口 / 代理规则 两块核心面板并排，日志落到底部 —— */
+  .card h2{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .card h2 .count{font-size:11px;letter-spacing:0;text-transform:none;color:var(--fg);background:var(--panel2);border:1px solid var(--line);border-radius:99px;padding:1px 8px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+  .tn-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .tn-url{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(--ok);word-break:break-all;flex:1 1 220px;min-width:0}
+  .tn-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media (max-width:720px){.tn-grid{grid-template-columns:1fr}}
+  .hint.warn{border-style:solid;border-color:#6b4e12;background:#2a2008;color:#e3c07a}
+  .hint.warn b{color:#f0d089}
+  .hint.ok{border-style:solid;border-color:#1f6f37;background:#0f2a17;color:#9be0b0}
+  /* 窄屏：卡片内部再收一点 */
+  @media (max-width:720px){ main{padding:10px;gap:12px} .card{padding:12px} }
+
+  /* ---- 工具箱 ---- */
+  .tools-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+  .sub{border:1px solid var(--line2);border-radius:10px;padding:12px;background:var(--panel2);min-width:0}
+  .sub>b{font-size:13px}
+  .dock{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line2)}
+  .dock:last-child{border-bottom:0}
+  .dock-main{min-width:0;flex:1}
+  .out{margin:8px 0 0;padding:8px 10px;background:#0b0f16;border:1px solid var(--line2);border-radius:8px;
+    font-size:12px;max-height:240px;overflow:auto;white-space:pre-wrap;word-break:break-all}
+  .light .out{background:#f6f8fa}
+  /* ---- 浅色主题 ---- */
+  html[data-theme="light"]{
+    --bg:#f6f8fa; --panel:#ffffff; --panel2:#f0f3f6; --line:#d6dde5; --line2:#e4e9ef;
+    --fg:#1f2328; --dim:#5c6670; --acc:#0969da; --ok:#1a7f37; --warn:#9a6700; --err:#cf222e;
+  }
+  html[data-theme="light"] input[type=text],html[data-theme="light"] input[type=password],
+  html[data-theme="light"] input[type=number],html[data-theme="light"] select,
+  html[data-theme="light"] textarea{background:#fff}
+  html[data-theme="light"] .tab:hover{background:#eef2f6}
+  html[data-theme="light"] .tab.active{background:#ddf4ff;border-color:var(--acc);color:#0a3069}
+  html[data-theme="light"] .tab.active .tag{background:#c8e9ff;color:#0a3069;border-color:#9ed0ff}
+  html[data-theme="light"] .tag{background:#eef2f6}
+  html[data-theme="light"] .pill.ok{background:#dafbe1}
+  html[data-theme="light"] .pill.err{background:#ffe9e9}
+  html[data-theme="light"] .pill.warn{background:#fff8c5}
+  /* ---- 手机端 ---- */
+  @media (max-width:720px){
+    main{padding:10px;gap:12px}
+    header{padding:10px 12px;gap:6px}
+    .card{padding:12px}
+    .card h2{font-size:12px}
+    .tools-grid{grid-template-columns:1fr}
+    .mini td,.mini th{padding:3px 4px;max-width:150px}
+    input[type=text],input[type=password],input[type=number],select,textarea{font-size:16px}
+    .tab{padding:8px 10px}
+    .tn-head{flex-wrap:wrap}
+    .tn-head .row{margin-left:0 !important;flex-wrap:wrap}
+    #rulesCard{min-height:auto}
+    #log{max-height:220px}
+    .out{max-height:160px}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">☁️ Cloudflare 隧道面板</h1>
+  <span class="badge" id="hostBadge">-</span>
+  <div class="pills">
+    <span class="pill" id="pillTunnel">隧道：-</span>
+    <span class="pill" id="pillCaddy">Caddy：-</span>
+    <span class="pill" id="pillRoutes">规则：0</span>
+    <button class="sm" id="btnTheme" title="深色 / 浅色">🌗</button>
+  </div>
+</header>
+
+<main>
+  <nav class="tabsbar">
+    <div class="tabs" id="exitList"></div>
+    <div class="row" style="gap:6px;flex:none">
+      <span class="muted" id="exitCount"></span>
+      <button class="primary" id="btnAddTunnel">＋ 新增出口</button>
+      <button class="sm" id="btnStartAll">全部启动</button>
+      <button class="sm" id="btnStopAll">全部停止</button>
+    </div>
+  </nav>
+
+  <div class="leftcol">
+  <details class="card" id="tunnelCard">
+    <summary>⚙️ 出口设置 <span class="tag" id="scopeName">—</span><span class="muted" id="dirtyTunnel" style="font-size:11px;margin-left:auto;color:var(--warn)"></span></summary>
+    <div id="exitForm"></div>
+  </details>
+
+  <section class="card">
+    <h2>运行信息</h2>
+    <div class="hint" id="runtimeInfo">—</div>
+    <div class="muted" style="margin-top:8px">当前公网入口：<code id="pubUrl">—</code></div>
+    <div class="hint">
+      <b>安全提醒</b>：代理出去的路径默认是公开的。要给某个服务加密码，用规则里的
+      「基础认证」；要按身份限制，建议在 Cloudflare 侧挂 Access（会覆盖整条域名）。
+    </div>
+  </section>
+
+
+  </div>
+
+  <!-- ============ 规则 ============ -->
+  <section class="card" id="rulesCard">
+    <h2>代理规则 <span class="tag" id="scopeTag">全局</span> <span class="count" id="ruleCount">0</span></h2>
+    <div id="rootWarn" class="hint warn hidden"></div>
+    <div id="orderWarn" class="hint warn hidden"></div>
+    <div id="skipWarn" class="hint warn hidden"></div>
+    <div class="hint" style="margin:0 0 10px">公网请求进 Caddy 后按「域名 → 路径」从上到下匹配，命中第一条就转发到对应上游；
+      一条都不命中就返回自定义 404。顺序即优先级。</div>
+    <div class="row" style="margin-bottom:12px">
+      <div class="grow">
+        <select id="tpl">
+          <option value="">从模板快速添加…</option>
+          <optgroup label="通用网页 / 自己写的服务">
+            <option value="whoami">演示服务 whoami（:8091）</option>
+            <option value="static">静态网站 nginx（:80）</option>
+            <option value="nodeapp">Node / Python 应用（:3000）</option>
+            <option value="api">后端 API 服务（:8000）</option>
+            <option value="wordpress">WordPress 博客（:80）</option>
+          </optgroup>
+          <optgroup label="运维面板 / 开发工具">
+            <option value="dsh">DeepSeek Harness（:3080）</option>
+            <option value="baota">宝塔面板（:8888）</option>
+            <option value="portainer">Portainer（:9000）</option>
+            <option value="grafana">Grafana（:3000）</option>
+            <option value="uptimekuma">Uptime Kuma（:3001）</option>
+            <option value="gitea">Gitea（:3000）</option>
+            <option value="codeserver">code-server（:8080）</option>
+          </optgroup>
+          <optgroup label="媒体 / 家庭">
+            <option value="jellyfin">Jellyfin（:8096）</option>
+            <option value="plex">Plex（:32400）</option>
+            <option value="qbittorrent">qBittorrent（:8080）</option>
+            <option value="transmission">Transmission（:9091）</option>
+            <option value="synology">群晖 DSM（:5000）</option>
+            <option value="homeassistant">Home Assistant（:8123）</option>
+            <option value="immich">Immich 相册（:2283）</option>
+            <option value="navidrome">Navidrome 音乐（:4533）</option>
+            <option value="nextcloud">Nextcloud（:8080）</option>
+          </optgroup>
+          <optgroup label="数据库 Web 面板（⚠️ 务必加认证）">
+            <option value="adminer">Adminer（MySQL/PG/SQLite…，:8080）</option>
+            <option value="phpmyadmin">phpMyAdmin（:80）</option>
+            <option value="pgadmin">pgAdmin（:5050）</option>
+            <option value="mongoexpress">mongo-express（:8081）</option>
+            <option value="redisinsight">RedisInsight（:5540）</option>
+            <option value="influxdb">InfluxDB UI（:8086）</option>
+            <option value="minio">MinIO 控制台（:9001）</option>
+          </optgroup>
+          <optgroup label="终端 / 远程（Web 化，⚠️ 等于给出 shell）">
+            <option value="ttyd">ttyd 网页终端（:7681）</option>
+            <option value="wetty">Wetty 网页 SSH（:3000）</option>
+            <option value="shellinabox">Shellinabox（:4200）</option>
+          </optgroup>
+        </select>
+      </div>
+      <button id="btnAdd">+ 添加规则</button>
+      <button class="sm" id="btnImportRule" title="粘贴一段规则 JSON 快速导入">导入单条</button>
+      <button class="sm" id="btnSim" title="输入路径，看会命中哪条规则">模拟匹配</button>
+      <button class="primary" id="btnSaveRoutes">保存并下发到 Caddy</button>
+      <span class="muted" id="saveMsg"></span>
+      <span class="muted" id="rulesDirty" style="color:#d29922"></span>
+    </div>
+
+    <div id="rules"></div>
+
+    <details class="guide" id="simBox" style="margin-top:14px">
+      <summary style="font-size:13px"><b>🔍 模拟匹配</b> —— 输入路径看它命中哪条规则（只是推算，不发请求）</summary>
+      <div class="row" style="gap:8px;margin:10px 0">
+        <input type="text" id="simPath" placeholder="/db/index.php" value="/" style="flex:2" />
+        <input type="text" id="simHost" placeholder="域名（规则限定了域名才要填）" style="flex:2" />
+        <select id="simMethod" style="flex:1"><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option><option>HEAD</option></select>
+        <button class="sm primary" id="btnSimRun">模拟</button>
+      </div>
+      <div class="hint" id="simOut">填好后点「模拟」</div>
+    </details>
+
+    <div class="hint">
+      <b>匹配规则</b>：从上到下，第一条命中即停止。四种条件可组合：
+      域名（Host）、路径前缀、请求方法、来源 IP（CIDR）。<br>
+      <b>路径前缀</b> 自动补通配：<code>/demo</code> 实际匹配 <code>/demo*</code>（含 <code>/demo/xx</code> 和 <code>/demox</code>）。<br>
+      <b>剥离前缀</b>：勾上后 <code>/demo/xx</code> 转发给上游时变成 <code>/xx</code>（很多应用不认子路径，必须勾）。<br>
+      <b>上游</b>：<code>127.0.0.1:8096</code> / <code>http://192.168.1.10:5000</code> / <code>https://nas.local:5001</code> 都可以。
+    </div>
+  </section>
+
+  <!-- ============ 设置 ============ -->
+  <section class="card full" id="settingsCard">
+    <h2>面板与 Caddy 设置</h2>
+    <div class="grid2">
+      <div>
+        <label>Caddy 监听地址（代理入口）</label>
+        <input type="text" id="caddyListen" placeholder=":8080" />
+      </div>
+      <div>
+        <label>面板标题</label>
+        <input type="text" id="panelTitle" placeholder="Cloudflare 隧道面板" />
+      </div>
+    </div>
+    <label>没有规则命中时返回的文案</label>
+    <textarea id="notFoundBody" rows="3"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="btnSaveSettings">保存设置</button>
+      <span class="muted" id="settingsMsg"></span>
+    </div>
+
+    <label style="margin-top:18px">面板登录保护（可选）</label>
+    <div class="grid2">
+      <input type="text" id="puser" placeholder="用户名（留空=不鉴权）" autocomplete="username" />
+      <input type="password" id="ppass" placeholder="密码" autocomplete="new-password" />
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="btnAuth">保存登录保护</button>
+      <button class="sm" id="btnExport">导出配置</button>
+      <button class="sm" id="btnExportFull">导出（含 token）</button>
+      <button class="sm" id="btnImport">导入配置</button>
+      <input type="file" id="fileImport" class="hidden" accept="application/json" />
+    </div>
+    <label style="margin-top:18px">备份与回滚（最近 20 份，一键恢复）</label>
+    <div id="backupList" class="hint"><div class="muted">读取中…</div></div>
+    <div class="hint">每次保存（规则/设置/出口/导入）都会在 <code>data/backups/</code> 留一份滚动备份，最多 20 份。</div>
+
+    <h2 style="margin-top:22px">维护模式</h2>
+    <label class="switch"><input class="chk" type="checkbox" id="maintOn" /> 开启后整站返回 503（隧道/出口都不用停）</label>
+    <div class="grid2">
+      <div><label>维护文案</label><textarea id="maintBody" rows="2"></textarea></div>
+      <div><label>Retry-After（秒）</label><input type="number" id="maintRetry" min="1" max="86400" /></div>
+    </div>
+
+    <h2 style="margin-top:22px">安全</h2>
+    <label>全局 IP 黑名单（逗号分隔，命中直接 403）</label>
+    <input type="text" id="ipDeny" placeholder="1.2.3.4, 10.0.0.0/8" />
+    <label class="switch" style="margin-top:10px"><input class="chk" type="checkbox" id="rlOn" /> 限流（需自定义 Caddy 镜像，见 docs/RATELIMIT.md）</label>
+    <div class="grid2">
+      <div><label>每秒请求数</label><input type="number" id="rlRps" min="0" placeholder="20" /></div>
+      <div><label>突发</label><input type="number" id="rlBurst" min="0" placeholder="40" /></div>
+    </div>
+
+    <h2 style="margin-top:22px">通知</h2>
+    <label>Webhook 地址（自建 / 钉钉 / 飞书 / Bark）</label>
+    <input type="text" id="notifyUrl" placeholder="https://…（留空=不通知）" />
+    <div class="grid2">
+      <div><label>格式</label>
+        <select id="notifyFormat">
+          <option value="generic">通用 JSON（{title,text,event}）</option>
+          <option value="dingtalk">钉钉机器人</option>
+          <option value="feishu">飞书机器人</option>
+          <option value="bark">Bark（iOS）</option>
+        </select>
+      </div>
+      <div><label>触发事件</label>
+        <div class="row" style="gap:10px;flex-wrap:wrap">
+          <label class="switch"><input class="chk" type="checkbox" id="evDown" /> 出口掉线</label>
+          <label class="switch"><input class="chk" type="checkbox" id="evUrl" /> 换域名</label>
+          <label class="switch"><input class="chk" type="checkbox" id="evCaddy" /> 下发失败</label>
+        </div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="sm" id="btnNotifyTest">发送测试通知</button>
+      <span class="muted" id="notifyMsg"></span>
+    </div>
+
+    <h2 style="margin-top:22px">Cloudflare API（可选）</h2>
+    <label>API Token（权限：Zone.DNS:Edit + Account.Cloudflare Tunnel:Edit）</label>
+    <input type="password" id="cfToken" placeholder="已设置则留空不改" autocomplete="new-password" />
+    <div class="grid2">
+      <div><label>Account ID</label><input type="text" id="cfAccount" placeholder="32 位十六进制" /></div>
+      <div><label>Zone ID（建 CNAME 用）</label><input type="text" id="cfZone" placeholder="32 位十六进制" /></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="sm" id="btnCfList">列出云端隧道</button>
+      <button class="sm" id="btnCfCreate">新建隧道 + CNAME…</button>
+      <span class="muted" id="cfMsg"></span>
+    </div>
+    <div id="cfList" class="hint"></div>
+
+    <h2 style="margin-top:22px">非 HTTP 服务（SSH / TCP / UDP）</h2>
+    <div class="hint">
+      本面板只代理 <b>HTTP/HTTPS</b>。数据库/SSH 的原生端口挂到 HTTP 上游一律 502（协议不同），三条正路：
+      <ol style="margin:6px 0 0 18px;padding:0">
+        <li><b>Web 外壳</b>：ttyd / wetty / code-server / Adminer / phpMyAdmin，用规则指向它们的端口。</li>
+        <li><b>cloudflared access</b>（命名隧道）：在 Cloudflare 后台给该隧道加 <code>ssh.yourdomain.com → ssh://localhost:22</code>，
+          客户端装 cloudflared 后 <code>cloudflared access ssh --hostname ssh.yourdomain.com</code>，再 <code>ssh user@ssh.yourdomain.com</code>。</li>
+        <li><b>Tailscale / WARP</b>：点对点，不经过 Cloudflare。</li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============ 访问统计 ============ -->
+  <section class="card full" id="accessCard">
+    <h2>访问统计 <span class="muted" style="font-size:12px">来自 Caddy access log（最近 100 条）</span></h2>
+    <div class="row" style="margin-bottom:8px">
+      <button class="sm primary" id="btnAccessRefresh">刷新</button>
+      <label class="switch"><input class="chk" type="checkbox" id="accessAuto" /> 每 10 秒自动刷新</label>
+      <span class="muted" id="accessMsg"></span>
+    </div>
+    <div id="accessBody"><div class="muted">点「刷新」加载</div></div>
+    <div class="hint">看到的是真正经过隧道的请求 —— 想知道某条规则有没有被命中，先访问一次再刷新。
+      一直空说明还没有流量，或 Caddy 还没重启过（access log 在 Caddy 重启后才开始写）。</div>
+  </section>
+
+  <!-- ============ 工具箱：Docker / 分享链接 / 测试器 ============ -->
+  <section class="card full" id="toolsCard">
+    <h2>工具箱 <span class="muted" style="font-size:12px">Docker 一键加规则 · 一次性分享 · 面板内测试</span></h2>
+    <div class="tools-grid">
+
+      <div class="sub" id="dockerBox">
+        <b>🐳 Docker 容器</b>
+        <div class="row" style="margin:6px 0">
+          <button class="sm primary" id="btnDockerRefresh">刷新容器</button>
+          <span class="muted" id="dockerMsg"></span>
+        </div>
+        <div id="dockerBody"><div class="muted" style="font-size:12px">点「刷新容器」读取本机容器（需要挂 docker.sock）</div></div>
+      </div>
+
+      <div class="sub" id="shareBox">
+        <b>🔗 一次性分享链接</b>
+        <label>上游（内网服务）</label>
+        <input type="text" id="shareUpstream" placeholder="http://127.0.0.1:8091" />
+        <div class="grid2">
+          <div><label>说明</label><input type="text" id="shareName" placeholder="给同事临时看" /></div>
+          <div><label>有效分钟</label><input type="number" id="shareMinutes" value="30" min="1" max="10080" /></div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button class="sm primary" id="btnShareAdd">生成链接</button>
+          <button class="sm" id="btnShareRefresh">刷新列表</button>
+        </div>
+        <div id="shareList" class="hint"><div class="muted" style="font-size:12px">还没有分享链接</div></div>
+      </div>
+
+      <div class="sub" id="curlBox">
+        <b>🧪 面板内测试器</b>
+        <label>请求路径（打到本机 Caddy）</label>
+        <input type="text" id="curlPath" placeholder="/demo" />
+        <label>Host 头（可选，用来测某个域名规则）</label>
+        <input type="text" id="curlHost" placeholder="app.example.com" />
+        <div class="row" style="margin-top:8px">
+          <button class="sm primary" id="btnCurl">发送</button>
+          <span class="muted" id="curlMsg"></span>
+        </div>
+        <pre id="curlOut" class="out">点「发送」看结果</pre>
+      </div>
+
+    </div>
+    <div class="hint">Docker：带发布端口的容器用 <code>127.0.0.1:端口</code>，只有内网端口的用容器 IP。
+      分享链接形如 <code>/s/&lt;token&gt;</code>，到期自动从 Caddy 里摘除（不写进规则列表）。
+      测试器只在面板这台机器上打本机 Caddy，不会暴露到公网。</div>
+  </section>
+
+  <!-- ============ 日志 ============ -->
+
+  <section class="card full" id="logCard">
+    <h2>实时日志</h2>
+    <div class="row" style="margin-bottom:8px">
+      <button class="sm" id="btnClear">清屏</button>
+      <button class="sm" id="btnLogDownload">下载日志</button>
+      <input type="text" id="logFilter" placeholder="过滤关键字（如 error / trycloudflare）" style="max-width:260px" />
+      <label class="switch"><input class="chk" type="checkbox" id="autoscroll" checked /> 自动滚动</label>
+      <span class="muted" id="logCount"></span>
+    </div>
+    <pre id="log"></pre>
+    <div class="hint">蓝色 = cloudflared（隧道），紫色 = Caddy（代理），灰色 = 面板本身。
+      出现 <code>Registered tunnel connection</code> 表示隧道连上了。</div>
+  </section>
+
+  <details class="card full guide">
+    <summary style="font-size:13px"><b>3 步跑起来（第一次用先看这里）</b></summary>
+    <div class="grid3">
+      <div>
+        <b>① 确认隧道</b>
+        <div class="hint" style="margin-top:6px">下面「隧道出口」里先选
+          <b>快速隧道</b>（不用账号，30 秒出临时域名）试通；确认没问题后，再换成
+          <b>命名隧道</b>（你自己的域名，长期用）。</div>
+      </div>
+      <div>
+        <b>② 加一条规则</b>
+        <div class="hint" style="margin-top:6px">在「代理规则」里点 <b>+ 添加规则</b>（或从模板里选）。
+          填「路径前缀」（如 <code>/jellyfin</code>）和「上游」（如 <code>http://127.0.0.1:8096</code>），
+          然后点 <b>保存并下发</b>。</div>
+      </div>
+      <div>
+        <b>③ 用公网地址访问</b>
+        <div class="hint" style="margin-top:6px">把「当前公网入口」+ 路径拼起来，例如
+          <code>https://xxx.trycloudflare.com/jellyfin</code>。打不开就看页面下方的「实时日志」，
+          常见原因是上游端口写错、或路径前缀不匹配。</div>
+      </div>
+    </div>
+  </details>
+
+  <details class="card full guide">
+      <summary>☁️ Cloudflare 后台怎么配？点开看——每个出口各配一条隧道</summary>
+      <ol>
+        <li><b>一个出口 = Cloudflare 里的一条隧道</b>。想跑两个命名隧道，就在 Cloudflare 建两条，各拿一串 token，
+          回到本页点「＋ 新增隧道出口」分别粘进去 —— 它们可以属于不同账号、不同域名，互不干扰。</li>
+        <li><b>建隧道拿 token</b>：<a href="https://one.dash.cloudflare.com" target="_blank" rel="noreferrer">one.dash.cloudflare.com</a>
+          → 左侧 <b>网络 → 隧道</b> → <b>创建隧道</b> → 连接器类型选 <b>Cloudflared</b> → 起个名 → 复制 <code>eyJhIjoi...</code>
+          <div class="hint warnline">⚠️ 页面上让你执行的 <code>cloudflared.exe service install</code> 千万别执行——那会多一个连接器抢同一条隧道。</div>
+        </li>
+        <li><b>加公共主机名</b>：隧道详情 → <b>公共主机名</b> → <b>添加公共主机名</b>，按下面这张表填 👇（每条隧道各自加）</li>
+        <li><b>回本页</b>：在对应出口里选「命名隧道」→ 粘 token → 「公网域名」填 <code>app.你的域名</code>（只用于展示/二维码）→ 点 <b>保存并重启</b></li>
+        <li><b>验证</b>：下方日志出现 <code>Registered tunnel connection</code> 即连上；再 <code>curl -sI https://app.你的域名/</code></li>
+      </ol>
+
+      <table>
+        <tr><th>Cloudflare 字段</th><th>填什么</th><th>为什么</th></tr>
+        <tr><td>子域 / 域</td><td><code>app</code> + 你的域名</td><td>最终地址 = <code>app.你的域名</code>；想用根域名则子域留空</td></tr>
+        <tr><td>路径</td><td><b>留空</b></td><td>整个域名交给 Caddy，再由本页规则分流</td></tr>
+        <tr><td>服务 · 类型</td><td><b>HTTP</b></td><td>本地 Caddy 是明文 <code>:8080</code>，选 HTTPS 必然 502</td></tr>
+        <tr><td>服务 · URL</td><td><code>127.0.0.1:8080</code></td><td>必须指向 <b>Caddy</b>：不是面板 8090，也不是业务端口。<br>（若某个出口想绕过 Caddy 直连服务，把该出口的「隧道指向」改成那个端口即可）</td></tr>
+        <tr><td>附加设置</td><td>一般不动</td><td>只有老式自签 HTTPS 上游才需要「TLS → 无 TLS 验证」</td></tr>
+      </table>
+
+      <ul>
+        <li>保存后 Cloudflare 会<b>自动</b>建 CNAME 指向 <code>&lt;隧道ID&gt;.cfargotunnel.com</code>，<b>不要</b>手工加 A 记录、也不要指向自己服务器 IP。</li>
+        <li><b>多个出口怎么分工</b>：常见做法是「命名隧道当主用 + 快速隧道当备用/临时分享」；或者「A 账号隧道给家里服务，B 账号隧道给对外服务」。
+          所有命名出口都指向 <code>8080</code> 时，Cloudflare 那边靠<b>主机名</b>区分，本页靠规则的「域名」列区分，互不冲突。</li>
+        <li>每个出口的 <b>metrics 端口</b>要不同（或都留空），撞了会启动失败。</li>
+        <li>排错口诀：页面 <b>1033</b> = 那条隧道没有连接器（看对应出口的日志）；<b>502</b> = cloudflared 到了但 Caddy 没应答（查本地 8080）；<b>404</b> = 到了 Caddy 但没匹配规则。</li>
+        <li>token 等于半把钥匙：别贴到公开地方；怀疑泄露就去隧道页 <b>刷新 token</b> 再回来重贴。</li>
+        <li>完整图文版（含 Cloudflare Access 二次验证、DNS 校验、错误码全表）见仓库 <code>README.md</code> 的 §5.2。</li>
+      </ul>
+    </details>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let S = null, R = null;
+// 表单脏标记：用户改过但还没保存的卡片，轮询回填要跳过它
+const dirty = { tunnel: false, settings: false, rules: false };
+
+// 每个模板：name/path/upstream/strip 之外可带 note（卡片备注）、timeoutSec、
+// sensitive（会暴露数据库/终端，UI 会提醒加认证）、host（建议用独立子域名）
+const TEMPLATES = {
+  // ---- 通用网页
+  whoami:        { name: '演示服务（whoami）', path: '/demo', upstream: 'http://127.0.0.1:8091', strip: true, note: '自带的演示上游，返回你的请求头，用来确认整条链路是通的。' },
+  static:        { name: '静态网站（nginx）', path: '/site', upstream: 'http://127.0.0.1:80', strip: true, note: '纯静态站点（HTML/JS/图片）最适合子路径；如果站点里有绝对路径资源，改用独立子域名。' },
+  nodeapp:       { name: 'Node / Python 应用', path: '/app', upstream: 'http://127.0.0.1:3000', strip: true, note: 'Next.js / Express / FastAPI 之类。WebSocket 已自动透传。' },
+  api:           { name: '后端 API', path: '/api', upstream: 'http://127.0.0.1:8000', strip: true, note: '给前端或脚本调的接口。要防滥用请加基础认证，或在规则里限制来源 IP。' },
+  wordpress:     { name: 'WordPress 博客', path: '/blog', upstream: 'http://127.0.0.1:80', strip: true, note: 'WordPress 强烈依赖根路径，子路径常出问题 → 建议用独立子域名（域名列填 blog.xxx.com，路径留空）。' },
+  // ---- 运维面板 / 开发工具
+  dsh:           { name: 'DeepSeek Harness', path: '/dsh', upstream: 'http://127.0.0.1:3080', strip: true, note: '它自己有配对鉴权，外出仍建议加一层基础认证。' },
+  baota:         { name: '宝塔面板', path: '/bt', upstream: 'http://127.0.0.1:8888', strip: true, sensitive: true, note: '⚠️ 服务器管理面板，暴露=半只脚进服务器。务必加基础认证 + 来源 IP 白名单。' },
+  portainer:     { name: 'Portainer 容器管理', path: '/docker', upstream: 'http://127.0.0.1:9000', strip: true, sensitive: true, note: '⚠️ 能起特权容器。务必加认证，最好只走内网/Tailscale。' },
+  grafana:       { name: 'Grafana 监控', path: '/grafana', upstream: 'http://127.0.0.1:3000', strip: true, note: 'Grafana 有子路径配置项（root_url），子路径访问需在 grafana.ini 里设 serve_from_sub_path=true。' },
+  uptimekuma:    { name: 'Uptime Kuma', path: '/uptime', upstream: 'http://127.0.0.1:3001', strip: true, note: '自带登录，问题不大。' },
+  gitea:         { name: 'Gitea 代码托管', path: '/gitea', upstream: 'http://127.0.0.1:3000', strip: true, note: 'Gitea 需在 app.ini 配 ROOT_URL 与子路径，否则 git clone 链接会错。' },
+  codeserver:    { name: 'code-server（VS Code）', path: '/code', upstream: 'http://127.0.0.1:8080', strip: true, sensitive: true, note: '⚠️ 等于远程 IDE 带终端。务必加认证。' },
+  // ---- 媒体 / 家庭
+  jellyfin:      { name: 'Jellyfin 媒体库', path: '/jellyfin', upstream: 'http://127.0.0.1:8096', strip: true, timeoutSec: 300, note: '视频流建议把「超时」设 300 秒，否则大文件会中途断。' },
+  plex:          { name: 'Plex', path: '/plex', upstream: 'http://127.0.0.1:32400', strip: true, timeoutSec: 300, note: 'Plex 对子路径支持差 → 建议独立子域名。' },
+  qbittorrent:   { name: 'qBittorrent', path: '/qbt', upstream: 'http://127.0.0.1:8080', strip: true, sensitive: true, note: '⚠️ 自带登录；但 Web UI 被爆破过。建议再加一层基础认证或 IP 白名单。' },
+  transmission:  { name: 'Transmission', path: '/tr', upstream: 'http://127.0.0.1:9091', strip: true, sensitive: true, note: '⚠️ 建议加认证。' },
+  synology:      { name: '群晖 DSM', path: '/dsm', upstream: 'http://127.0.0.1:5000', strip: true, sensitive: true, note: 'DSM 对子路径支持一般，登录后可能跳根路径 → 建议独立子域名。' },
+  homeassistant: { name: 'Home Assistant', path: '/ha', upstream: 'http://127.0.0.1:8123', strip: true, note: 'HA 需在 configuration.yaml 里信任反代，否则登录会被拒（use_x_forwarded_for + trusted_proxies）。' },
+  immich:        { name: 'Immich 相册', path: '/immich', upstream: 'http://127.0.0.1:2283', strip: true, timeoutSec: 120, note: '大相册上传建议调大超时。' },
+  navidrome:     { name: 'Navidrome 音乐', path: '/music', upstream: 'http://127.0.0.1:4533', strip: true, note: '音乐流走同一条隧道，注意上行带宽。' },
+  nextcloud:     { name: 'Nextcloud', path: '/cloud', upstream: 'http://127.0.0.1:8080', strip: true, note: 'Nextcloud 需配 overwrite.cli.url / overwritewebroot，否则同步客户端会报错。' },
+  // ---- 数据库 Web 面板
+  adminer:       { name: 'Adminer 数据库面板', path: '/db', upstream: 'http://127.0.0.1:8080', strip: true, sensitive: true, note: '⚠️ 一个页面登所有数据库（MySQL/PG/SQLite/Oracle…）。务必用基础认证 + IP 白名单双保险，别裸奔。' },
+  phpmyadmin:    { name: 'phpMyAdmin', path: '/pma', upstream: 'http://127.0.0.1:80', strip: true, sensitive: true, note: '⚠️ 同上。phpMyAdmin 历史上漏洞不少，建议只在内网/Tailscale 里开。' },
+  pgadmin:       { name: 'pgAdmin（PostgreSQL）', path: '/pgadmin', upstream: 'http://127.0.0.1:5050', strip: true, sensitive: true, note: '⚠️ pgAdmin 对子路径支持差 → 建议独立子域名 + 基础认证。' },
+  mongoexpress:  { name: 'mongo-express', path: '/mongo', upstream: 'http://127.0.0.1:8081', strip: true, sensitive: true, note: '⚠️ 默认常无认证，务必加基础认证。' },
+  redisinsight:  { name: 'RedisInsight', path: '/redis', upstream: 'http://127.0.0.1:5540', strip: true, sensitive: true, note: '⚠️ 能看到你的全部 Redis 数据。加认证。' },
+  influxdb:      { name: 'InfluxDB UI', path: '/influx', upstream: 'http://127.0.0.1:8086', strip: true, sensitive: true, note: '⚠️ InfluxDB 自带 token/账号体系，仍建议加一层。' },
+  minio:         { name: 'MinIO 控制台', path: '/minio', upstream: 'http://127.0.0.1:9001', strip: true, sensitive: true, note: '注意：9001 是控制台，9000 是 S3 API。只暴露控制台就够。' },
+  // ---- 终端 / 远程（Web 化）
+  ttyd:          { name: 'ttyd 网页终端', path: '/term', upstream: 'http://127.0.0.1:7681', strip: true, sensitive: true, note: '⚠️ 等于把 shell 挂到公网。ttyd 必须用 -c 用户:密码 启动，再叠加本规则的基础认证。走 WebSocket，已实测可用。' },
+  wetty:         { name: 'Wetty 网页 SSH', path: '/wetty', upstream: 'http://127.0.0.1:3000', strip: true, sensitive: true, note: '⚠️ Wetty = SSH over WebSocket。必须加认证，且只对可信设备开放。' },
+  shellinabox:   { name: 'Shellinabox', path: '/shell', upstream: 'http://127.0.0.1:4200', strip: true, sensitive: true, note: '⚠️ 老牌网页终端，自带 --user:pass 参数，务必设置。' },
+};
+
+function newRoute(tpl) {
+  const t = tpl || { name: '新服务', path: '/svc', upstream: 'http://127.0.0.1:8080', strip: true };
+  return {
+    id: Math.random().toString(16).slice(2, 10),
+    name: t.name, enabled: true, host: t.host || '', path: t.path, matchMethod: '',
+    ipAllow: '', strip: !!t.strip, upstream: t.upstream, backupUpstream: '',
+    tunnelId: t.tunnelId !== undefined ? t.tunnelId : (selectedExit || ''),
+    lbTryDuration: 0, lbPolicy: 'round_robin', headersReq: '', headersRes: '',
+    timeoutSec: Number(t.timeoutSec) || 0,
+    basicAuth: { user: '', hasPassword: false }, note: t.note || '',
+  };
+}
+
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function pill(el, text, cls) { el.textContent = text; el.className = 'pill' + (cls ? ' ' + cls : ''); }
+
+async function api(path, opts) {
+  const res = await fetch(path, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts));
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.ok === false) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+// ---------------- 规则渲染
+function ruleHtml(r, i) {
+  const upFull = R.publicUrl ? `${R.publicUrl}${r.path || '/'}` : '';
+  return `
+  <div class="rule ${r.enabled ? '' : 'disabled'}" data-i="${i}">
+    <div class="rule-head">
+      <div><label>名称（给自己看的）</label><input type="text" data-k="name" value="${esc(r.name)}"></div>
+      <div><label>域名（可空）</label><input type="text" data-k="host" value="${esc(r.host)}" placeholder="留空=任意域名"></div>
+      <div><label>路径前缀</label><input type="text" data-k="path" value="${esc(r.path)}" placeholder="/jellyfin"></div>
+      <div><label>上游（内网服务）</label><input type="text" data-k="upstream" value="${esc(r.upstream)}" placeholder="http://127.0.0.1:8096"></div>
+      <div class="row" style="gap:6px">
+        <span class="tag" title="${r.tunnelId ? '只对所属出口的域名生效' : '所有出口都生效'}">${r.tunnelId ? '专属' : '全局'}</span>
+        <label class="switch" title="启用/停用"><input class="chk" type="checkbox" data-k="enabled" ${r.enabled ? 'checked' : ''}> 启用</label>
+        <button class="sm" data-act="test" title="从面板所在机器探一次这个上游端口">测上游</button>
+        <button class="sm" data-act="up" title="上移一位（优先级更高）">↑</button>
+        <button class="sm" data-act="down" title="下移一位（优先级更低）">↓</button>
+        <button class="sm" data-act="adv">高级</button>
+        <button class="sm" data-act="copy" ${upFull ? '' : 'disabled'}>复制链接</button>
+        <button class="sm" data-act="exp" title="把这条规则导出成 JSON">导出</button>
+        <button class="sm danger" data-act="del">删除</button>
+      </div>
+    </div>
+    <div class="hint probe hidden" data-probe="${i}"></div>
+    ${r.note ? `<div class="muted" style="margin-top:8px">📝 ${esc(r.note)}</div>` : ''}
+    <div class="rule-adv hidden">
+      <div class="grid2">
+        <div><label>作用出口（这条规则绑在哪条隧道上）</label>
+          <select data-k="tunnelId">
+            <option value="">全局 —— 所有出口都按 域名/路径 匹配</option>
+            ${(S.tunnels || []).map((t) => `<option value="${esc(t.id)}" ${r.tunnelId === t.id ? 'selected' : ''}>出口：${esc(t.name || t.id)}（${t.mode === 'quick' ? '快速' : '命名'}）</option>`).join('')}
+          </select>
+        </div>
+        <div><label>当前作用域</label>
+          <div class="muted" style="padding-top:6px">${r.tunnelId
+            ? '只对出口「' + esc((S.tunnels.find((t) => t.id === r.tunnelId) || {}).name || r.tunnelId) + '」的域名生效，别的出口访问同一路径会 404'
+            : '全局：任何出口都能命中（仍按域名/路径判断）'}</div>
+        </div>
+      </div>
+      <div class="grid3">
+        <div><label>请求方法（可空，如 GET,POST）</label><input type="text" data-k="matchMethod" value="${esc(r.matchMethod)}"></div>
+        <div><label>来源 IP / CIDR 白名单（可空）</label><input type="text" data-k="ipAllow" value="${esc(r.ipAllow)}" placeholder="192.168.1.0/24, 10.0.0.5"></div>
+        <div><label>超时秒数（0=默认）</label><input type="number" min="0" max="3600" data-k="timeoutSec" value="${Number(r.timeoutSec) || 0}"></div>
+      </div>
+      <div class="grid3">
+        <div><label>备用上游（主挂了自动切，可空）</label><input type="text" data-k="backupUpstream" value="${esc(r.backupUpstream)}" placeholder="http://192.168.1.11:8096"></div>
+        <div><label>多上游策略（填了备用上游才生效）</label>
+          <select data-k="lbPolicy">
+            <option value="round_robin">round_robin 轮流（推荐）</option>
+            <option value="first">first 只用第一个</option>
+            <option value="least_conn">least_conn 连接最少</option>
+            <option value="random">random 随机</option>
+            <option value="ip_hash">ip_hash 按客户端 IP 粘住</option>
+            <option value="uri_hash">uri_hash 按 URI 粘住</option>
+          </select>
+        </div>
+        <div><label>故障尝试时长（秒，0=默认10）</label><input type="number" min="0" max="120" data-k="lbTryDuration" value="${Number(r.lbTryDuration) || 0}"></div>
+      </div>
+      <div class="grid2">
+        <div><label>转发时追加请求头（每行 <code>名称: 值</code>）</label><textarea data-k="headersReq" rows="3" placeholder="X-Api-Key: abc123">${esc(r.headersReq)}</textarea></div>
+        <div><label>改写响应头（每行 <code>名称: 值</code>）</label><textarea data-k="headersRes" rows="3" placeholder="X-Robots-Tag: noindex">${esc(r.headersRes)}</textarea></div>
+      </div>
+      <div class="grid3">
+        <div><label>基础认证用户名（可空）</label><input type="text" data-k="authUser" value="${esc(r.basicAuth ? r.basicAuth.user : '')}"></div>
+        <div><label>密码 ${r.basicAuth && r.basicAuth.hasPassword ? '<span class="muted">（已设置，留空不改）</span>' : ''}</label><input type="password" data-k="authPass" placeholder="留空表示不启用/不修改"></div>
+        <div><label>剥离路径前缀</label><label class="switch"><input class="chk" type="checkbox" data-k="strip" ${r.strip ? 'checked' : ''}> 把前缀从转发路径里去掉</label></div>
+      </div>
+      <label>备注（写给未来的自己）</label>
+      <input type="text" data-k="note" value="${esc(r.note)}" placeholder="例如：只给手机用，走 Tailscale">
+      <div class="muted" style="margin-top:8px">公网访问地址：<span class="url">${esc(upFull || '（隧道就绪后显示）')}</span></div>
+    </div>
+  </div>`;
+}
+
+function renderRules() {
+  updateRuleCount();
+  updateOrderWarn();
+  const st = $('#scopeTag');
+  if (st) {
+    const t = selectedExit ? (S.tunnels.find((x) => x.id === selectedExit) || {}) : null;
+    st.textContent = selectedExit ? `出口：${t.name || selectedExit}` : '全局';
+    st.className = 'tag' + (selectedExit ? ' ok' : '');
+  }
+  const box = $('#rules');
+  const shown = [];
+  (S.routes || []).forEach((r, i) => { if ((r.tunnelId || '') === selectedExit) shown.push([r, i]); });
+  if (!shown.length) {
+    box.innerHTML = `<div class="hint">${selectedExit
+      ? '这条出口还没有专属规则。点上面「+ 添加规则」或从模板里选一个，它只对这条出口的域名生效。'
+      : '还没有全局规则。全局规则按域名/路径匹配，对任何出口都生效。'}</div>`;
+    return;
+  }
+  box.innerHTML = shown.map(([r, i]) => ruleHtml(r, i)).join('');
+  box.querySelectorAll('.rule').forEach((el) => {
+    const i = Number(el.dataset.i);
+    const r = S.routes[i];
+    el.querySelectorAll('[data-k]').forEach((inp) => {
+      if (inp.tagName === 'SELECT') inp.value = r[inp.dataset.k] || inp.value;
+      inp.addEventListener('input', () => {
+        const k = inp.dataset.k;
+        if (!r.basicAuth) r.basicAuth = { user: '', hasPassword: false };
+        if (k === 'authUser') r.basicAuth.user = inp.value;
+        else if (k === 'authPass') { r.basicAuth.password = inp.value; }
+        else if (inp.type === 'checkbox') r[k] = inp.checked;
+        else if (inp.type === 'number') r[k] = Number(inp.value) || 0;
+        else r[k] = inp.value;
+        if (k === 'enabled') el.classList.toggle('disabled', !r.enabled);
+        markDirty('rules');
+      });
+    });
+    const scopeSel = el.querySelector('[data-k="tunnelId"]');
+    if (scopeSel) scopeSel.addEventListener('change', () => {
+      r.tunnelId = scopeSel.value;
+      markDirty('rules');
+      const nm = r.tunnelId ? ((S.tunnels.find((t) => t.id === r.tunnelId) || {}).name || r.tunnelId) : '全局规则';
+      $('#saveMsg').textContent = `已把「${r.name || r.path}」改到 ${nm}，记得点「保存并下发」`;
+      renderRules();
+    });
+    const adv = el.querySelector('.rule-adv');
+    el.querySelector('[data-act="adv"]').addEventListener('click', () => adv.classList.toggle('hidden'));
+    el.querySelector('[data-act="del"]').addEventListener('click', () => {
+      if (confirm(`删除规则「${r.name || r.path}」？`)) { S.routes.splice(i, 1); markDirty('rules'); renderRules(); }
+    });
+    const copyBtn = el.querySelector('[data-act="copy"]');
+    if (copyBtn) copyBtn.addEventListener('click', async () => {
+      const link = (R.publicUrl || '') + (r.path || '/');
+      try { await navigator.clipboard.writeText(link); copyBtn.textContent = '已复制'; setTimeout(() => (copyBtn.textContent = '复制链接'), 1200); }
+      catch { prompt('复制：', link); }
+    });
+    el.querySelector('[data-act="test"]').addEventListener('click', () => testUpstream(i, el));
+    el.querySelector('[data-act="up"]').addEventListener('click', () => moveRuleInScope(i, -1));
+    el.querySelector('[data-act="down"]').addEventListener('click', () => moveRuleInScope(i, 1));
+    el.querySelector('[data-act="exp"]').addEventListener('click', () => exportRule(r));
+  });
+}
+
+// ---------------- 新功能：测上游 / 排序 / 导出 / 模拟 / 访问统计 / 备份回滚
+async function testUpstream(i, el) {
+  const r = S.routes[i];
+  const box = el.querySelector(`[data-probe="${i}"]`);
+  if (!box) return;
+  box.classList.remove('hidden');
+  box.className = 'hint probe';
+  box.textContent = '探测中…';
+  try {
+    const d = await api('/api/rules/test', { method: 'POST', body: JSON.stringify({ upstream: r.upstream }) });
+    if (d.ok) {
+      box.className = 'hint probe ok-hint';
+      box.innerHTML = `✅ 上游可达：TCP ${d.tcpMs}ms${d.status ? `，HTTP ${d.status}` : ''}${d.note ? ` —— <span class="warn">${esc(d.note)}</span>` : ''}`;
+    } else {
+      box.className = 'hint probe err';
+      box.textContent = `❌ ${d.error || '探测失败'}${d.tcpMs ? `（TCP ${d.tcpMs}ms）` : ''}`;
+    }
+  } catch (e) {
+    box.className = 'hint probe err';
+    box.textContent = '探测失败：' + e.message;
+  }
+}
+
+function moveRuleInScope(i, dir) {
+  const scope = [];
+  S.routes.forEach((r, idx) => { if ((r.tunnelId || '') === selectedExit) scope.push(idx); });
+  const pos = scope.indexOf(i);
+  const target = pos + dir;
+  if (pos < 0 || target < 0 || target >= scope.length) return;
+  const j = scope[target];
+  const tmp = S.routes[i];
+  S.routes[i] = S.routes[j];
+  S.routes[j] = tmp;
+  markDirty('rules');
+  renderRules();
+  $('#saveMsg').textContent = (dir < 0 ? '已上移一位' : '已下移一位') + '，记得点「保存并下发」';
+}
+
+function exportRule(r) {
+  const o = {
+    name: r.name, host: r.host, path: r.path, upstream: r.upstream, backupUpstream: r.backupUpstream,
+    strip: !!r.strip, matchMethod: r.matchMethod, ipAllow: r.ipAllow, headersReq: r.headersReq,
+    headersRes: r.headersRes, timeoutSec: r.timeoutSec, lbPolicy: r.lbPolicy, lbTryDuration: r.lbTryDuration,
+    note: r.note, tunnelId: r.tunnelId,
+    basicAuth: r.basicAuth && r.basicAuth.user ? { user: r.basicAuth.user, password: '' } : { user: '', password: '' },
+  };
+  const txt = JSON.stringify(o, null, 2);
+  navigator.clipboard.writeText(txt).then(
+    () => { $('#saveMsg').textContent = '这条规则的 JSON 已复制到剪贴板（口令哈希不会导出）'; },
+    () => prompt('这是这条规则的 JSON，复制走：', txt)
+  );
+}
+
+function importRule() {
+  const txt = prompt('粘贴一条规则的 JSON（可先用「导出」拿到）：');
+  if (!txt) return;
+  try {
+    const o = JSON.parse(txt);
+    if (!o.upstream) throw new Error('缺少 upstream 字段');
+    const r = newRoute({});
+    Object.assign(r, {
+      name: o.name || r.name, host: o.host || '', path: o.path || '', upstream: o.upstream,
+      backupUpstream: o.backupUpstream || '', strip: !!o.strip, matchMethod: o.matchMethod || '',
+      ipAllow: o.ipAllow || '', headersReq: o.headersReq || '', headersRes: o.headersRes || '',
+      timeoutSec: Number(o.timeoutSec) || 0, note: o.note || '',
+    });
+    r.tunnelId = o.tunnelId && (S.tunnels || []).some((t) => t.id === o.tunnelId) ? o.tunnelId : (selectedExit || '');
+    if (o.basicAuth && o.basicAuth.user) r.basicAuth = { user: o.basicAuth.user, hasPassword: false };
+    S.routes.push(r);
+    markDirty('rules');
+    renderRules();
+    $('#saveMsg').textContent = '已导入 1 条规则，记得点「保存并下发」';
+  } catch (e) {
+    alert('导入失败：' + e.message);
+  }
+}
+
+async function simulate() {
+  const out = $('#simOut');
+  const body = JSON.stringify({ path: $('#simPath').value || '/', host: $('#simHost').value.trim(), method: $('#simMethod').value });
+  out.className = 'hint';
+  out.textContent = '推算中…';
+  try {
+    const d = await api('/api/match', { method: 'POST', body });
+    if (d.matched) {
+      out.className = 'hint ok-hint';
+      out.innerHTML = `✅ 命中第 <b>${d.index}</b> / ${d.total} 条：<b>${esc(d.rule.name || d.rule.path || d.rule.upstream)}</b>
+        → <code>${esc(d.rule.upstream)}</code>
+        <span class="tag">${esc(d.scope)}</span>
+        ${d.rule.basicAuth ? '<span class="tag warn">需要基础认证</span>' : ''}
+        ${d.rule.ipAllow ? `<span class="tag warn">限来源 IP ${esc(d.rule.ipAllow)}</span>` : ''}
+        ${d.rule.strip ? '<span class="tag">会剥离路径前缀</span>' : ''}`;
+    } else if (d.needHost) {
+      out.className = 'hint warn';
+      out.textContent = `这条规则限定了域名（${(d.hosts || []).join('、')}），请在上面填要模拟的域名。`;
+    } else {
+      out.className = 'hint warn';
+      out.textContent = '❌ ' + (d.note || '没有任何规则命中');
+    }
+  } catch (e) {
+    out.className = 'hint err';
+    out.textContent = '模拟失败：' + e.message;
+  }
+}
+
+let accessTimer = null;
+// ---------------- 分页小工具（每页 5 条，倒序）
+const PER_PAGE = 5;
+function pageCount(n) { return Math.max(1, Math.ceil(n / PER_PAGE)); }
+function pagerHtml(key, page, pages, total) {
+  if (!total) return '';
+  return `<div class="pager">
+      <span class="muted">共 ${total} 条 · 第 ${page} / ${pages} 页</span>
+      <button class="sm" data-page="1" ${page <= 1 ? 'disabled' : ''}>« 首页</button>
+      <button class="sm" data-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>← 上一页</button>
+      <button class="sm" data-page="${page + 1}" ${page >= pages ? 'disabled' : ''}>下一页 →</button>
+      <button class="sm" data-page="${pages}" ${page >= pages ? 'disabled' : ''}>末页 »</button>
+    </div>`;
+}
+function bindPager(box, onPage) {
+  box.querySelectorAll('[data-page]').forEach((b) => b.addEventListener('click', () => {
+    const p = parseInt(b.dataset.page, 10);
+    if (p >= 1 && p !== onPage.current) onPage(p);
+  }));
+}
+
+// ---------------- 访问统计（倒序分页）
+let accessAll = [], accessPage = 1, accessSummary = null;
+async function loadAccess() {
+  const box = $('#accessBody');
+  if (!box) return;
+  try {
+    const d = await api('/api/access?limit=200');
+    if (!d.available) {
+      box.innerHTML = `<div class="hint warn">${esc(d.note || '还没有访问日志')}</div>`;
+      return;
+    }
+    accessSummary = d.summary || {};
+    // 服务端 readAccess 已经 latest-first 返回，这里保持原序
+    accessAll = (d.rows || []).slice();
+    if (accessPage > pageCount(accessAll.length)) accessPage = pageCount(accessAll.length);
+    renderAccess();
+    const m = $('#accessMsg');
+    if (m) m.textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  } catch (e) {
+    box.innerHTML = `<div class="hint err">读取失败：${esc(e.message)}</div>`;
+  }
+}
+function renderAccess() {
+  const box = $('#accessBody');
+  if (!box) return;
+  const s = accessSummary || {};
+  const st = (k) => (s.byStatus && s.byStatus[k]) || 0;
+  const pages = pageCount(accessAll.length);
+  const slice = accessAll.slice((accessPage - 1) * PER_PAGE, accessPage * PER_PAGE);
+  const rows = slice.map((r) => `<tr>
+        <td class="mono">${esc((r.ts || '').slice(11, 19))}</td>
+        <td class="mono">${esc(r.method)}</td>
+        <td class="mono" title="${esc(r.host + (r.ua ? ' · ' + r.ua : ''))}">${esc((r.uri || '').slice(0, 70))}</td>
+        <td class="mono ${r.status >= 500 ? 'err' : r.status >= 400 ? 'warn' : 'ok'}">${r.status}</td>
+        <td class="mono">${r.durMs}ms</td>
+        <td class="mono muted">${esc(r.ip)}</td>
+      </tr>`).join('');
+  box.innerHTML = `
+      <div class="row" style="gap:10px;margin-bottom:8px">
+        <span class="tag">最近 ${s.total || 0} 条</span>
+        <span class="tag ok">2xx ${st('2xx')}</span>
+        <span class="tag">3xx ${st('3xx')}</span>
+        <span class="tag warn">4xx ${st('4xx')}</span>
+        <span class="tag err">5xx ${st('5xx')}</span>
+        ${(s.topPaths || []).slice(0, 3).map((x) => `<span class="tag" title="访问最多的路径">${esc(x.k)} × ${x.v}</span>`).join('')}
+      </div>
+      <table class="mini">
+        <thead><tr><th>时间</th><th>方法</th><th>路径</th><th>状态</th><th>耗时</th><th>来源 IP</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="6" class="muted">这段时间还没有流量</td></tr>'}</tbody>
+      </table>
+      ${pagerHtml('access', accessPage, pages, accessAll.length)}`;
+  bindPager(box, (p) => { accessPage = p; renderAccess(); });
+}
+
+// ---------------- 备份与回滚（倒序分页）
+let backupAll = [], backupPage = 1;
+async function loadBackups() {
+  const box = $('#backupList');
+  if (!box) return;
+  try {
+    const d = await api('/api/backups');
+    // 文件名以时间戳开头，字典序倒排即最新在前
+    backupAll = (d.files || []).slice().sort().reverse();
+    if (backupPage > pageCount(backupAll.length)) backupPage = pageCount(backupAll.length);
+    renderBackups();
+  } catch (e) {
+    box.innerHTML = `<div class="hint err">读取失败：${esc(e.message)}</div>`;
+  }
+}
+function renderBackups() {
+  const box = $('#backupList');
+  if (!box) return;
+  if (!backupAll.length) {
+    box.innerHTML = '<div class="muted">还没有备份（保存一次就会出现）</div>';
+    return;
+  }
+  const pages = pageCount(backupAll.length);
+  const slice = backupAll.slice((backupPage - 1) * PER_PAGE, backupPage * PER_PAGE);
+  box.innerHTML = slice.map((f) => `<div class="row" style="gap:8px;margin:3px 0">
+        <span class="mono grow" style="font-size:12px">${esc(f)}</span>
+        <button class="sm" data-restore="${esc(f)}">回滚</button>
+      </div>`).join('') + pagerHtml('backup', backupPage, pages, backupAll.length);
+  box.querySelectorAll('[data-restore]').forEach((b) => b.addEventListener('click', async () => {
+    const f = b.dataset.restore;
+    if (!confirm(`回滚到「${f}」？\n当前配置会先另存一份备份，然后被这份覆盖。`)) return;
+    b.disabled = true;
+    try {
+      const r = await api('/api/backups/restore', { method: 'POST', body: JSON.stringify({ file: f }) });
+      alert(`已回滚：${r.routeCount} 条规则` + (r.restarted && r.restarted.length ? `\n重启的出口：${r.restarted.join('、')}` : ''));
+      await refresh();
+      await loadBackups();
+    } catch (e) {
+      alert('回滚失败：' + e.message);
+      b.disabled = false;
+    }
+  }));
+  bindPager(box, (p) => { backupPage = p; renderBackups(); });
+}
+
+function hintForTunnel(t, rt) {
+  if (rt && rt.status === 'error' && rt.lastError) return `<span class="err">${esc(rt.lastError)}</span>`;
+  if (t.mode === 'quick')
+    return '快速隧道是临时的：重连或重建容器后域名会变。要长期用请切到「命名隧道」。';
+  return '命名隧道：Cloudflare 里这条隧道的<b>公共主机名</b>要指向 <code>http://127.0.0.1:8080</code>（本栈 Caddy），再由「代理规则」按域名/路径分流。';
+}
+
+function tunnelHtml(t, rt) {
+  const named = t.mode === 'named';
+  return `<div class="rule" data-tid="${t.id}" id="tn-${t.id}">
+    <div class="tn-head">
+      <b>${esc(t.name || '未命名出口')}</b>
+      <span class="pill" id="tpill-${t.id}">…</span>
+      <span class="tn-url" id="turl-${t.id}"></span>
+      <div class="row" style="margin-left:auto">
+        <button class="sm primary" data-act="save">保存并重启</button>
+        <button class="sm" data-act="start">启动</button>
+        <button class="sm" data-act="stop">停止</button>
+        <button class="sm" data-act="qr">二维码</button>
+        <button class="sm" data-act="dup" title="按当前配置复制一个新出口（token 一起复制）">复制出口</button>
+        <button class="sm danger" data-act="del">删除</button>
+      </div>
+    </div>
+
+    <div class="tn-grid" style="margin-top:6px">
+      <div>
+        <label>名字（自己认得就行）</label>
+        <input type="text" data-k="name" value="${esc(t.name)}" placeholder="主隧道 / 备用隧道 / 另一个账号" />
+      </div>
+      <div>
+        <label>模式</label>
+        <select data-k="mode">
+          <option value="quick"${named ? '' : ' selected'}>快速隧道 —— 免账号，域名会变（试跑）</option>
+          <option value="named"${named ? ' selected' : ''}>命名隧道 —— 自己的域名（长期）</option>
+        </select>
+      </div>
+    </div>
+
+    <div data-mode="quick" class="${named ? 'hidden' : ''}">
+      <label>隧道指向（默认本栈 Caddy）</label>
+      <input type="text" data-k="origin" value="${esc(t.origin || '')}" placeholder="http://127.0.0.1:8080" />
+    </div>
+
+    <div data-mode="named" class="${named ? '' : 'hidden'}">
+      <label>Tunnel Token（${t.hasToken ? '已保存，留空则不修改' : '还没设置：粘 eyJhIjoi... 整串'}）</label>
+      <input type="password" data-k="token" placeholder="${t.hasToken ? '（已保存 token，留空不改）' : 'eyJhIjoi... 整串粘贴'}" />
+      <label>公网域名（只用于展示和二维码）</label>
+      <input type="text" data-k="publicHostname" value="${esc(t.publicHostname || '')}" placeholder="app.example.com" />
+    </div>
+
+    <details style="margin-top:8px">
+      <summary>高级选项（协议 / 日志 / metrics / 额外参数）</summary>
+      <div class="tn-grid">
+        <div>
+          <label>传输协议</label>
+          <select data-k="protocol">
+            ${[['auto', 'auto（自动，推荐）'], ['quic', 'quic（UDP，最快）'], ['http2', 'http2（TCP，UDP 被封时）'], ['http2_ws', 'http2_ws（WebSocket over TCP）']]
+              .map(([v, l]) => `<option value="${v}"${t.protocol === v ? ' selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label>日志级别</label>
+          <select data-k="loglevel">
+            ${[['info', 'info（推荐）'], ['debug', 'debug（排障用）'], ['warn', 'warn'], ['error', 'error']]
+              .map(([v, l]) => `<option value="${v}"${t.loglevel === v ? ' selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label>metrics 端口（可空，互不重复）</label>
+          <input type="text" data-k="metricsPort" value="${esc(t.metricsPort || '')}" placeholder="留空则不开启" />
+        </div>
+        <div>
+          <label>额外 cloudflared 参数</label>
+          <input type="text" data-k="extraArgs" value="${esc(t.extraArgs || '')}" placeholder="例如 --region us --edge-ip-version 4" />
+        </div>
+      </div>
+      <label class="switch" style="margin-top:10px"><input class="chk" type="checkbox" data-k="enabled"${t.enabled ? ' checked' : ''} /> 面板启动时自动拉起这个出口</label>
+    </details>
+
+    <div class="hint" id="thint-${t.id}"></div>
+    <div class="row" style="margin-top:6px">
+      <button class="sm" data-act="copy">复制公网链接</button>
+      <img id="tqr-${t.id}" alt="" style="display:none;max-width:200px" />
+    </div>
+  </div>`;
+}
+
+let renderedFormKey = '';
+let selectedExit = '';   // '' = 全局作用域（不绑定出口）
+
+const STATUS_MAP = { stopped: ['已停止', ''], starting: ['启动中…', 'warn'], running: ['运行中', 'ok'], stopping: ['停止中…', 'warn'], error: ['异常', 'err'] };
+
+function rtOf(id) { return ((R && R.tunnels) || []).find((x) => x.id === id) || { status: 'stopped' }; }
+function scopeRoutes() { return (S.routes || []).filter((r) => (r.tunnelId || '') === selectedExit); }
+
+// 左栏：出口列表（全局 + 每条出口），点一下切换右栏
+function renderExitList() {
+  const box = $('#exitList');
+  if (!box) return;
+  const gCount = (S.routes || []).filter((r) => !r.tunnelId).length;
+  const out = [`<div class="tab${selectedExit === '' ? ' active' : ''}" data-eid="" title="不绑定出口：任何出口的请求都可能命中">
+      <span class="dot"></span>全局规则<span class="tag">${gCount} 条</span></div>`];
+  for (const t of S.tunnels) {
+    const rt = rtOf(t.id);
+    const [txt, cls] = STATUS_MAP[rt.status] || [rt.status, ''];
+    const n = (S.routes || []).filter((r) => r.tunnelId === t.id).length;
+    const dotCls = cls === 'ok' ? 'ok' : cls === 'err' ? 'err' : cls === 'warn' ? 'warn' : '';
+    out.push(`<div class="tab${selectedExit === t.id ? ' active' : ''}" data-eid="${t.id}"
+      title="${esc(txt)}${rt.publicUrl ? ' · ' + esc(rt.publicUrl) : ''}">
+      <span class="dot ${dotCls}"></span>${esc(t.name || '未命名出口')}<span class="tag">${t.mode === 'named' ? '命名' : '快速'} · ${n} 条</span></div>`);
+  }
+  box.innerHTML = out.join('');
+  box.querySelectorAll('.tab').forEach((el) => el.addEventListener('click', () => selectExit(el.dataset.eid)));
+  const ec = $('#exitCount');
+  if (ec) ec.textContent = `${S.tunnels.length} 个出口`;
+}
+
+function selectExit(id) {
+  selectedExit = id || '';
+  renderExitList();
+  renderExitSettings(true);
+  renderRules();
+  updateTunnelStatus();
+}
+
+// 右栏上半：选中出口的设置（全局视角时给说明）
+function renderExitSettings(force) {
+  const box = $('#exitForm');
+  if (!box) return;
+  const label = $('#scopeName');
+  if (!selectedExit) {
+    if (label) label.textContent = '全局';
+    renderedFormKey = '';
+    box.innerHTML = '<div class="hint">当前是 <b>全局规则</b> 视角：这样建的规则由「域名/路径」决定，<b>对所有出口都生效</b>。' +
+      '想让某条规则只属于某条出口（例如只允许该出口的域名访问），点左边那条出口，再在右边加规则。</div>';
+    return;
+  }
+  const t = S.tunnels.find((x) => x.id === selectedExit);
+  if (!t) { selectedExit = ''; return renderExitSettings(true); }
+  if (label) label.textContent = t.name || '未命名出口';
+  if (!force && renderedFormKey === selectedExit) return;
+  renderedFormKey = selectedExit;
+  box.innerHTML = tunnelHtml(t, rtOf(t.id));
+  bindTunnelCard(box, t);
+}
+
+function bindTunnelCard(box, t) {
+  const id = t.id;
+  const el = box.querySelector('[data-tid]') || box;
+  el.querySelectorAll('[data-k]').forEach((inp) => {
+    inp.addEventListener('input', () => markDirty('tunnel'));
+    inp.addEventListener('change', () => markDirty('tunnel'));
+  });
+  const modeSel = el.querySelector('[data-k="mode"]');
+  if (modeSel) modeSel.addEventListener('change', () => {
+    const named = modeSel.value === 'named';
+    el.querySelector('[data-mode="quick"]').classList.toggle('hidden', named);
+    el.querySelector('[data-mode="named"]').classList.toggle('hidden', !named);
+    markDirty('tunnel');
+  });
+  const on = (act, fn) => { const b = el.querySelector(`[data-act="${act}"]`); if (b) b.addEventListener('click', fn); };
+  on('save', () => saveTunnel(id, el));
+  on('start', () => tunnelAction(id, 'start'));
+  on('stop', () => tunnelAction(id, 'stop'));
+  on('del', () => deleteTunnel(id, t.name));
+  on('qr', () => showTunnelQr(id));
+  on('dup', () => duplicateTunnel(id, el));
+  on('copy', () => copyTunnelUrl(id));
+}
+
+function renderTunnels(force) {
+  renderExitList();
+  renderExitSettings(force);
+  updateTunnelStatus();
+}
+
+// 右栏下半 + 左栏状态：都要跟着作用域走
+function updateRootWarn() {
+  const el = $('#rootWarn');
+  const list = scopeRoutes();
+  const has = list.some((r) => r.enabled && (r.path === '' || r.path === '/' || r.path == null));
+  if (el) {
+    if (!has && list.length === 0) {
+      el.classList.add('hidden');
+    } else if (!has) {
+      el.classList.remove('hidden');
+      el.innerHTML = `<b>访问 <code>/</code> 会 404，这是正常的。</b>` +
+        (selectedExit
+          ? '该出口的规则里没有匹配根路径 <code>/</code> 的一条 —— 出口只把流量送进 Caddy，给哪个服务由规则决定。'
+          : '没有任何全局规则匹配根路径 <code>/</code>。') +
+        `<div class="row" style="margin-top:8px">
+          <button class="sm primary" id="btnAddRoot">＋ 加一条路径为 / 的规则</button>
+          <button class="sm" id="btnOpenRules">去看规则</button>
+        </div>`;
+      const b1 = $('#btnAddRoot'); if (b1) b1.addEventListener('click', addRootRule);
+      const b2 = $('#btnOpenRules'); if (b2) b2.addEventListener('click', () => { const c = $('#rulesCard'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+    } else {
+      el.classList.add('hidden');
+    }
+  }
+}
+
+// 当前作用域里的规则（带 S.routes 真索引），顺序警告要用
+function scopeIdx() {
+  const out = [];
+  (S.routes || []).forEach((r, i) => { if ((r.tunnelId || '') === selectedExit) out.push([r, i]); });
+  return out;
+}
+
+// / 是万能前缀：如果它不在最后，后面的规则永远匹配不到 —— 主动提醒并给一键修复
+function updateOrderWarn() {
+  const el = $('#orderWarn');
+  if (!el) return;
+  const items = scopeIdx().filter(([r]) => r.enabled);
+  const ci = items.findIndex(([r]) => (r.path || '/') === '/');
+  if (ci === -1 || ci === items.length - 1) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  const r = items[ci][0];
+  const after = items.length - ci - 1;
+  el.classList.remove('hidden');
+  el.innerHTML = `⚠️ 「${esc(r.name || '/')}」的路径是 <code>/</code>，会命中所有请求，但它排在第 ${ci + 1} 条 —— 后面 ${after} 条规则永远不会被匹配。` +
+    `<button class="sm" id="btnFixOrder">把这条移到最后</button>`;
+  const b = $('#btnFixOrder');
+  if (b) b.addEventListener('click', () => {
+    S.routes.splice(S.routes.indexOf(r), 1);
+    S.routes.push(r);
+    markDirty('rules');
+    renderRules();
+    $('#saveMsg').textContent = '已把 / 规则移到最后，记得点「保存并下发」';
+  });
+}
+
+function addRootRule() {
+  S.routes.push(newRoute({ name: '网站首页', path: '/', upstream: 'http://127.0.0.1:8091', strip: false,
+    note: '根路径：访问 https://域名/ 时进这里。上游默认指向自带的演示服务，改成你自己的即可' }));
+  markDirty('rules');
+  renderRules();
+  updateRootWarn();
+  updateRuleCount();
+  const inp = $('#rules .rule [data-k="upstream"]');
+  if (inp) { inp.focus(); inp.select(); }
+}
+
+function updateRuleCount() {
+  const el = $('#ruleCount');
+  const list = scopeRoutes();
+  if (el) el.textContent = `${list.filter((r) => r.enabled).length}/${list.length} 条生效`;
+}
+
+function updateTunnelStatus() {
+  const rtById = {};
+  (R && R.tunnels ? R.tunnels : []).forEach((r) => (rtById[r.id] = r));
+  for (const t of S.tunnels) {
+    const rt = rtById[t.id] || { status: 'stopped' };
+    const pillEl = $('#tpill-' + t.id);
+    if (!pillEl) continue;
+    const [txt, cls] = STATUS_MAP[rt.status] || [rt.status, ''];
+    pill(pillEl, `${t.mode === 'named' ? '命名' : '快速'} · ${txt}${rt.pid ? ' #' + rt.pid : ''}`, cls);
+    const u = $('#turl-' + t.id);
+    if (u) u.textContent = rt.publicUrl || '';
+    const h = $('#thint-' + t.id);
+    if (h) h.innerHTML = hintForTunnel(t, rt);
+  }
+  const running = (R && R.tunnels ? R.tunnels : []).filter((r) => r.status === 'running').length;
+  pill($('#pillTunnel'), `隧道：${running}/${S.tunnels.length} 在线`, running ? 'ok' : 'warn');
+  renderExitList();
+  updateRootWarn();
+  updateRuleCount();
+  // 未生效规则（出口没域名 / 已删除）
+  const sw = $('#skipWarn');
+  if (sw) {
+    const skipped = ((R && R.caddy && R.caddy.skipped) || []).filter((k) => {
+      const r = (S.routes || []).find((x) => x.id === k.id);
+      return r && (r.tunnelId || '') === selectedExit;
+    });
+    if (skipped.length) {
+      sw.classList.remove('hidden');
+      sw.innerHTML = '<b>有规则没生效：</b>' + skipped.map((k) => `<div>· ${esc(k.name || k.path)}：${esc(k.reason)}</div>`).join('');
+    } else sw.classList.add('hidden');
+  }
+  const pu = $('#pubUrl');
+  if (pu) pu.textContent = (R && R.publicUrl) || '（尚未就绪）';
+}
+
+function collectTunnel(el, id) {
+  const g = (k) => el.querySelector('[data-k="' + k + '"]');
+  const body = {
+    name: g('name').value,
+    mode: g('mode').value,
+    protocol: g('protocol').value,
+    loglevel: g('loglevel').value,
+    metricsPort: g('metricsPort').value,
+    extraArgs: g('extraArgs').value,
+    enabled: g('enabled').checked,
+  };
+  const tok = g('token');
+  if (tok && tok.value.trim()) body.token = tok.value.trim();
+  const org = g('origin');
+  if (org) body.origin = org.value;
+  const host = g('publicHostname');
+  if (host) body.publicHostname = host.value;
+  return body;
+}
+
+async function saveTunnel(id, el) {
+  try {
+    await api('/api/tunnels/' + id, { method: 'POST', body: JSON.stringify(collectTunnel(el, id)) });
+    dirty.tunnel = false;
+    renderDirty();
+    await refresh();
+  } catch (e) { alert('保存失败：' + e.message); }
+}
+
+async function tunnelAction(id, act) {
+  try {
+    await api('/api/tunnels/' + id + '/' + act, { method: 'POST' });
+    setTimeout(() => refresh().catch(() => {}), 800);
+  } catch (e) { alert('操作失败：' + e.message); }
+}
+
+async function deleteTunnel(id, name) {
+  if (!confirm(`删除隧道出口「${name || id}」？\n（只影响本面板，不会动 Cloudflare 上的隧道）`)) return;
+  try {
+    await api('/api/tunnels/' + id + '/delete', { method: 'POST' });
+    dirty.tunnel = false;
+    if (selectedExit === id) selectedExit = '';
+    renderedFormKey = '';
+    await refresh();
+    renderTunnels(true);
+    renderRules();
+  } catch (e) { alert('删除失败：' + e.message); }
+}
+
+function tunnelUrlOf(id) {
+  const rt = (R.tunnels || []).find((r) => r.id === id);
+  return (rt && rt.publicUrl) || '';
+}
+
+async function copyTunnelUrl(id) {
+  const u = tunnelUrlOf(id);
+  if (!u) return alert('这个出口还没有公网地址（快速隧道要等 cloudflared 打印出来）');
+  try { await navigator.clipboard.writeText(u); } catch { prompt('复制：', u); }
+}
+
+async function showTunnelQr(id) {
+  const u = tunnelUrlOf(id);
+  if (!u) return alert('这个出口还没有公网地址');
+  const d = await api('/api/qr?text=' + encodeURIComponent(u));
+  const img = $('#tqr-' + id);
+  img.src = d.dataUrl;
+  img.style.display = 'block';
+}
+
+function fillForm() {
+  $('#title').textContent = '☁️ ' + (S.settings.panelTitle || 'Cloudflare 隧道面板');
+  document.title = S.settings.panelTitle || 'Cloudflare 隧道面板';
+  $('#caddyListen').value = S.settings.caddyListen || '';
+  $('#panelTitle').value = S.settings.panelTitle || '';
+  $('#notFoundBody').value = S.settings.notFoundBody || '';
+  $('#puser').value = S.panel.authEnabled ? '（已设置）' : '';
+  const st = S.settings || {};
+  const m = st.maintenance || {};
+  $('#maintOn').checked = !!m.on;
+  $('#maintBody').value = m.body || '';
+  $('#maintRetry').value = m.retryAfter || 300;
+  const sec = st.security || {};
+  $('#ipDeny').value = sec.ipDeny || '';
+  const rl = sec.rateLimit || {};
+  $('#rlOn').checked = !!rl.enabled;
+  $('#rlRps').value = rl.rps || '';
+  $('#rlBurst').value = rl.burst || '';
+  const nt = st.notify || {};
+  const ev = nt.events || {};
+  $('#notifyUrl').value = nt.url || '';
+  $('#notifyFormat').value = nt.format || 'generic';
+  $('#evDown').checked = ev.tunnelDown !== false;
+  $('#evUrl').checked = ev.urlChange !== false;
+  $('#evCaddy').checked = ev.caddyFail !== false;
+  const cf = st.cf || {};
+  $('#cfAccount').value = cf.accountId || '';
+  $('#cfZone').value = cf.zoneId || '';
+  $('#cfToken').value = '';
+  dirty.settings = false;
+  renderDirty();
+}
+
+async function refresh() {
+  const d = await api('/api/state');
+  const editingRules = isEditing('#rules');
+  // 规则区只要有未保存改动（刚加一条/删一条/改了字段），就保留本地副本；
+  // 否则每 5 秒的轮询会用服务端旧数据把刚加的规则悄悄抹掉。
+  if (editingRules || dirty.rules) d.state.routes = S.routes;
+  S = d.state; R = d.runtime;
+
+  $('#hostBadge').textContent = `${R.host} · v${d.version}`;
+  pill($('#pillCaddy'), `Caddy：${R.caddy.ok ? '已同步' : '未就绪'}${R.caddy.routeCount ? ' ·' + R.caddy.routeCount : ''}`, R.caddy.ok ? 'ok' : 'err');
+  pill($('#pillRoutes'), `规则：${S.routes.filter((r) => r.enabled).length}/${S.routes.length}`);
+
+  const rtTunnels = R.tunnels || [];
+  const runningCount = rtTunnels.filter((r) => r.status === 'running').length;
+  $('#runtimeInfo').innerHTML =
+    `主机：<code>${esc(R.host)}</code>　局域网 IP：<code>${(R.lanIps || []).join(', ') || '-'}</code><br>` +
+    `面板：<code>http://${(R.lanIps || ['本机'])[0]}:${location.port || 8090}</code>　Caddy 入口：<code>${esc(R.caddy.listen || '')}</code><br>` +
+    `隧道出口：<b>${runningCount}/${S.tunnels.length}</b> 在线` +
+    rtTunnels.filter((r) => r.status !== 'stopped')
+      .map((r) => `<br>· <code>${esc(r.name)}</code>：<code>${esc(r.status)}</code>${r.startedAt ? '，已运行 ' + Math.round((Date.now() - r.startedAt) / 1000) + ' 秒' : ''}${r.publicUrl ? '　' + esc(r.publicUrl) : ''}`).join('') +
+    `${R.caddy.lastPush ? '　上次下发：' + new Date(R.caddy.lastPush).toLocaleTimeString('zh-CN', { hour12: false }) : ''}`;
+
+  // 状态徽章永远刷新；表单回填只在“没在编辑、也没有未保存改动”时做，
+  // 否则每 5 秒的轮询会把用户刚输入的 token / 刚切好的模式悄悄改回去。
+  if (!dirty.settings && !isEditing('#settingsCard')) fillForm();
+  renderTunnels(!dirty.tunnel && !isEditing('#exitForm'));
+  if (!editingRules && !dirty.rules) renderRules();
+}
+
+function isEditing(sel) {
+  const a = document.activeElement;
+  return !!(a && a.closest && a.closest(sel));
+}
+
+function renderDirty() {
+  const tips = [];
+  if (dirty.tunnel) tips.push('隧道出口');
+  if (dirty.settings) tips.push('面板设置');
+  const el = $('#dirtyTunnel');
+  if (el) el.textContent = tips.length ? `● 有未保存的改动（${tips.join('、')}），自动刷新已暂停` : '';
+  const rd = $('#rulesDirty');
+  if (rd) rd.textContent = dirty.rules ? '● 规则有未保存的改动，自动刷新已暂停 —— 改完点「保存并下发到 Caddy」' : '';
+}
+
+// ---------------- 事件
+// 卡片内任意输入/切换 → 记脏，避免轮询回填把用户的选择改回去
+function markDirty(which) { dirty[which] = true; renderDirty(); }
+$('#settingsCard').addEventListener('input', () => markDirty('settings'));
+$('#settingsCard').addEventListener('change', () => markDirty('settings'));
+
+// 新增隧道出口：先建一条默认（快速）出口，再让用户改
+$('#btnAddTunnel').addEventListener('click', async () => {
+  try {
+    const d = await api('/api/tunnels', {
+      method: 'POST',
+      body: JSON.stringify({ name: '新隧道出口 ' + (S.tunnels.length + 1), mode: 'quick', enabled: true }),
+    });
+    dirty.tunnel = false;
+    selectedExit = d.id;          // 新建后自动选中，右栏就是它的设置和规则
+    await refresh();
+    renderTunnels(true);
+    const el = $('#tn-' + d.id);
+    if (el) el.querySelector('[data-k="name"]').focus();
+  } catch (e) { alert('新增失败：' + e.message); }
+});
+$('#btnStartAll').addEventListener('click', async () => {
+  await api('/api/tunnels/start-all', { method: 'POST' });
+  setTimeout(() => refresh().catch(() => {}), 800);
+});
+$('#btnStopAll').addEventListener('click', async () => {
+  await api('/api/tunnels/stop-all', { method: 'POST' });
+  setTimeout(() => refresh().catch(() => {}), 600);
+});
+
+$('#tpl').addEventListener('change', (e) => {
+  const k = e.target.value;
+  if (!k) return;
+  const t = TEMPLATES[k];
+  S.routes.push(newRoute(t));
+  e.target.value = '';
+  markDirty('rules');
+  renderRules();
+  if (t && t.sensitive) {
+    const last = document.querySelectorAll('#rules .rule');
+    const el = last[last.length - 1];
+    if (el) {
+      el.querySelector('.rule-adv').classList.remove('hidden');
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+    $('#saveMsg').innerHTML = '<span style="color:#d29922">⚠️ 这条会暴露数据库/终端，已展开高级选项 —— 建议填「基础认证」或「来源 IP 白名单」后再下发</span>';
+  } else {
+    $('#saveMsg').textContent = '已添加，记得点「保存并下发」';
+  }
+});
+$('#btnAdd').addEventListener('click', () => {
+  S.routes.push(newRoute());
+  markDirty('rules');
+  renderRules();
+  $('#saveMsg').textContent = selectedExit
+    ? `已添加，属于出口「${(S.tunnels.find((t) => t.id === selectedExit) || {}).name || selectedExit}」，记得点「保存并下发」`
+    : '已添加（全局规则），记得点「保存并下发」';
+  const all = document.querySelectorAll('#rules .rule');
+  const lastEl = all[all.length - 1];
+  if (lastEl) lastEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+});
+
+$('#btnImportRule').addEventListener('click', importRule);
+$('#btnSim').addEventListener('click', () => {
+  const b = $('#simBox');
+  if (b) { b.open = true; b.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  const inp = $('#simPath'); if (inp) inp.focus();
+});
+$('#btnSimRun').addEventListener('click', simulate);
+$('#btnAccessRefresh').addEventListener('click', loadAccess);
+$('#accessAuto').addEventListener('change', (e) => {
+  if (e.target.checked) { loadAccess(); accessTimer = setInterval(loadAccess, 10000); }
+  else { clearInterval(accessTimer); accessTimer = null; }
+});
+
+$('#btnSaveRoutes').addEventListener('click', async () => {
+  $('#saveMsg').textContent = '保存中…';
+  try {
+    const d = await api('/api/routes', { method: 'POST', body: JSON.stringify({ routes: S.routes }) });
+    if (d.caddy.ok) { dirty.rules = false; renderDirty(); }
+    $('#saveMsg').textContent = d.caddy.ok ? '已保存并下发 ✓' : '已保存，但 Caddy 下发失败：' + d.caddy.error;
+    await refresh();
+  } catch (e) { $('#saveMsg').textContent = '失败：' + e.message; }
+});
+
+$('#btnSaveSettings').addEventListener('click', async () => {
+  $('#settingsMsg').textContent = '保存中…';
+  try {
+    const cfBody = { accountId: $('#cfAccount').value.trim(), zoneId: $('#cfZone').value.trim() };
+    const cfTok = $('#cfToken').value.trim();
+    if (cfTok) cfBody.token = cfTok;
+    await api('/api/settings', { method: 'POST', body: JSON.stringify({
+      caddyListen: $('#caddyListen').value,
+      panelTitle: $('#panelTitle').value,
+      notFoundBody: $('#notFoundBody').value,
+      maintenance: { on: $('#maintOn').checked, body: $('#maintBody').value, retryAfter: Number($('#maintRetry').value) || 300 },
+      security: { ipDeny: $('#ipDeny').value, rateLimit: { enabled: $('#rlOn').checked, rps: Number($('#rlRps').value) || 0, burst: Number($('#rlBurst').value) || 0 } },
+      notify: { url: $('#notifyUrl').value.trim(), format: $('#notifyFormat').value,
+        events: { tunnelDown: $('#evDown').checked, urlChange: $('#evUrl').checked, caddyFail: $('#evCaddy').checked } },
+      cf: cfBody,
+    }) });
+    $('#settingsMsg').textContent = '已保存 ✓';
+    await refresh();
+  } catch (e) { $('#settingsMsg').textContent = '失败：' + e.message; }
+});
+
+$('#btnAuth').addEventListener('click', async () => {
+  const u = $('#puser').value.trim(), p = $('#ppass').value;
+  if (u === '（已设置）') return alert('要修改请直接输入新用户名和密码');
+  await api('/api/panel-auth', { method: 'POST', body: JSON.stringify({ user: u, pass: p }) });
+  alert(u ? '已开启登录保护，请重新打开页面' : '已关闭登录保护');
+  $('#ppass').value = '';
+  await refresh();
+});
+
+$('#btnExport').addEventListener('click', () => { location.href = '/api/export'; });
+$('#btnExportFull').addEventListener('click', () => {
+  if (!confirm('导出文件会包含 tunnel token（明文），请妥善保管。继续？')) return;
+  location.href = '/api/export?full=1';
+});
+$('#btnImport').addEventListener('click', () => $('#fileImport').click());
+$('#fileImport').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const text = await f.text();
+  try {
+    const d = await api('/api/import', { method: 'POST', body: text });
+    alert(`导入成功，共 ${d.routeCount} 条规则`);
+    await refresh();
+  } catch (err) { alert('导入失败：' + err.message); }
+  e.target.value = '';
+});
+
+$('#btnClear').addEventListener('click', () => { $('#log').textContent = ''; });
+
+// ---------------- 日志
+let logLines = 0;
+const es = new EventSource('/api/logs/stream');
+es.onmessage = (ev) => {
+  let rec; try { rec = JSON.parse(ev.data); } catch { return; }
+  const pre = $('#log');
+  const span = document.createElement('span');
+  span.className = 'l-' + (rec.source || 'panel');
+  span.textContent = `${new Date(rec.t).toLocaleTimeString('zh-CN', { hour12: false })} [${rec.source}] ${rec.line}\n`;
+  pre.appendChild(span);
+  logLines++;
+  $('#logCount').textContent = logLines + ' 行';
+  if ($('#autoscroll').checked) pre.scrollTop = pre.scrollHeight;
+  if (pre.childNodes.length > 1500) pre.removeChild(pre.firstChild);
+};
+
+// ---------------- 浅色 / 深色
+(function initTheme() {
+  const saved = localStorage.getItem('cfp-theme');
+  if (saved) document.documentElement.dataset.theme = saved;
+  const b = $('#btnTheme');
+  if (b) b.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem('cfp-theme', next);
+  });
+})();
+
+// ---------------- Docker 容器 → 一键加规则
+async function loadDocker() {
+  const msg = $('#dockerMsg'), box = $('#dockerBody');
+  msg.textContent = '读取中…';
+  try {
+    const d = await api('/api/docker/containers');
+    msg.textContent = d.available ? `${d.containers.length} 个容器` : '';
+    if (!d.available) { box.innerHTML = `<div class="hint err" style="font-size:12px">${esc(d.error)}</div>`; return; }
+    if (!d.containers.length) { box.innerHTML = '<div class="muted" style="font-size:12px">没有容器</div>'; return; }
+    box.innerHTML = d.containers.map((c) => `
+      <div class="dock">
+        <div class="dock-main">
+          <b style="font-size:13px">${esc(c.name)}</b>
+          <span class="tag ${c.state === 'running' ? 'ok' : 'err'}">${esc(c.state)}</span>
+          <div class="muted mono" style="font-size:11px">${esc(c.image)} · ${esc((c.ports || []).join(' ') || '无端口')}</div>
+        </div>
+        <button class="sm" data-dock="${esc(c.name)}" ${c.upstream ? '' : 'disabled title="这个容器没有可用的 TCP 端口"'}>加规则</button>
+      </div>`).join('');
+    box.querySelectorAll('[data-dock]').forEach((btn) => btn.addEventListener('click', () => {
+      const c = d.containers.find((x) => x.name === btn.dataset.dock);
+      if (!c || !c.upstream) return;
+      const slug = c.name.replace(/[^\w-]/g, '').toLowerCase() || 'app';
+      const r = Object.assign(newRoute(), {
+        name: c.name, path: '/' + slug, upstream: c.upstream, strip: true,
+        note: `来自 Docker 容器 ${c.name}（${c.image}）`,
+      });
+      S.routes.push(r);
+      markDirty('rules');
+      renderRules();
+      $('#rulesCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      alert(`已加到规则列表底部：\n${r.path} → ${r.upstream}\n别忘了点「保存并下发」`);
+    }));
+  } catch (e) {
+    msg.textContent = '';
+    box.innerHTML = `<div class="hint err" style="font-size:12px">${esc(e.message)}</div>`;
+  }
+}
+$('#btnDockerRefresh').addEventListener('click', loadDocker);
+
+// ---------------- 一次性分享链接
+async function loadShares() {
+  const box = $('#shareList');
+  try {
+    const d = await api('/api/shares');
+    if (!d.shares.length) { box.innerHTML = '<div class="muted" style="font-size:12px">还没有分享链接</div>'; return; }
+    box.innerHTML = d.shares.map((x) => `
+      <div class="dock">
+        <div class="dock-main">
+          <b style="font-size:12px">${esc(x.name)}</b>
+          <div class="mono" style="font-size:11px;word-break:break-all">${esc(x.url)}</div>
+          <div class="muted" style="font-size:11px">→ ${esc(x.upstream)} · 剩 ${Math.ceil(x.leftSec / 60)} 分钟</div>
+        </div>
+        <div class="row" style="gap:4px">
+          <button class="sm" data-copy="${esc(x.url)}">复制</button>
+          <button class="sm danger" data-del="${esc(x.id)}">删</button>
+        </div>
+      </div>`).join('');
+    box.querySelectorAll('[data-copy]').forEach((b) => b.addEventListener('click', () => {
+      navigator.clipboard.writeText(b.dataset.copy).then(() => { b.textContent = '已复制'; setTimeout(() => (b.textContent = '复制'), 1200); });
+    }));
+    box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
+      await api(`/api/shares/${b.dataset.del}/delete`, { method: 'POST' });
+      loadShares();
+    }));
+  } catch (e) { box.innerHTML = `<div class="hint err">${esc(e.message)}</div>`; }
+}
+$('#btnShareAdd').addEventListener('click', async () => {
+  try {
+    const d = await api('/api/shares', { method: 'POST', body: JSON.stringify({
+      upstream: $('#shareUpstream').value.trim(), name: $('#shareName').value.trim(),
+      minutes: Number($('#shareMinutes').value) || 30,
+    }) });
+    navigator.clipboard.writeText(d.share.url).catch(() => {});
+    alert('已生成（已尝试复制到剪贴板）：\n' + d.share.url);
+    loadShares();
+  } catch (e) { alert('生成失败：' + e.message); }
+});
+$('#btnShareRefresh').addEventListener('click', loadShares);
+
+// ---------------- 面板内测试器
+$('#btnCurl').addEventListener('click', async () => {
+  const msg = $('#curlMsg'), out = $('#curlOut');
+  msg.textContent = '请求中…';
+  const path = $('#curlPath').value.trim() || '/';
+  const host = $('#curlHost').value.trim();
+  const url = host ? `${path}${path.includes('?') ? '&' : '?'}__host=${encodeURIComponent(host)}` : path;
+  try {
+    const d = await api('/api/curl', { method: 'POST', body: JSON.stringify({ path: url }) });
+    msg.textContent = '';
+    if (!d.ok) { out.textContent = `请求失败：${d.error}（${d.ms}ms）`; return; }
+    out.textContent = [
+      `${d.status}  ${d.ms}ms  ${d.bytes} 字节`,
+      d.url,
+      '',
+      ...Object.entries(d.headers).map(([k, v]) => `${k}: ${v}`),
+      '',
+      d.preview,
+    ].join('\n');
+  } catch (e) { msg.textContent = '失败：' + e.message; }
+});
+
+// ---------------- 通知测试
+$('#btnNotifyTest').addEventListener('click', async () => {
+  const msg = $('#notifyMsg');
+  msg.textContent = '发送中…';
+  try {
+    const d = await api('/api/notify/test', { method: 'POST', body: '{}' });
+    msg.textContent = d.configured ? (d.ok ? '已发送 ✓（去看看收到没）' : '发送失败，见下方日志') : '还没填 Webhook 地址';
+  } catch (e) { msg.textContent = '失败：' + e.message; }
+});
+
+// ---------------- Cloudflare API
+$('#btnCfList').addEventListener('click', async () => {
+  const msg = $('#cfMsg'), box = $('#cfList');
+  msg.textContent = '读取中…';
+  try {
+    const d = await api('/api/cf/tunnels');
+    msg.textContent = `${d.tunnels.length} 条云端隧道`;
+    if (!d.tunnels.length) { box.innerHTML = '<div class="muted" style="font-size:12px">还没有隧道</div>'; return; }
+    box.innerHTML = `<table class="mini"><tr><th>名字</th><th>状态</th><th>连接</th><th>ID</th><th></th></tr>` +
+      d.tunnels.map((t) => `<tr><td>${esc(t.name)}</td><td>${esc(t.status)}</td><td>${t.connections}</td>
+        <td class="mono" style="font-size:11px">${esc(t.id)}</td>
+        <td><button class="sm danger" data-cfdel="${esc(t.id)}" data-cfname="${esc(t.name)}">删</button></td></tr>`).join('') + '</table>';
+    box.querySelectorAll('[data-cfdel]').forEach((b) => b.addEventListener('click', async () => {
+      if (!confirm(`删除云端隧道「${b.dataset.cfname}」？本地出口不会被自动删除。`)) return;
+      try { await api(`/api/cf/tunnels/${b.dataset.cfdel}/delete`, { method: 'POST' }); $('#btnCfList').click(); }
+      catch (e) { alert('删除失败：' + e.message); }
+    }));
+  } catch (e) { msg.textContent = '失败：' + e.message; box.innerHTML = ''; }
+});
+$('#btnCfCreate').addEventListener('click', async () => {
+  const name = prompt('隧道名字（字母数字 . _ -，例如 dsh2）：');
+  if (!name) return;
+  const hostname = prompt('要绑的域名（留空则不建 DNS）：', 'app2.example.com') || '';
+  const addLocal = confirm('顺便在本地面板里加一条出口？\n（确定=加，token 自动填好）');
+  $('#cfMsg').textContent = '创建中…';
+  try {
+    const d = await api('/api/cf/tunnels', { method: 'POST', body: JSON.stringify({ name, hostname, addLocal }) });
+    $('#cfMsg').textContent = `已创建 ${d.tunnel.name}（token ${d.token}${d.dns && d.dns.error ? '，DNS 失败：' + d.dns.error : d.dns ? '，CNAME 已建' : ''}）`;
+    if (d.localId) { selectedExit = d.localId; await refresh(); }
+    $('#btnCfList').click();
+  } catch (e) { $('#cfMsg').textContent = '失败：' + e.message; }
+});
+
+// ---------------- 出口复制
+async function duplicateTunnel(id, el) {
+  const t = S.tunnels.find((x) => x.id === id);
+  if (!t) return;
+  const name = prompt('新出口的名字：', t.name + ' 副本');
+  if (!name) return;
+  const body = {
+    name, mode: t.mode, token: el.querySelector('[data-k="token"]') ? el.querySelector('[data-k="token"]').value.trim() : t.token || '',
+    origin: t.origin, publicHostname: t.publicHostname, protocol: t.protocol, loglevel: t.loglevel,
+    metricsPort: '', extraArgs: t.extraArgs, enabled: true,
+  };
+  try {
+    const d = await api('/api/tunnels', { method: 'POST', body: JSON.stringify(body) });
+    selectedExit = d.id;
+    await refresh();
+  } catch (e) { alert('复制失败：' + e.message); }
+}
+
+// ---------------- 日志过滤 / 下载
+function applyLogFilter() {
+  const q = ($('#logFilter').value || '').trim().toLowerCase();
+  for (const node of $('#log').childNodes) {
+    if (node.nodeType !== 1) continue;
+    node.classList.toggle('hidden', !!q && !node.textContent.toLowerCase().includes(q));
+  }
+}
+$('#logFilter').addEventListener('input', applyLogFilter);
+$('#btnLogDownload').addEventListener('click', () => { location.href = '/api/logs/download'; });
+
+loadShares().catch(() => {});
+loadBackups();
+refresh().catch((e) => alert('加载失败：' + e.message));
+setInterval(() => refresh().catch(() => {}), 5000);
+</script>
+</body>
+</html>

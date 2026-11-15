@@ -1,0 +1,25 @@
+{
+  "admin": { "listen": "127.0.0.1:2019" },
+  "apps": {
+    "http": {
+      "servers": {
+        "main": {
+          "listen": [":8080"],
+          "automatic_https": { "disable": true },
+          "routes": [
+            {
+              "handle": [
+                {
+                  "handler": "static_response",
+                  "status_code": 200,
+                  "headers": { "Content-Type": ["text/plain; charset=utf-8"] },
+                  "body": "cf-tunnel-panel bootstrap: 等待面板下发配置…\n"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

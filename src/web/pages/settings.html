@@ -1,0 +1,128 @@
+<div class="topbar">
+  <div class="t"><h1>设置</h1><div class="sub">站点、维护、安全、通知、面板登录与备份</div></div>
+  <div class="tools"><button class="sm primary" id="btnSave">保存设置</button></div>
+</div>
+
+<div class="content stack">
+  <div class="card">
+    <div class="hd"><h2>站点</h2><div class="sub">只影响面板与 Caddy 的对外行为</div></div>
+    <div class="bd stack">
+      <div class="form-grid">
+        <div class="field"><label>面板标题</label><input id="panelTitle" placeholder="Cloudflare 隧道面板" /></div>
+        <div class="field"><label>Caddy 监听地址</label><input id="caddyListen" placeholder=":8080" /><span class="hint">改成别的端口后，隧道的上游也要一起改</span></div>
+      </div>
+      <div class="field"><label>未命中规则的 404 文案</label><textarea id="notFoundBody" rows="3"></textarea></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="hd"><h2>维护模式</h2><div class="sub">打开后整站返回 503，隧道和规则都不用动</div></div>
+    <div class="bd stack">
+      <label class="inline"><input class="chk" type="checkbox" id="maintOn" /> 开启维护模式</label>
+      <div class="form-grid">
+        <div class="field"><label>维护提示文案</label><input id="maintBody" placeholder="站点正在维护，请稍后再来。" /></div>
+        <div class="field"><label>Retry-After（秒）</label><input id="maintRetry" value="300" /></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="hd"><h2>安全</h2><div class="sub">IP 黑名单最先匹配；限流需要自定义 Caddy 镜像</div></div>
+    <div class="bd stack">
+      <div class="field"><label>全局 IP 黑名单（逗号分隔，支持 CIDR）</label><input id="ipDeny" placeholder="1.2.3.4, 10.0.0.0/8" /></div>
+      <div class="form-grid">
+        <div class="field"><label class="inline"><input class="chk" type="checkbox" id="rlOn" /> 开启限流</label>
+          <span class="hint">只在 `CADDY_RATELIMIT=1` + xcaddy 自定义镜像时生效，见 docs/RATELIMIT.md</span></div>
+        <div class="field"><label>每秒请求数</label><input id="rlRps" value="20" /></div>
+        <div class="field"><label>突发上限</label><input id="rlBurst" value="40" /></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="hd"><h2>掉线通知</h2><div class="sub">出口掉线 / 换域名 / Caddy 下发失败时推一条</div></div>
+    <div class="bd stack">
+      <div class="form-grid">
+        <div class="field"><label>Webhook 地址</label><input id="notifyUrl" placeholder="https://…" /></div>
+        <div class="field"><label>格式</label>
+          <select id="notifyFormat">
+            <option value="generic">通用 JSON</option>
+            <option value="dingtalk">钉钉机器人</option>
+            <option value="feishu">飞书机器人</option>
+            <option value="bark">Bark（iOS）</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="field"><label>相同事件冷却（秒）</label><input id="notifyCool" type="number" min="0" max="86400" step="30" placeholder="300" />
+          <div class="sub">比如出口掉线后 5 分钟内只提醒一次，避免反复刷屏；0 = 不冷却</div></div>
+        <div class="field"><label>静默时段</label><input id="notifyQuiet" placeholder="23:00-07:00" />
+          <div class="sub">这段时间内不发通知（可跨零点，多段用逗号：12:00-13:30,23:00-07:00）</div></div>
+      </div>
+      <div class="row">
+        <label class="inline"><input class="chk" type="checkbox" id="evDown" /> 出口掉线</label>
+        <label class="inline"><input class="chk" type="checkbox" id="evUrl" /> 快速隧道换域名</label>
+        <label class="inline"><input class="chk" type="checkbox" id="evCaddy" /> Caddy 下发失败</label>
+        <button class="sm ghost" id="btnNotifyTest">发测试通知</button>
+        <button class="sm ghost" id="btnNotifyClear">清空地址</button>
+        <span class="muted" id="notifyMsg"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="hd"><h2>面板登录</h2><div class="sub">设置后浏览器会弹 HTTP Basic 登录框</div></div>
+    <div class="bd">
+      <div class="form-grid">
+        <div class="field"><label>用户名（留空 = 关闭鉴权）</label><input id="panelUser" autocomplete="off" /></div>
+        <div class="field"><label>密码</label><input id="panelPass" type="password" autocomplete="new-password" placeholder="留空 = 不修改" /></div>
+      </div>
+      <div class="row" style="margin-top:12px"><button class="sm" id="btnPanelAuth">更新登录方式</button><span class="muted" id="authMsg"></span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="hd"><h2>只读账号</h2><div class="sub">给「只想看看状态」的人：能看所有页面，改不了任何配置</div></div>
+    <div class="bd">
+      <div class="form-grid">
+        <div class="field"><label>只读用户名（留空 = 关闭）</label><input id="viewerUser" autocomplete="off" /></div>
+        <div class="field"><label>只读密码</label><input id="viewerPass" type="password" autocomplete="new-password" placeholder="留空 = 不修改" /></div>
+      </div>
+      <div class="row" style="margin-top:12px"><button class="sm" id="btnViewer">保存只读账号</button><span class="muted" id="viewerMsg"></span></div>
+      <div class="hint">只读账号用浏览器 Basic 登录，GET 一律放行、写操作返回 403。首次设置必须同时给密码。</div>
+    </div>
+  </div>
+
+  <div class="card flush">
+    <div class="hd"><h2>通知发送记录</h2><div class="sub">最近 50 条，包含被静默/冷却拦下的</div><div class="right"><button class="sm ghost" id="btnNotifyHist">刷新</button></div></div>
+    <div class="bd tight" id="notifyHist"><div class="empty">读取中…</div></div>
+  </div>
+
+  <div class="card flush">
+    <div class="hd"><h2>备份与回滚</h2><div class="sub">每次保存都会留一份，最多 20 份</div><div class="right"><button class="sm ghost" id="btnBackupRefresh">刷新</button></div></div>
+    <div class="bd tight" id="backupList"><div class="empty">读取中…</div></div>
+    <div class="bd tight" id="diffOut"></div>
+  </div>
+
+  <div class="card">
+    <div class="hd"><h2>导入 / 导出</h2><div class="sub">整份配置搬家；导出默认不含 token 与密码</div></div>
+    <div class="bd">
+      <div class="row">
+        <button class="sm" id="btnExport">导出（脱敏）</button>
+        <button class="sm ghost" id="btnExportFull">导出（含 token）</button>
+        <button class="sm ghost" id="btnImport">导入 JSON</button>
+        <input type="file" id="fileImport" class="hidden" accept="application/json,.json" />
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="hd"><h2>关于</h2></div>
+    <div class="bd stack">
+      <div class="row"><span class="tag" id="verTag">版本 —</span><a class="sm" href="/healthz" target="_blank" rel="noreferrer">/healthz</a><a class="sm" href="/metrics" target="_blank" rel="noreferrer">/metrics</a><a class="sm" href="/badge.svg" target="_blank" rel="noreferrer">徽章</a></div>
+      <div id="sysInfo" class="tbl-wrap"><div class="empty">读取中…</div></div>
+      <div class="row"><button class="sm ghost" id="btnSysRefresh">刷新系统信息</button></div>
+      <div class="hint">面板要走 HTTPS 就挂证书并设置 <span class="mono">PANEL_TLS_CERT</span> / <span class="mono">PANEL_TLS_KEY</span> 重启容器；证书生成命令见 README §10。</div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,42 @@
+<div class="topbar">
+  <div class="t"><h1>隧道出口</h1><div class="sub">每条出口 = 一个独立的 cloudflared 进程，可以同时运行多条</div></div>
+  <div class="tools">
+    <button class="sm ghost" id="btnStartAll">全部启动</button>
+    <button class="sm ghost" id="btnStopAll">全部停止</button>
+    <button class="sm primary" id="btnAdd">＋ 新建出口</button>
+  </div>
+</div>
+
+<div class="content stack">
+  <div class="hint">
+    出口只负责把公网流量送进本机 Caddy（<span class="mono" id="caddyListenHint">:8080</span>）；
+    哪个域名 / 路径去哪个服务，由「<a href="/rules">代理规则</a>」决定。
+    快速隧道重启会换新域名，命名隧道域名固定。
+  </div>
+
+  <div id="tunnelList" class="stack"></div>
+
+  <div class="card" id="newCard">
+    <div class="hd"><h2>新建出口</h2><div class="sub">快速隧道零配置；命名隧道要先在 Cloudflare 建隧道拿 token</div></div>
+    <div class="bd stack">
+      <div class="form-grid">
+        <div class="field"><label>名字</label><input id="newName" placeholder="例如：家里 NAS" /></div>
+        <div class="field"><label>模式</label>
+          <select id="newMode">
+            <option value="quick">快速隧道（临时域名）</option>
+            <option value="named">命名隧道（自己的域名）</option>
+          </select>
+        </div>
+        <div class="field"><label>上游地址</label><input id="newOrigin" placeholder="http://127.0.0.1:8080" /></div>
+      </div>
+      <div class="form-grid hidden" id="newNamedBox">
+        <div class="field"><label>Tunnel Token</label><input id="newToken" type="password" placeholder="eyJhIjoi..." autocomplete="off" /></div>
+        <div class="field"><label>公网域名</label><input id="newHost" placeholder="dsh.example.com" /></div>
+      </div>
+      <div class="row">
+        <button class="primary" id="btnCreate">创建并启动</button>
+        <span class="muted" id="newMsg"></span>
+      </div>
+    </div>
+  </div>
+</div>
