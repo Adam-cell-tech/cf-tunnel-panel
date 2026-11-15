@@ -371,6 +371,17 @@ Everything the panel does is a plain JSON endpoint, so you can script it.
 
 Configuration is stored in `data/state.json` (mode `0600`, 20 rolling backups in `data/backups/`).
 
+Each format has a completely different URL shape. A wrong URL does not error out at send time — it is **silently dropped**, so the panel validates on save:
+
+| Format | What the URL looks like | Secret (signing) |
+| --- | --- | --- |
+| Generic JSON | any `http(s)://` endpoint receiving `{title,text,event,ts,host}` | not needed |
+| DingTalk bot | `https://oapi.dingtalk.com/robot/send?access_token=…` | only when "signing" is enabled (`SEC…`), appended as `timestamp`/`sign` in the query |
+| Feishu bot | `https://open.feishu.cn/open-apis/bot/v2/hook/…` | only with "signature verification", sent as `timestamp`/`sign` in the body |
+| Bark (iOS) | `https://api.day.app/your-key` (self-hosted: your own domain) | not needed; panel appends `/title/body` |
+
+A DingTalk bot that only uses a keyword needs no secret — just make sure the keyword appears in the message. Panel titles contain "掉线" / "失败" / "换了 IP" (down / failed / IP changed), so pick one of those.
+
 ### 10.3 Login sessions (more controllable than Basic)
 
 | Method | Use case | Revocable |

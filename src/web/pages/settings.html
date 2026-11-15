@@ -43,7 +43,7 @@
     <div class="hd"><h2>掉线通知</h2><div class="sub">出口掉线 / 换域名 / Caddy 下发失败时推一条</div></div>
     <div class="bd stack">
       <div class="form-grid">
-        <div class="field"><label>Webhook 地址</label><input id="notifyUrl" placeholder="https://…" /></div>
+        <div class="field"><label id="notifyUrlLabel">Webhook 地址</label><input id="notifyUrl" placeholder="https://…" /></div>
         <div class="field"><label>格式</label>
           <select id="notifyFormat">
             <option value="generic">通用 JSON</option>
@@ -53,6 +53,12 @@
           </select>
         </div>
       </div>
+      <div class="form-grid hidden" id="notifySecretWrap">
+        <div class="field"><label id="notifySecretLabel">加签密钥（可选）</label><input id="notifySecret" type="password" placeholder="SEC 开头的密钥，留空不改" />
+          <div class="sub" id="notifySecretHint">机器人安全设置里勾了「加签」才需要；只勾「自定义关键词」就留空</div></div>
+        <div class="field"><label>操作</label><button class="sm ghost" id="btnSecretClear">清空已存密钥</button></div>
+      </div>
+      <div class="hint" id="notifyHint"></div>
       <div class="form-grid">
         <div class="field"><label>相同事件冷却（秒）</label><input id="notifyCool" type="number" min="0" max="86400" step="30" placeholder="300" />
           <div class="sub">比如出口掉线后 5 分钟内只提醒一次，避免反复刷屏；0 = 不冷却</div></div>

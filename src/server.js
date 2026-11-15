@@ -380,15 +380,32 @@ async function handler(req, res) {
         if (quiet && !/^\d{1,2}:\d{2}-\d{1,2}:\d{2}(,\s*\d{1,2}:\d{2}-\d{1,2}:\d{2})*$/.test(quiet)) {
           throw new Error('静默时段格式应为 23:00-07:00（多段用逗号分隔）');
         }
-        const cool = n.cooldownSec === undefined ? (state.settings.notify.cooldownSec || 0) : n.cooldownSec;
+        const prevN = state.settings.notify || {};
+        const cool = n.cooldownSec === undefined ? (prevN.cooldownSec || 0) : n.cooldownSec;
+        const fmt = ['generic', 'dingtalk', 'feishu', 'bark'].includes(n.format) ? n.format
+          : (['generic', 'dingtalk', 'feishu', 'bark'].includes(prevN.format) ? prevN.format : 'generic');
+        // 每种格式的地址长得完全不一样，填错了只会「静默不送达」，所以在保存时就挡住
+        const shape = {
+          dingtalk: [/^https:\/\/oapi\.dingtalk\.com\/robot\/send/i, '钉钉机器人地址形如 https://oapi.dingtalk.com/robot/send?access_token=…（在群设置 → 机器人 → 自定义 → Webhook 里复制）'],
+          feishu: [/^https:\/\/(open\.feishu\.cn|open\.larksuite\.com)\/open-apis\/bot\/v2\/hook\//i, '飞书机器人地址形如 https://open.feishu.cn/open-apis/bot/v2/hook/xxxx（群设置 → 群机器人 → 添加 → 自定义机器人）'],
+          bark: [/^https?:\/\/[^/]+\/./i, 'Bark 地址形如 https://api.day.app/你的Key（自建服务器就填你的域名/Key）'],
+        }[fmt];
+        if (url && shape && !shape[0].test(url)) throw new Error(`通知地址和「${fmt}」格式不匹配：${shape[1]}`);
+        // 加签密钥：空 = 保留旧值；要清空传 clearSecret: true
+        const secretGiven = String(n.secret || '').trim();
+        const secret = n.clearSecret === true ? '' : (secretGiven || state.settings.notify.secret || '');
         state.settings.notify = {
           url,
-          format: ['generic', 'dingtalk', 'feishu', 'bark'].includes(n.format) ? n.format : 'generic',
-          events: {
-            tunnelDown: n.events ? n.events.tunnelDown !== false : true,
-            urlChange: n.events ? n.events.urlChange !== false : true,
-            caddyFail: n.events ? n.events.caddyFail !== false : true,
-          },
+          format: fmt,
+          secret,
+          events: n.events && typeof n.events === 'object'
+            ? {
+              tunnelDown: n.events.tunnelDown !== false,
+              urlChange: n.events.urlChange !== false,
+              caddyFail: n.events.caddyFail !== false,
+              sessionIp: n.events.sessionIp !== false,
+            }
+            : (prevN.events || { tunnelDown: true, urlChange: true, caddyFail: true, sessionIp: true }),
           cooldownSec: Math.max(0, Math.min(86400, Number(cool) || 0)),
           quietHours: quiet,
         };
@@ -541,6 +558,9 @@ async function handler(req, res) {
       });
       if (merged.settings && merged.settings.cf && !merged.settings.cf.token && state.settings.cf.token) {
         merged.settings.cf.token = state.settings.cf.token;
+      }
+      if (merged.settings && merged.settings.notify && !merged.settings.notify.secret && state.settings.notify.secret) {
+        merged.settings.notify.secret = state.settings.notify.secret;
       }
       if (merged.settings && merged.settings.notify && !merged.settings.notify.url && state.settings.notify.url) {
         merged.settings.notify.url = state.settings.notify.url;

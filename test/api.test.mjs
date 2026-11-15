@@ -369,6 +369,24 @@ const all = await fetch(B + '/api/sessions/revoke-all', { method: 'POST', header
 const allD = await all.json().catch(() => ({}));
 ok('退出全部设备：返回踢掉数量并清 cookie', all.status === 200 && allD.ok === true && allD.revoked >= 1 && /Max-Age=0/.test(String(all.headers.get('set-cookie') || '')), `revoked=${allD.revoked}`);
 
+// ---- 通知格式与加签 ----
+{
+  const nail = async (body) => (await fetch(B + '/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
+  const r1 = await nail({ notify: { url: 'https://example.com/hook', format: 'dingtalk' } });
+  const d1 = await r1.json().catch(() => ({}));
+  ok('钉钉格式填普通地址被拒', r1.status === 400 && /钉钉/.test(d1.error || ''), d1.error || '');
+  const r2 = await nail({ notify: { url: 'https://api.day.app/k', format: 'feishu' } });
+  const d2 = await r2.json().catch(() => ({}));
+  ok('飞书格式填 Bark 地址被拒', r2.status === 400 && /飞书/.test(d2.error || ''), d2.error || '');
+  const r3 = await nail({ notify: { url: 'https://oapi.dingtalk.com/robot/send?access_token=abc', format: 'dingtalk', secret: 'SECx' } });
+  const d3 = await r3.json().catch(() => ({}));
+  ok('钉钉地址+加签密钥可保存', r3.status === 200 && !!(d3.settings && d3.settings.notify.hasSecret), String(r3.status));
+  const r4 = await nail({ notify: { clearSecret: true } });
+  const d4 = await r4.json().catch(() => ({}));
+  ok('清空密钥不影响格式与冷却', r4.status === 200 && d4.settings.notify.format === 'dingtalk' && d4.settings.notify.cooldownSec === 300 && d4.settings.notify.hasSecret === false, JSON.stringify(d4.settings.notify));
+  await nail({ notify: { clearUrl: true, format: 'generic' } });
+}
+
 // 清理临时探针规则
 try {
   const cur = (await j('/api/state')).d.state.routes || [];

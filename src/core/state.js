@@ -28,7 +28,8 @@ function defaultState() {
       // 通知：出口掉线 / 换域名 / Caddy 下发失败时推一条
       notify: {
         url: '', format: 'generic',
-        events: { tunnelDown: true, urlChange: true, caddyFail: true },
+        secret: '',       // 钉钉/飞书「加签」密钥（可选），只在 URL 里有 sign 校验时才需要
+        events: { tunnelDown: true, urlChange: true, caddyFail: true, sessionIp: true },
         cooldownSec: 300,  // 同一事件多少秒内不重复提醒（0 = 不冷却）
         quietHours: '',    // 静默时段，如 "23:00-07:00"，可逗号分隔多段
       },
@@ -250,6 +251,7 @@ function publicSettings() {
     format: s.notify.format,
     events: s.notify.events,
     hasUrl: !!s.notify.url,
+    hasSecret: !!s.notify.secret,
     cooldownSec: s.notify.cooldownSec || 0,
     quietHours: s.notify.quietHours || '',
   };

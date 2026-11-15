@@ -1146,6 +1146,17 @@ scrape_configs:
 ![tunnel](https://your-host:8090/badge.svg)
 ```
 
+每种格式的地址长得完全不一样，填错了不会报错、只会**静默不送达**，所以面板在保存时按格式校验：
+
+| 格式 | 地址长什么样 | 密钥（加签） |
+| --- | --- | --- |
+| 通用 JSON | 任意 `http(s)://` 地址，收到 `{title,text,event,ts,host}` | 不需要 |
+| 钉钉机器人 | `https://oapi.dingtalk.com/robot/send?access_token=…` | 安全设置勾了「加签」才填（`SEC` 开头），签进 URL 的 `timestamp`/`sign` |
+| 飞书机器人 | `https://open.feishu.cn/open-apis/bot/v2/hook/…` | 开了「签名校验」才填，签在 body 的 `timestamp`/`sign` |
+| Bark（iOS） | `https://api.day.app/你的Key`（自建填自己域名） | 不需要，面板自动拼 `/标题/正文` |
+
+只勾「自定义关键词」的钉钉机器人不需要密钥，但要保证关键词出现在消息里 —— 面板的标题带「掉线」「失败」「换了 IP」，把关键词设成其中任一个即可。
+
 ### 10.3 登录会话（比 Basic 更可控）
 
 面板支持两种登录：

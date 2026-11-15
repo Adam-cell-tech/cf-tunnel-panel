@@ -192,6 +192,12 @@ const EN = {
 
 // 页面正文（说明文案、提示、卡片副标题）—— 逐条人工翻译，不机翻
 const EN_PAGES = {
+  '加签密钥（可选）': 'Signing secret (optional)',
+  '机器人安全设置里勾了「加签」才需要；只勾「自定义关键词」就留空': 'Only needed when the bot has signing enabled; leave empty if you use a keyword instead',
+  '操作': 'Action',
+  '清空已存密钥': 'Clear stored secret',
+  '当前是只读账号，不能修改任何配置': 'Read-only account: changes are not allowed',
+
   "谁在访问、哪条规则在接、面板日志实时流": "Who is visiting, which rule caught it, live panel log",
   "自动刷新": "Auto refresh",
   "访问统计": "Access log",

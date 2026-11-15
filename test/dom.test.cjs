@@ -254,6 +254,9 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     const { doc, win, errors } = await open('/settings', 1400);
     chk('设置: 有登录会话表', !!doc.querySelector('#sessTable'), '');
     chk('设置: 有踢掉其它设备按钮', !!doc.querySelector('#btnSessKickOthers'), '');
+    chk('设置: 通知有格式专属提示区', !!doc.querySelector('#notifyHint'), '');
+    chk('设置: 有加签密钥字段（切换格式显示）', !!doc.querySelector('#notifySecretWrap') && !!doc.querySelector('#notifySecret'), '');
+    chk('设置: 有清空密钥按钮', !!doc.querySelector('#btnSecretClear'), '');
     chk('设置: 有退出全部设备按钮', !!doc.querySelector('#btnSessRevokeAll'), '');
     chk('设置: 通知里有「会话换 IP」开关', !!doc.querySelector('#evSessionIp'), '');
 

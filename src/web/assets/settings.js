@@ -113,6 +113,35 @@ async function loadSystem() {
   }
 }
 
+const NOTIFY_FMT = {
+  generic: {
+    label: 'Webhook 地址', ph: 'https://example.com/hook', secret: false,
+    hint: '会 POST 一个 JSON：{title, text, event, ts, host}。任何能收 JSON 的服务都行（自建接收端、n8n、Node-RED…）。',
+  },
+  dingtalk: {
+    label: '钉钉机器人 Webhook', ph: 'https://oapi.dingtalk.com/robot/send?access_token=…', secret: true,
+    hint: '群 → 群设置 → 智能群助手 → 添加机器人 → 自定义。安全设置勾了「加签」就把 SEC 开头的密钥填到上面；只勾「自定义关键词」则留空密钥，但要保证关键词出现在「面板」「掉线」「失败」里任一个（消息标题会带上）。',
+  },
+  feishu: {
+    label: '飞书机器人 Webhook', ph: 'https://open.feishu.cn/open-apis/bot/v2/hook/…', secret: true,
+    hint: '群 → 设置 → 群机器人 → 添加 → 自定义机器人。开了「签名校验」就把密钥填到上面。',
+  },
+  bark: {
+    label: 'Bark 推送地址', ph: 'https://api.day.app/你的Key', secret: false,
+    hint: '在 Bark App 里复制推送地址，末尾不要带斜杠；面板会自动拼成 /标题/正文。自建服务器就填你的域名/Key。',
+  },
+};
+
+function applyNotifyFmt() {
+  const f = NOTIFY_FMT[$('#notifyFormat').value] || NOTIFY_FMT.generic;
+  $('#notifyUrlLabel').textContent = f.label;
+  const u = $('#notifyUrl');
+  u.placeholder = S && S.settings.notify.hasUrl ? '已配置（留空不改）' : f.ph;
+  $('#notifyHint').textContent = f.hint;
+  $('#notifySecretWrap').classList.toggle('hidden', !f.secret);
+  $('#notifySecret').placeholder = S && S.settings.notify.hasSecret ? '已配置（留空不改）' : (f.secret ? 'SEC 开头的密钥，留空不改' : '');
+}
+
 function fill() {
   const s = ST.state.settings || {};
   $('#panelTitle').value = s.panelTitle || '';
@@ -140,6 +169,7 @@ function fill() {
   $('#notifyQuiet').value = n.quietHours || '';
   $('#panelUser').value = (ST.state.panel && ST.state.panel.user) || '';
   $('#verTag').textContent = '版本 ' + (ST.version || '—');
+  applyNotifyFmt();
 }
 
 async function save() {
@@ -155,6 +185,7 @@ async function save() {
     notify: {
       url: $('#notifyUrl').value.trim(),
       format: $('#notifyFormat').value,
+      secret: $('#notifySecret').value.trim(),
       events: { tunnelDown: $('#evDown').checked, urlChange: $('#evUrl').checked, caddyFail: $('#evCaddy').checked, sessionIp: $('#evSessionIp') ? $('#evSessionIp').checked : true },
       cooldownSec: Number($('#notifyCool').value) || 0,
       quietHours: $('#notifyQuiet').value.trim(),
@@ -243,6 +274,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  $('#notifyFormat').addEventListener('change', applyNotifyFmt);
+  $('#btnSecretClear').addEventListener('click', async () => {
+    try {
+      await api('/api/settings', { method: 'POST', body: { notify: { clearSecret: true } } });
+      toast('已清空加签密钥', 'ok');
+      await loadState(true); fill();
+    } catch (e) { toast(e.message, 'err'); }
+  });
   $('#btnNotifyClear').addEventListener('click', async () => {
     if (!confirm('清空通知 Webhook 地址？')) return;
     try {

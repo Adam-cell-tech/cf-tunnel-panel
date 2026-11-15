@@ -35,6 +35,11 @@ function recordNotify(event, title, status, extra = '') {
   if (notifyHistory.length > 50) notifyHistory.splice(0, notifyHistory.length - 50);
 }
 
+/** 钉钉 / 飞书的「加签」：base64(hmac_sha256(secret, `${ts}\n${secret}`)) */
+function signWith(secret, ts) {
+  return crypto.createHmac('sha256', String(secret)).update(`${ts}\n${secret}`).digest('base64');
+}
+
 async function notify(event, title, text, opts = {}) {
   const n = state.settings.notify || {};
   if (!n.url) return false;
@@ -60,8 +65,23 @@ async function notify(event, title, text, opts = {}) {
     let url = String(n.url).trim();
     let body = JSON.stringify({ title, text: line, event, ts: new Date().toISOString(), host: os.hostname() });
     const headers = { 'Content-Type': 'application/json' };
-    if (n.format === 'dingtalk') body = JSON.stringify({ msgtype: 'text', text: { content: line } });
-    else if (n.format === 'feishu') body = JSON.stringify({ msg_type: 'text', content: { text: line } });
+    if (n.format === 'dingtalk') {
+      // 钉钉加签走 query：&timestamp=<ms>&sign=<base64>
+      if (n.secret) {
+        const ts = Date.now();
+        url += (url.includes('?') ? '&' : '?') + `timestamp=${ts}&sign=${encodeURIComponent(signWith(n.secret, ts))}`;
+      }
+      body = JSON.stringify({ msgtype: 'text', text: { content: line } });
+    } else if (n.format === 'feishu') {
+      // 飞书加签走 body：timestamp（秒）+ sign
+      const payload = { msg_type: 'text', content: { text: line } };
+      if (n.secret) {
+        const ts = Math.floor(Date.now() / 1000);
+        payload.timestamp = String(ts);
+        payload.sign = signWith(n.secret, ts);
+      }
+      body = JSON.stringify(payload);
+    }
     else if (n.format === 'bark') { url = url.replace(/\/+$/, '') + '/' + encodeURIComponent(title) + '/' + encodeURIComponent(text); body = '{}'; }
     const r = await fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(8000) });
     log(`通知已发送（${event}）HTTP ${r.status}`, 'panel');
