@@ -140,6 +140,12 @@
           <button class="sm ghost" id="btnTotpDisable">关闭二次验证</button>
           <span class="muted" id="totpDisableMsg"></span>
         </div>
+        <div class="row" style="margin-top:8px;align-items:center">
+          <input id="totpRecoveryCode" inputmode="numeric" placeholder="当前验证码或旧恢复码" style="max-width:220px" />
+          <button class="sm ghost" id="btnTotpRecovery">重新生成恢复码</button>
+          <span class="muted" id="totpRecoveryMsg"></span>
+        </div>
+        <pre class="out hidden" id="totpRecoveryNew"></pre>
       </div>
     </div>
   </div>

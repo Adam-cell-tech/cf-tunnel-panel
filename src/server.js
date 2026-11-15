@@ -620,6 +620,23 @@ async function handler(req, res) {
     return sendJson(res, 200, { ok: true, enabled: false });
   }
 
+  if (p === '/api/totp/recovery' && req.method === 'POST') {
+    const body = await readBody(req);
+    const conf = state.totp || {};
+    if (!conf.enabled || !conf.secret) return sendJson(res, 400, { ok: false, error: '二次验证还没开启' });
+    const code = String(body.code || '').trim();
+    let pass = false;
+    if (/^\d{6}$/.test(code)) pass = totp.verify(conf.secret, code) !== null;
+    if (!pass && code) pass = ((conf.recovery || []).indexOf(totp.hashRecovery(code)) >= 0);
+    if (!pass) return sendJson(res, 400, { ok: false, error: '要重新生成恢复码，得先输入当前验证码或一个旧恢复码' });
+    const pack = totp.newRecovery(10);
+    state.totp.recovery = pack.hashed;
+    saveState('totp-recovery');
+    auditRecord({ actor: auth.who, ip: clientIpOf(req), method: 'POST', path: p, status: 200, action: '重新生成恢复码', target: '10 个' });
+    log('已重新生成 10 个恢复码，旧的全部作废', 'panel');
+    return sendJson(res, 200, { ok: true, recovery: pack.plain });
+  }
+
   if (p === '/api/panel-auth' && req.method === 'POST') {
     const body = await readBody(req);
     const pUser = String(body.user || '').trim();

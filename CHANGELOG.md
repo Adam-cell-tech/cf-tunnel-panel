@@ -12,6 +12,20 @@
 - `package.json` 增加 `engines.node >= 20`。
 - 测试：API 113、DOM 75。
 
+## v0.13.1 — 2026-11-16
+
+### 新增
+- `POST /api/totp/recovery`：用「当前验证码或一个旧恢复码」换一批新的 10 个恢复码，旧的全部作废（只存 sha256）；设置页「二次验证」卡新增输入框 + 「重新生成恢复码」按钮，新码只在页面显示一次。
+- 端到端测试（真 Caddy）从 8 项扩到 **23 项**：strip 前缀、不 strip 原样透传、基础认证三种情况、按 Host 域名隔离（含未登记域名 404）、WebSocket 101 升级、未命中 404、维护模式 503 + `Retry-After` + 关闭恢复、IP 黑名单 403 + 清空恢复、admin 不监听 2019、配置含 access log writer 与 `trusted_proxies`、规则表与设置还原。
+
+### 变更
+- 审计日志去重：同一次请求若已被 handler 显式记账（人话 action），收尾兜底那条「POST /api/xxx」不再重复写，列表里不再成对出现。
+- e2e 探针路径改成互不嵌套的前缀（`/e2strip`、`/e2keep`、`/e2auth`、`/e2host`、`/e2ws`）——Caddy 是前缀匹配，`/e2e` 会吃掉 `/e2ek`，之前这类失败是测试写法问题而非实现问题。
+- 域名隔离断言改用原始 socket 手写请求（`fetch`/undici 不允许覆盖 `Host` 头），并补 `Transfer-Encoding: chunked` 解码。
+
+### 修复
+- `/api/totp/recovery` 首次实现误用 `newRecovery()` 返回值（它返回 `{plain, hashed}` 而不是数组）→ 500。
+
 ## v0.13.0
 
 ### 新增

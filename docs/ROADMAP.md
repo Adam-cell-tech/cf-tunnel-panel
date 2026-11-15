@@ -5,6 +5,15 @@
 
 ---
 
+## ✅ v0.13.1 — 恢复码轮换 + 端到端测试补齐
+
+| 项 | 实现要点 |
+| --- | --- |
+| 恢复码重新生成 | `POST /api/totp/recovery`（验证码或旧恢复码换 10 个新码，只存哈希）；设置页按钮 + 一次性展示 |
+| E2E 23 项 | strip / keep / basicAuth(401,401,200) / Host 隔离（含未登记 404）/ WS 101 / 404 / 维护 503+Retry-After / IP 黑名单 403 / admin 20190 / access log / trusted_proxies / 还原校验 |
+| 审计去重 | 兜底记录遇到同请求的人话记录（1 秒内同 method+path+status）即丢弃 |
+| 测试修复 | 探针前缀改成不嵌套；Host 断言用原始 socket（fetch 不能改 Host）；补 chunked 解码 |
+
 ## ✅ v0.13.0 — 二次验证 + 角色细分 + 真 Caddy 的 CI
 
 | 方向 | 实现要点 | 实测 |

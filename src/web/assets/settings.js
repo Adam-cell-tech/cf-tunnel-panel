@@ -425,6 +425,22 @@ $('#btnTotpEnable').addEventListener('click', async () => {
   } catch (e) { $('#totpSetupMsg').textContent = e.message; }
 });
 
+$('#btnTotpRecovery').addEventListener('click', async () => {
+  const code = ($('#totpRecoveryCode').value || '').trim();
+  if (!code) { $('#totpRecoveryMsg').textContent = '要先输入当前验证码或一个旧恢复码'; return; }
+  $('#totpRecoveryMsg').textContent = '生成中…';
+  try {
+    const r = await api('/api/totp/recovery', { method: 'POST', body: { code } });
+    const box = $('#totpRecoveryNew');
+    box.textContent = '新的恢复码（只显示这一次，请立刻抄下来）：\n\n' + (r.recovery || []).join('\n');
+    box.classList.remove('hidden');
+    $('#totpRecoveryCode').value = '';
+    $('#totpRecoveryMsg').textContent = '已重新生成，旧恢复码全部作废';
+    $('.hidden', '#totpRecoveryBox') && $('#totpRecoveryBox').classList.remove('hidden');
+    $('#totpRecovery').textContent = (r.recovery || []).join('  ');
+  } catch (e) { $('#totpRecoveryMsg').textContent = e.message; }
+});
+
 $('#btnTotpDisable').addEventListener('click', async () => {
   const code = ($('#totpDisableCode').value || '').trim();
   if (!code) { $('#totpDisableMsg').textContent = '要先输入一个验证码或恢复码'; return; }

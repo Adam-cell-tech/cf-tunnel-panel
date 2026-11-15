@@ -572,3 +572,11 @@ The script snapshots the route table to `/tmp` before touching it and restores f
 
 > It exposes your services to the internet. Read [§9 Security](#9-security) before publishing anything
 > that has a login behind it.
+
+### v0.13.1 highlights
+
+| Change | Detail |
+| --- | --- |
+| Recovery-code rotation | `POST /api/totp/recovery` takes a current TOTP code **or** one old recovery code and returns 10 fresh ones; the old set is voided. Settings → 2FA has the new "重新生成恢复码" button. Only hashes are stored. |
+| E2E coverage 8 → 23 | The real-Caddy suite now proves prefix stripping, prefix passthrough, basic auth (401/401/200), Host-based routing isolation, WebSocket 101 upgrade, maintenance 503 + `Retry-After`, IP blacklist 403, admin off 2019, access-log writer and `trusted_proxies` — and restores routes/settings in `finally`. |
+| Audit de-duplication | A request whose handler already logged a human-readable action no longer also emits the generic `POST /api/...` row. |

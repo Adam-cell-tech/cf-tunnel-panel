@@ -72,6 +72,14 @@ function record(entry = {}) {
     target: String(entry.target || '').slice(0, 200),
     ok: entry.ok !== false,
   };
+  // 同一次请求可能被「显式记账」和「收尾兜底」各记一条：兜底那条的 action 是「POST /api/xxx」形式，
+  // 若前一条同 method+path+status 且间隔 <1s、action 是人话，就丢弃这条兜底记录，避免审计里成对出现。
+  const generic = /^(?:GET|POST|PUT|PATCH|DELETE) \/api\//.test(rec.action);
+  const prev = buffer[buffer.length - 1];
+  if (generic && prev && prev.method === rec.method && prev.path === rec.path && prev.status === rec.status
+      && Math.abs(rec.at - prev.at) < 1000 && !/^(?:GET|POST|PUT|PATCH|DELETE) \/api\//.test(prev.action)) {
+    return prev;
+  }
   buffer.push(rec);
   if (buffer.length > AUDIT_MAX) buffer.splice(0, buffer.length - AUDIT_MAX);
   try {

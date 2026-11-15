@@ -446,6 +446,19 @@ ok('退出全部设备：返回踢掉数量并清 cookie', all.status === 200 &&
   ok('TOTP：恢复码可登录且一次性', l4.status === 200 && l4d.usedRecovery === true, JSON.stringify(l4d).slice(0, 80));
   const st2 = await j('/api/state');
   ok('TOTP：恢复码用掉后余量 -1', st2.d.state.settings.totp.recoveryLeft === 9, String(st2.d.state.settings.totp.recoveryLeft));
+  // 恢复码重新生成：错口令拒绝、对的可换一批
+  const rw = await j('/api/totp/recovery', { method: 'POST', body: { code: '000000' } });
+  ok('TOTP：错码不能重生成恢复码', rw.status === 400, String(rw.status));
+  const rg = await j('/api/totp/recovery', { method: 'POST', body: { code: code() } });
+  const newCodes = (rg.d && rg.d.recovery) || [];
+  ok('TOTP：可重生成 10 个恢复码', rg.status === 200 && newCodes.length === 10 && newCodes[0] !== recovery, String(rg.status));
+  const st2b = await j('/api/state');
+  ok('TOTP：重生成后余量回到 10', st2b.d.state.settings.totp.recoveryLeft === 10, String(st2b.d.state.settings.totp.recoveryLeft));
+  const l5 = await rawFetch(B + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: USER, pass: PASS }) });
+  const l5d = await l5.json();
+  const l6 = await rawFetch(B + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challenge: l5d.challenge, code: newCodes[0] }) });
+  ok('TOTP：新恢复码可登录', l6.status === 200, String(l6.status));
+
   const dis = await j('/api/totp/disable', { method: 'POST', body: { code: code() } });
   ok('TOTP：可关闭', dis.status === 200 && dis.d.ok === true, String(dis.status));
   const st3 = await j('/api/state');
@@ -474,6 +487,9 @@ ok('退出全部设备：返回踢掉数量并清 cookie', all.status === 200 &&
   const rd = await rawFetch(B + '/api/state', { headers: { Authorization: 'Basic ' + Buffer.from('admin:wrongpass').toString('base64') } });
   ok('operator：不影响管理员口令', rd.status === 401, String(rd.status));
   ok('operator：仍可登录（Basic 可用）', (await rawFetch(B + '/api/tunnels', { headers: { Authorization: OP } })).status === 200);
+  const au = await j('/api/audit?limit=20');
+  const opRows = ((au.d && au.d.rows) || []).filter((r) => /运维/.test(r.actor || ''));
+  ok('operator：审计里能认出「运维」身份', opRows.length > 0, JSON.stringify(opRows[0] || {}).slice(0, 90));
   const off = await j('/api/operator', { method: 'POST', body: { user: '', pass: '' } });
   ok('operator：可关闭', off.status === 200 && off.d.ok === true);
   const after = await rawFetch(B + '/api/state', { headers: { Authorization: OP } });
