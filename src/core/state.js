@@ -4,10 +4,10 @@
  * 从 src/server.js 按职责拆出（v0.9.0），仅做搬运，行为不变。
  */
 
-const http=require('http'); const https=require('https'); const crypto=require('crypto');
-const zlib=require('zlib'); const net=require('net'); const fs=require('fs');
-const path=require('path'); const os=require('os'); const { spawn }=require('child_process');
-const QRCode=require('qrcode'); const bcrypt=require('bcryptjs');
+const http=require('http');
+  const fs=require('fs');
+const path=require('path');
+ const bcrypt=require('bcryptjs');
 
 const { BACKUP_DIR, DATA_DIR, LOGLEVELS, PROTOCOLS, STATE_FILE } = require('./paths');
 const { log, parseCidrs, parseHeaderLines, parseUpstream, rid } = require('./util');
@@ -80,8 +80,6 @@ function defaultState() {
     viewer: { user: '', pass: '' },
   };
 }
-
-
 
 function deepDefault(target, def) {
   if (Array.isArray(def)) return Array.isArray(target) ? target : def;
@@ -257,7 +255,6 @@ function publicSettings() {
   };
   return s;
 }
-
 
 /**
  * 跨模块只读/可写代理：其他模块 require 后当作 `state` 直接用，

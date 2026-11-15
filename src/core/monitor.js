@@ -4,10 +4,7 @@
  * 从 src/server.js 按职责拆出（v0.9.0），仅做搬运，行为不变。
  */
 
-const http=require('http'); const https=require('https'); const crypto=require('crypto');
-const zlib=require('zlib'); const net=require('net'); const fs=require('fs');
-const path=require('path'); const os=require('os'); const { spawn }=require('child_process');
-const QRCode=require('qrcode'); const bcrypt=require('bcryptjs');
+ const os=require('os');
 
 const { log } = require('./util');
 const _state = require('./state');
@@ -16,9 +13,10 @@ const { saveState } = require('./state');
 const { publicUrlOf, tunnelRt } = require('./registry');
 const { caddy } = require('./caddy');
 const { pushCaddy } = require('./pusher');
-const { histTick, sampleHistory } = require('./insight');
+const { sampleHistory } = require('./insight');
 const { notify } = require('./notify');
 let seenCaddyOk = true;
+let histTick = 0; // 采样节拍：每 12 次（12×5s=60s）落一个点
 function startMonitor() {
   setInterval(() => {
     histTick += 1;

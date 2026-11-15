@@ -4,10 +4,9 @@
  * 从 src/server.js 按职责拆出（v0.9.0），仅做搬运，行为不变。
  */
 
-const http=require('http'); const https=require('https'); const crypto=require('crypto');
-const zlib=require('zlib'); const net=require('net'); const fs=require('fs');
-const path=require('path'); const os=require('os'); const { spawn }=require('child_process');
-const QRCode=require('qrcode'); const bcrypt=require('bcryptjs');
+const http=require('http');
+
+const path=require('path');
 
 const BENCH_MAX_MB = 32;
 
@@ -57,6 +56,5 @@ function benchLocalOnce(port) {
     req.end();
   });
 }
-
 
 module.exports = { BENCH_MAX_MB, benchLocalOnce, coloOf, sendBenchBlob };

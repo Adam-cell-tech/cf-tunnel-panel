@@ -4,10 +4,9 @@
  * 从 src/server.js 按职责拆出（v0.9.0），仅做搬运，行为不变。
  */
 
-const http=require('http'); const https=require('https'); const crypto=require('crypto');
-const zlib=require('zlib'); const net=require('net'); const fs=require('fs');
-const path=require('path'); const os=require('os'); const { spawn }=require('child_process');
-const QRCode=require('qrcode'); const bcrypt=require('bcryptjs');
+const http=require('http'); const https=require('https');
+ const net=require('net'); const fs=require('fs');
+const path=require('path'); const os=require('os');
 
 const { ACCESS_LOG_FILE, BACKUP_DIR, DATA_DIR, STATE_FILE, VERSION } = require('./paths');
 const _state = require('./state');
@@ -335,7 +334,6 @@ function diffRoutes(backupRoutes, currentRoutes) {
   }
   return { added, removed, changed };
 }
-
 
 // ---------------------------------------------------------------- 徽章 / metrics
 

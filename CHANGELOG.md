@@ -2,6 +2,16 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.11.2
+
+- **口令只存 bcrypt 哈希**：`state.json` 里 `panel.pass` / `viewer.pass` 改为 `$2b$10$…`；启动时自动把历史明文迁移成哈希（`migrate-secrets`）。
+- **Basic 凭据缓存**：bcrypt 每次校验在本机 ARM 上约 170ms，成功凭据缓存 10 分钟后同页面加载从 5.8s 回到 <1s；改口令即时清空缓存。
+- **代码指纹**：新增 `tools/codehash.js` + `src/core/ident.js`，`/healthz` 增加 `code` / `imageCode` / `sha` / `drift`；`Dockerfile` 构建时写 `.code-hash`，热替换代码会被识别成 `drift: true`。
+- **修 core 模块冗余 require**：清理 121 条复制残留（先前误删 `SEC_HEADERS` 导致页面 500，已用更稳的匹配规则重做）。
+- **修 v0.9.0 拆分埋下的真 bug**：`monitor.js` 对解构来的常量做 `histTick += 1`，每 5 秒抛 `Assignment to constant variable`，导致出口状态采样/掉线通知/历史采样自拆分起从未运行；改为模块内 `let histTick`。
+- `package.json` 增加 `engines.node >= 20`。
+- 测试：API 113、DOM 75。
+
 ## v0.11.1
 
 - 通知按格式校验地址（钉钉/飞书/Bark 填错当场 400，不再静默不送达）。

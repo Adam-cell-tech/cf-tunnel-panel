@@ -5,9 +5,8 @@
  */
 
 const http=require('http'); const https=require('https'); const crypto=require('crypto');
-const zlib=require('zlib'); const net=require('net'); const fs=require('fs');
-const path=require('path'); const os=require('os'); const { spawn }=require('child_process');
-const QRCode=require('qrcode'); const bcrypt=require('bcryptjs');
+ const net=require('net');
+const path=require('path');
 
 const _state = require('./state');
 const state = _state.stateProxy;

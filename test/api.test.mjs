@@ -29,6 +29,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const h = await j('/healthz');
 ok('healthz 200 且带 version', h.status === 200 && !!h.d.version, h.d.version);
+ok('healthz 带代码指纹', !!h.d.code && h.d.code.length === 16, String(h.d.code));
+ok('healthz 报告 drift 标记', typeof h.d.drift === 'boolean', String(h.d.drift));
 
 const st = await j('/api/state');
 const routes0 = st.d.state.routes.length;

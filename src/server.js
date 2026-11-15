@@ -41,10 +41,13 @@ const _registry = require('./core/registry');
 const { firstTunnel, publicUrlOf, runtimes, tunnelById, tunnelRt } = _registry;
 
 const _auth = require('./core/auth');
-const { AUTH_BLOCK_MS, AUTH_FAIL_LIMIT, AUTH_FAIL_WINDOW, authBlockedFor, authFails, authOk, checkAuth, clearAuthFail, clientIpOf, noteAuthFail, login } = _auth;
+const { clearBasicCache, AUTH_BLOCK_MS, AUTH_FAIL_LIMIT, AUTH_FAIL_WINDOW, authBlockedFor, authFails, authOk, checkAuth, clearAuthFail, clientIpOf, noteAuthFail, login } = _auth;
 
 const _session = require('./core/session');
 const session = _session;
+
+const secret = require('./core/secret');
+const ident = require('./core/ident');
 
 const _caddy = require('./core/caddy');
 const { buildCaddyConfig, buildMatch, buildRouteHandlers, caddy, cloudflareRanges, lastSkipped, maintPage, tunnelHostOf } = _caddy;
@@ -85,11 +88,18 @@ async function handler(req, res) {
 
   if (p === '/healthz') {
     const running = state.tunnels.filter((t) => tunnelRt(t.id).status === 'running').length;
+    let build = {};
+    try { build = ident.buildInfo(); } catch { build = {}; }
     return sendJson(res, 200, {
       ok: true,
       tunnels: { total: state.tunnels.length, running },
       tunnel: running > 0 ? 'running' : state.tunnels.length ? 'stopped' : 'none',
       version: VERSION,
+      // 代码指纹：drift=true 说明容器里是 docker cp 热替换的代码，跟镜像不一致
+      code: build.code || null,
+      imageCode: build.build || null,
+      sha: build.sha || null,
+      drift: !!build.drift,
     });
   }
   // 状态徽章：故意放在鉴权之前，方便 README / 监控页直接贴 <img src=".../badge.svg">
@@ -489,9 +499,14 @@ async function handler(req, res) {
 
   if (p === '/api/panel-auth' && req.method === 'POST') {
     const body = await readBody(req);
-    state.panel.user = String(body.user || '').trim();
-    state.panel.pass = String(body.pass || '');
+    const pUser = String(body.user || '').trim();
+    const pPass = String(body.pass || '');
+    if (pUser && pPass.length < 4) return sendJson(res, 400, { ok: false, error: '面板密码至少 4 位' });
+    state.panel.user = pUser;
+    // 口令只存 bcrypt 哈希：state.json、备份、导出里都不再出现明文
+    state.panel.pass = pPass ? secret.hash(pPass) : '';
     saveState('panel-auth');
+    clearBasicCache();
     // 改口令等于「我不相信现在所有还登着的设备」：全踢，让所有人重新登录。
     const kicked = state.panel.user ? session.revokeAll() : 0;
     if (kicked) {
@@ -653,10 +668,11 @@ async function handler(req, res) {
       if (user && pass && pass.length < 6) throw new Error('只读密码至少 6 位');
       if (!user) state.viewer = { user: '', pass: '' };
       else {
-        state.viewer = { user, pass: pass || (state.viewer && state.viewer.pass) || '' };
+        state.viewer = { user, pass: pass ? secret.hash(pass) : ((state.viewer && state.viewer.pass) || '') };
         if (!state.viewer.pass) throw new Error('只读账号还要给一个密码');
       }
       saveState('viewer');
+      clearBasicCache();
       const kickedViewer = session.revokeAll();
       if (kickedViewer) res.setHeader('Set-Cookie', session.clearCookieHeader());
       log(user ? `已设置只读账号 ${user}` : '已关闭只读账号', 'panel');
@@ -906,6 +922,26 @@ async function handler(req, res) {
 
 // ---------------------------------------------------------------- 启动
 loadState();
+
+/**
+ * 一次性把历史明文口令迁移成 bcrypt 哈希（v0.11.2 之前 state.json 里存的是明文）。
+ * 只在发现明文时改写一次，之后 state.json / 备份 / 导出里都只有 $2b$ 串。
+ */
+function migrateSecrets() {
+  let changed = false;
+  if (state.panel && state.panel.pass && !secret.isHash(state.panel.pass)) {
+    state.panel.pass = secret.hash(state.panel.pass);
+    changed = true;
+    log('面板口令已从明文迁移为 bcrypt 哈希', 'panel');
+  }
+  if (state.viewer && state.viewer.pass && !secret.isHash(state.viewer.pass)) {
+    state.viewer.pass = secret.hash(state.viewer.pass);
+    changed = true;
+    log('只读口令已从明文迁移为 bcrypt 哈希', 'panel');
+  }
+  if (changed) saveState('migrate-secrets');
+}
+migrateSecrets();
 const onReq = (req, res) => {
   const ip = (req.socket && req.socket.remoteAddress) || 'unknown';
   const t0 = Date.now();

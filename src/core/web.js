@@ -4,10 +4,9 @@
  * 从 src/server.js 按职责拆出（v0.9.0），仅做搬运，行为不变。
  */
 
-const http=require('http'); const https=require('https'); const crypto=require('crypto');
-const zlib=require('zlib'); const net=require('net'); const fs=require('fs');
-const path=require('path'); const os=require('os'); const { spawn }=require('child_process');
-const QRCode=require('qrcode'); const bcrypt=require('bcryptjs');
+  const crypto=require('crypto');
+const zlib=require('zlib');  const fs=require('fs');
+const path=require('path');
 
 const { PAGES, PAGE_DIR } = require('./paths');
 const i18n = require('./i18n');
@@ -140,7 +139,6 @@ function serveText(req, res, body, type, cache = 'no-cache') {
   res.writeHead(200, headers);
   return res.end(buf);
 }
-
 
 const uiHtml = () => fs.readFileSync(UI_FILE, 'utf8');
 

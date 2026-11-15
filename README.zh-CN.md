@@ -1180,6 +1180,28 @@ scrape_configs:
 
 「观测」页底部：谁、什么时候、从哪个 IP、改了什么。只记「改动作 + 失败的请求」，`/metrics`、`/badge.svg`、静态资源、日志流这些高频只读请求不记，避免把日志刷爆。写 `data/audit.log`（JSON Lines，超 2MB 只留最后 3000 行），接口 `GET /api/audit?limit=&q=`。
 
+### 10.6 口令只存哈希（bcrypt）
+
+`state.json` 里的 `panel.pass` / `viewer.pass` 都是 bcrypt 哈希（`$2b$10$…`），不再是明文 —— 备份、导出、
+`cat data/state.json` 都不会泄露口令。老版本留下的明文会在启动时自动迁移成哈希（`saveState('migrate-secrets')`），
+所以升级后你可能看到多出一个备份文件。
+
+每个 Basic 认证请求都要跑一次 bcrypt（本机 ARM 上 10 轮约 170ms），会把页面加载拖慢一个数量级，因此
+**验证成功的 Basic 凭据会在内存里缓存 10 分钟**；改口令时立刻清空。浏览器走的是会话 cookie，不受影响。
+
+### 10.7 容器里跑的是镜像里的代码吗？
+
+`/healthz` 现在直接回答这个问题：
+
+```bash
+curl -s localhost:8090/healthz | jq '{version, code, imageCode, drift}'
+```
+
+- `code`：磁盘上 `src/` 现算的指纹（SHA1 前 16 位）
+- `imageCode`：构建镜像时写进 `/app/.code-hash` 的指纹
+- `drift: true`：两者不一致 —— 容器里跑的是 `docker cp` 热替换进去的代码，不是镜像里的。开发时正常，
+  生产上危险：下次 `docker compose up -d` 会把你悄悄退回镜像里的版本。
+
 ## 11. 目录结构 / API
 
 ```

@@ -4,10 +4,9 @@
  * 从 src/server.js 按职责拆出（v0.9.0），仅做搬运，行为不变。
  */
 
-const http=require('http'); const https=require('https'); const crypto=require('crypto');
-const zlib=require('zlib'); const net=require('net'); const fs=require('fs');
-const path=require('path'); const os=require('os'); const { spawn }=require('child_process');
-const QRCode=require('qrcode'); const bcrypt=require('bcryptjs');
+const http=require('http'); const https=require('https');
+
+const path=require('path');
 
 function dockerApi(pathname) {
   return new Promise((resolve, reject) => {
@@ -94,7 +93,6 @@ async function cfApi(pathname, { method = 'GET', body } = {}) {
   }
   return j.result;
 }
-
 
 const _state = require('./state');
 const state = _state.stateProxy;

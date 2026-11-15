@@ -593,3 +593,15 @@ if (!active || !active.closest || !active.closest('#rules')) { fillForm(); rende
   - `ChrispyBacon-dev/DockFlare` —— Docker label 驱动，自动建隧道/DNS（需高权限 API Token）
   - `cocardoso/cloudflared-manager` —— 浏览器管理隧道 + DNS CNAME（需 API Token）
   - `WisdomSky/Cloudflared-web` —— 单一镜像 + 极简启停面板（无分流能力）
+
+## ✅ v0.11.2 — 口令哈希、清 require、代码指纹
+
+| 项 | 做法 | 结果 |
+| --- | --- | --- |
+| 口令明文 | `src/core/secret.js`（bcrypt）+ 启动迁移 `migrate-secrets` | `state.json` 里只剩 `$2b$10$…` |
+| Basic 认证变慢 | 成功凭据内存缓存 10 分钟，改口令即清空 | 页面加载 5.8s → <1s，`/api/state` 175ms → 10ms |
+| 模块冗余 require | 逐条按「绑定名是否被引用」清理（含 `...X` 展开的正确匹配） | 18 个模块共删 121 条 |
+| 镜像/运行代码漂移 | `tools/codehash.js` + `src/core/ident.js` + `/healthz` 的 `code/imageCode/drift` | 热替换会被识别为 `drift: true` |
+| 拆分遗留 bug | `monitor.js` 的 `histTick` 改为模块内 `let` | 出口采样/掉线通知/历史曲线恢复工作 |
+| Node 版本声明 | `package.json` 加 `engines.node >= 20` | — |
+

@@ -4,13 +4,13 @@
  * 从 src/server.js 按职责拆出（v0.9.0），仅做搬运，行为不变。
  */
 
-const http=require('http'); const https=require('https'); const crypto=require('crypto');
-const zlib=require('zlib'); const net=require('net'); const fs=require('fs');
-const path=require('path'); const os=require('os'); const { spawn }=require('child_process');
-const QRCode=require('qrcode'); const bcrypt=require('bcryptjs');
+const path=require('path');
+ const bcrypt=require('bcryptjs');
 
 const { log } = require('./util');
 const session = require('./session');
+const secret = require('./secret');
+const crypto = require('crypto');
 const audit = require('./audit');
 const { notify } = require('./notify');
 const _state = require('./state');
@@ -46,8 +46,8 @@ function checkAuth(req) {
   const h = req.headers.authorization || '';
   if (!h.startsWith('Basic ')) return { ok: false, tried: false, readonly: false, who: '(未登录)', via: 'none' };
   const [u, p] = Buffer.from(h.slice(6), 'base64').toString('utf8').split(':');
-  if (u === user && p === pass) return { ok: true, tried: true, readonly: false, who: u, via: 'basic' };
-  if (viewer.user && u === viewer.user && p === viewer.pass) return { ok: true, tried: true, readonly: true, who: `${u}（只读）`, via: 'basic' };
+  if (u === user && verifyBasicCached(u, p, pass)) return { ok: true, tried: true, readonly: false, who: u, via: 'basic' };
+  if (viewer.user && u === viewer.user && verifyBasicCached(u, p, viewer.pass)) return { ok: true, tried: true, readonly: true, who: `${u}（只读）`, via: 'basic' };
   return { ok: false, tried: true, readonly: false, who: `${u || '(空)'}（口令错误）`, via: 'basic' };
 }
 
@@ -57,9 +57,39 @@ function login({ user, pass, ip = '', ua = '' }) {
   const viewer = state.viewer || {};
   const u = String(user || '');
   const p = String(pass || '');
-  if (admin.user && u === admin.user && p === admin.pass) return session.create({ user: u, role: 'admin', ip, ua });
-  if (viewer.user && u === viewer.user && p === viewer.pass) return session.create({ user: u, role: 'viewer', ip, ua });
+  if (admin.user && u === admin.user && secret.verify(admin.pass, p)) return session.create({ user: u, role: 'admin', ip, ua });
+  if (viewer.user && u === viewer.user && secret.verify(viewer.pass, p)) return session.create({ user: u, role: 'viewer', ip, ua });
   return null;
+}
+
+
+// Basic 认证每次请求都要跑一次 bcrypt（本机 aarch64 上 10 轮约 170ms），
+// 会把页面加载拖慢一个数量级。这里缓存「已验证通过的 (用户,口令,哈希)」10 分钟：
+// 只对成功结果缓存（错口令照常走 bcrypt + 失败计数），改口令时整表清空。
+const basicPassCache = new Map(); // key -> expiresAt
+const BASIC_CACHE_MS = 10 * 60 * 1000;
+
+function basicCacheKey(u, p, stored) {
+  return crypto.createHash('sha256').update(`${u}\u0000${p}\u0000${stored}`).digest('hex');
+}
+
+/** 校验 Basic 口令：先查缓存，未命中才跑 bcrypt 并把成功结果记下来。 */
+function verifyBasicCached(u, p, stored) {
+  if (!stored) return false;
+  const key = basicCacheKey(u, p, String(stored));
+  const exp = basicPassCache.get(key);
+  if (exp && exp > Date.now()) return true;
+  const okNow = secret.verify(stored, p);
+  if (okNow) {
+    if (basicPassCache.size > 200) basicPassCache.clear();
+    basicPassCache.set(key, Date.now() + BASIC_CACHE_MS);
+  }
+  return okNow;
+}
+
+/** 口令变更后调用：旧口令的缓存必须立刻失效。 */
+function clearBasicCache() {
+  basicPassCache.clear();
 }
 
 // 登录失败计数：同一 IP 10 分钟内错 8 次，锁 10 分钟。
@@ -100,4 +130,4 @@ function clearAuthFail(req) { authFails.delete(clientIpOf(req)); }
 
 /** 校验并归一化前端提交的路由数组。plaintext 口令在这里转成 bcrypt 哈希。 */
 
-module.exports = { AUTH_BLOCK_MS, AUTH_FAIL_LIMIT, AUTH_FAIL_WINDOW, authBlockedFor, authFails, authOk, checkAuth, clearAuthFail, clientIpOf, noteAuthFail, login };
+module.exports = { clearBasicCache, AUTH_BLOCK_MS, AUTH_FAIL_LIMIT, AUTH_FAIL_WINDOW, authBlockedFor, authFails, authOk, checkAuth, clearAuthFail, clientIpOf, noteAuthFail, login };

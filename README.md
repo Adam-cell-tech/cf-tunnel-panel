@@ -347,6 +347,31 @@ Details worth knowing:
 - **Route-level rate limiting** (`rate_limit`) needs a Caddy built with that module — see
   [`docs/RATELIMIT.md`](docs/RATELIMIT.md). Simpler alternative: Cloudflare Rate Limiting Rules.
 
+### 9.1 Passwords are stored as bcrypt hashes
+
+`panel.pass` and `viewer.pass` in `state.json` are bcrypt hashes (`$2b$10$…`), never plaintext — so backups,
+exports and `cat data/state.json` no longer leak your password. Existing plaintext passwords are migrated
+automatically on startup (`saveState('migrate-secrets')`), which is why you may see one extra backup file
+right after upgrading.
+
+Because every Basic-auth request would otherwise cost one bcrypt round (~170 ms on a small ARM box), successful
+Basic credentials are cached in memory for 10 minutes; changing the password clears that cache immediately.
+Browser sessions are unaffected — they use the session cookie, not Basic.
+
+### 9.2 Is the container running the image's code?
+
+`state.json` says v0.11.2 but the page looks old? Ask `/healthz`:
+
+```bash
+curl -s localhost:8090/healthz | jq '{version, code, imageCode, drift}'
+```
+
+- `code` — fingerprint (SHA1/16) of `src/` **as it is on disk right now**
+- `imageCode` — fingerprint baked into the image at build time (`RUN node tools/codehash.js > .code-hash`)
+- `drift: true` — the two differ, i.e. the container is running hot-copied code (`docker cp`) rather than the
+  image's code. Perfectly normal while developing, dangerous in production: a plain `docker compose up -d`
+  will silently roll you back to the image's version.
+
 ## 10. API
 
 Everything the panel does is a plain JSON endpoint, so you can script it.

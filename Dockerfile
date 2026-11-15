@@ -5,6 +5,7 @@
 #   docker build --build-arg NODE_IMAGE=node:22-bookworm-slim \
 #                --build-arg CF_IMAGE=cloudflare/cloudflared:latest \
 #                --build-arg NPM_REGISTRY=https://registry.npmjs.org .
+ARG GIT_SHA=dev
 ARG CF_IMAGE=cloudflare/cloudflared:2026.10.7
 FROM ${CF_IMAGE} AS cf
 
@@ -22,11 +23,15 @@ COPY --from=cf /usr/local/bin/cloudflared /usr/local/bin/cloudflared
 RUN cloudflared --version
 
 WORKDIR /app
+ENV GIT_SHA=${GIT_SHA}
 COPY package.json ./
 RUN npm config set registry ${NPM_REGISTRY} \
  && npm install --omit=dev --no-audit --no-fund
 
 COPY src ./src
+COPY tools ./tools
+# 把「镜像里这份代码」的指纹写死进镜像；运行时再算一次，不一致就在 /healthz 里报 drift
+RUN node tools/codehash.js > .code-hash
 
 ENV TZ=Asia/Shanghai \
     PORT=8090 \

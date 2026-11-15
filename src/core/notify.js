@@ -4,10 +4,9 @@
  * 从 src/server.js 按职责拆出（v0.9.0），仅做搬运，行为不变。
  */
 
-const http=require('http'); const https=require('https'); const crypto=require('crypto');
-const zlib=require('zlib'); const net=require('net'); const fs=require('fs');
-const path=require('path'); const os=require('os'); const { spawn }=require('child_process');
-const QRCode=require('qrcode'); const bcrypt=require('bcryptjs');
+  const crypto=require('crypto');
+
+ const os=require('os');
 
 const { log } = require('./util');
 const _state = require('./state');
@@ -96,7 +95,6 @@ async function notify(event, title, text, opts = {}) {
 
 // 出口状态/域名变化 → 通知（5 秒采样一次，不改动引擎）
 const notifyHistory = [];     // 最近 50 条通知结果，面板里能看到「发过什么、成没成」
-
 
 const lastNotify = new Map(); // event -> 上次发送时间
 
