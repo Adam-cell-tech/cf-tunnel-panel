@@ -104,6 +104,8 @@ async function handler(req, res) {
       version: VERSION,
       mode: lease.isLeader() ? 'leader' : 'standby',
       instance: lease.instanceId(),
+      // 集群视角：不管这次请求落到哪台，都能看到当前主实例是谁（监控/排障用）
+      leader: (lease.status().holder || {}).id || null,
       // 代码指纹：drift=true 说明容器里是 docker cp 热替换的代码，跟镜像不一致
       code: build.code || null,
       imageCode: build.build || null,
@@ -343,6 +345,7 @@ async function handler(req, res) {
     maybeReloadState();   // 另一实例可能刚改过配置
     return sendJson(res, 200, {
       version: VERSION,
+      mode: lease.isLeader() ? 'leader' : 'standby',
       state: {
         settings: publicSettings(),
         tunnels: publicTunnels(),

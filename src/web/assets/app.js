@@ -20,6 +20,12 @@ async function api(path, { method = 'GET', body, raw = false } = {}) {
   if (!r.ok || (data && data.ok === false)) {
     const msg = (data && data.error) || `HTTP ${r.status}`;
     if (r.status === 403 && /只读/.test(msg)) showReadonly(msg);
+    // 横向扩展：Caddy 会把请求轮流分给两台实例，轮到备份实例时写操作会被 409 拦住。
+    // 备份实例随时会接管，所以提示后刷新一次即可（这次的改动需要重做一次）。
+    if (r.status === 409 && data && data.code === 'STANDBY') {
+      toast('这次请求落在备份实例上（只读），已自动刷新，请重新操作一次', 'warn', 6000);
+      setTimeout(() => location.reload(), 900);
+    }
     const err = new Error(msg);
     err.status = r.status;
     err.payload = data;
@@ -438,8 +444,12 @@ function paintHealth(d) {
   const running = list.filter((t) => rtOf(t.id, d).status === 'running').length;
   const box = $('#healthDot');
   const txt = $('#healthText');
-  if (box) box.className = 'dot ' + (running ? 'ok' : 'err');
-  if (txt) txt.textContent = running ? `${running}/${list.length} 出口在线` : '没有出口在线';
+  const standby = d.mode === 'standby';
+  if (box) box.className = 'dot ' + (standby ? 'warn' : running ? 'ok' : 'err');
+  if (txt) {
+    txt.textContent = (standby ? '备份实例 · ' : '') + (running ? `${running}/${list.length} 出口在线` : '没有出口在线');
+    txt.title = standby ? '当前是只读备份实例；写操作会被拒绝，主实例接管后自动恢复' : '';
+  }
 }
 
 

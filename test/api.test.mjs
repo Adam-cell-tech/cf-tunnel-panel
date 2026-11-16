@@ -810,6 +810,13 @@ try {
   const t2 = await j('/api/state');
   ok('配置：写入后立即生效', t2.d.state.settings.panelTitle === '横向扩展测试', t2.d.state.settings.panelTitle || '');
   await j('/api/settings', { method: 'POST', body: { panelTitle: 'Cloudflare 隧道面板' } });
+
+  // 谁是主实例：/healthz 与 /api/state 都要能看出来（监控 + 前端「备份实例」提示）
+  const h = await j('/healthz');
+  ok('healthz 带 mode', ['leader', 'standby'].includes(h.d.mode), h.d.mode);
+  ok('healthz 带集群主实例 id', typeof h.d.leader === 'string' && h.d.leader.length > 0, h.d.leader || '(空)');
+  const ms = await j('/api/state');
+  ok('/api/state 带 mode', ['leader', 'standby'].includes(ms.d.mode), ms.d.mode);
 }
 
 await restoreRoutes();
