@@ -73,15 +73,15 @@ jobs:
         with:
           node-version: '22'
 
-      - name: 启动真 Caddy（2.11.9，admin 20190）
+      - name: 启动真 Caddy（2.11.9，admin 20290，业务端口 8180）
         run: |
           docker run -d --name caddy --network host \
             -v "$PWD/test/caddy.e2e.json:/etc/caddy/caddy.json:ro" \
             caddy:2.11.9-alpine caddy run --config /etc/caddy/caddy.json
           for i in $(seq 1 30); do
-            curl -sf http://127.0.0.1:20190/config/ >/dev/null && break || sleep 1
+            curl -sf http://127.0.0.1:20290/config/ >/dev/null && break || sleep 1
           done
-          curl -sf http://127.0.0.1:20190/config/ >/dev/null && echo "caddy admin ready"
+          curl -sf http://127.0.0.1:20290/config/ >/dev/null && echo "caddy admin ready"
 
       - name: 装依赖
         run: npm install --no-audit --no-fund
@@ -89,8 +89,11 @@ jobs:
       - name: 启动面板（无口令，仅本地）
         env:
           DATA_DIR: ${{ github.workspace }}/.e2e-data
-          CADDY_ADMIN: http://127.0.0.1:20190
+          CADDY_ADMIN: http://127.0.0.1:20290
           CADDY_LOG_DIR: ${{ github.workspace }}/.e2e-data/logs
+          CADDY_PORT: '8180'
+          CADDY_LISTEN: ':8180'
+          PANEL_ALLOW_FRESH_PUSH: '1'
           PORT: '8090'
         run: |
           mkdir -p "$DATA_DIR/logs"
@@ -104,9 +107,12 @@ jobs:
         env:
           PANEL_URL: http://127.0.0.1:8090
           PANEL_PASS: ''
-          CADDY_PORT: '8080'
-        run: node test/e2e-caddy.mjs
+          CADDY_PORT: '8180'
+        run: timeout 600 node test/e2e-caddy.mjs
 
       - name: 失败时打印日志
         if: failure()
-        run: docker logs caddy --tail 50; tail -50 /tmp/panel.log
+        run: |
+          docker logs caddy --tail 80 || true
+          echo '--- panel ---'; tail -80 /tmp/panel.log || true
+          echo '--- caddy config ---'; curl -s http://127.0.0.1:20290/config/ | head -c 2000 || true
