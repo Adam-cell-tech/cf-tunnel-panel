@@ -176,6 +176,27 @@ async function handler(req, res) {
 
   // 静态资源不需要登录：登录页自己也要用 app.css，而且它们不含任何密钥。
   // 放在鉴权之前还有个好处：Cloudflare 能把这些 URL 当公开资源缓存。
+  // 语言包 + 字典：必须是外部脚本（CSP 不允许内联），也必须在鉴权之前（登录页要用）
+  if (p === '/boot.js' && (req.method === 'GET' || req.method === 'HEAD')) {
+    const lg = langOf(req);
+    const js = `window.__CFP_LANG=${JSON.stringify(lg)};window.__CFP_DICT=${_i18n.clientDict()};`;
+    const buf = Buffer.from(js);
+    const ae = String(req.headers['accept-encoding'] || '');
+    const gz = buf.length > 1024 && /gzip/.test(ae);
+    const out = gz ? zlib.gzipSync(buf, { level: 6 }) : buf;
+    const head = {
+      'Content-Type': 'application/javascript; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      Vary: 'Accept-Encoding',
+    };
+    if (gz) head['Content-Encoding'] = 'gzip';
+    head['Content-Length'] = out.length;
+    res.writeHead(200, head);
+    res.end(out);
+    return;
+  }
+
   if (p.startsWith('/assets/') && (req.method === 'GET' || req.method === 'HEAD')) {
     const name = path.basename(p.slice('/assets/'.length));
     const file = path.join(ASSET_DIR, name);
@@ -1377,7 +1398,7 @@ const onReq = (req, res) => {
   // 审计：只记"会被记性"的请求 —— 改东西的、和鉴权相关的、以及任何失败的 API 调用
   res.on('finish', () => {
     try {
-      const skip = path0 === '/metrics' || path0 === '/badge.svg' || path0.startsWith('/assets/') ||
+      const skip = path0 === '/metrics' || path0 === '/badge.svg' || path0.startsWith('/assets/') || path0 === '/boot.js' ||
         path0.startsWith('/__bench/') || path0 === '/api/audit' || path0 === '/api/logs' || path0 === '/api/logs/stream';
       if (skip) return;
       const mutating = req.method !== 'GET' && req.method !== 'HEAD';

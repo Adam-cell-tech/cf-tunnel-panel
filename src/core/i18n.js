@@ -241,6 +241,15 @@ const EN_V0137 = {
 };
 Object.assign(EN, EN_V0137);
 
+// v0.13.8 新增（登录页脚本外置后出现的文案）
+const EN_V0138 = {
+  '登录中…': 'Signing in…',
+  '网络错误：': 'Network error: ',
+  '登录失败': 'Sign-in failed',
+  '下一步': 'Next',
+};
+Object.assign(EN, EN_V0138);
+
 const EN_PAGES = {
   '加签密钥（可选）': 'Signing secret (optional)',
   '机器人安全设置里勾了「加签」才需要；只勾「自定义关键词」就留空': 'Only needed when the bot has signing enabled; leave empty if you use a keyword instead',

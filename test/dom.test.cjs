@@ -296,6 +296,10 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
   {
     const { doc, errors } = await open('/login', 600);
     chk('登录页: 有表单与两个输入框', !!doc.querySelector('#loginForm') && !!doc.querySelector('#u') && !!doc.querySelector('#p'), '');
+    chk('登录页: 没有内联脚本（CSP 会拦）', doc.querySelectorAll('script:not([src])').length === 0, String(doc.querySelectorAll('script:not([src])').length));
+    chk('登录页: 引用了外部 login.js', !!doc.querySelector('script[src*="login.js"]'), '');
+    chk('登录页: 表单带 data-next', !!(doc.querySelector('#loginForm') && doc.querySelector('#loginForm').getAttribute('data-next')), '');
+    chk('登录页: 引用了 /boot.js', !!doc.querySelector('script[src^="/boot.js"]'), '');
     chk('登录页: 不出现侧边导航', !doc.querySelector('.side .nav'), '');
     chk('登录页: 无脚本错误', errors.length === 0, errors.join(' | ').slice(0, 160));
   }

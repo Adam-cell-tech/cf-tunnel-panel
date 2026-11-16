@@ -65,7 +65,7 @@ function pageShell(active, body, lang = 'zh') {
 ${body}
   </main>
 </div>
-<script>window.__CFP_LANG=${JSON.stringify(lang === 'en' ? 'en' : 'zh')};window.__CFP_DICT=${i18n.clientDict()};</script>
+<script src="/boot.js?v=${ASSET_V}"></script>
 <script src="${AV('app.js')}"></script>
 <script src="${AV(activePage.file + '.js')}"></script>
 </body>
@@ -86,7 +86,7 @@ function loginPage({ next = '/', error = '', lang = 'zh' } = {}) {
 <link rel="icon" href="/badge.svg" type="image/svg+xml">
 </head>
 <body class="login-body">
-<form class="login-card" id="loginForm" autocomplete="on">
+<form class="login-card" id="loginForm" autocomplete="on" data-next="${safeNext}">
   <div class="brand" style="padding:0 0 14px"><span class="logo" aria-hidden="true">CF</span><div><div class="nm">${title}</div><div class="ver">v${VERSION}</div></div></div>
   <h1 style="font-size:18px;margin:0 0 12px">${i18n.t(lang, '登录面板')}</h1>
   <div class="field"><label for="u">${i18n.t(lang, '用户名')}</label><input id="u" name="username" autocomplete="username" required autofocus></div>
@@ -97,47 +97,8 @@ function loginPage({ next = '/', error = '', lang = 'zh' } = {}) {
   <button class="primary" type="submit" style="width:100%;margin-top:10px">${i18n.t(lang, '登录')}</button>
   <p class="muted" style="font-size:12px;margin:12px 0 0">登录后 7 天内免登录；在「设置 → 登录会话」里可以查看并踢掉其它设备。</p>
 </form>
-<script>
-(function () {
-  var f = document.getElementById('loginForm');
-  var err = document.getElementById('err');
-  var rem = document.getElementById('rem');
-  if (err.textContent) err.classList.remove('hidden');
-  f.addEventListener('submit', async function (e) {
-    e.preventDefault();
-    err.classList.add('hidden');
-    var btn = f.querySelector('button');
-    btn.disabled = true; var old = btn.textContent; btn.textContent = '登录中…';
-    try {
-      var tw = document.getElementById('tWrap');
-      var tIn = document.getElementById('t');
-      var need = tw && !tw.classList.contains('hidden');
-      var payload = need
-        ? { challenge: f.dataset.challenge, code: tIn.value, remember: rem.checked }
-        : { user: document.getElementById('u').value, pass: document.getElementById('p').value, remember: rem.checked };
-      var r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'cfp' }, body: JSON.stringify(payload) });
-      var d = await r.json().catch(function () { return {}; });
-      if (d && d.needTotp) {
-        f.dataset.challenge = d.challenge;
-        tw.classList.remove('hidden');
-        tIn.focus();
-        btn.disabled = false; btn.textContent = '${i18n.t(lang, '下一步')}';
-        document.getElementById('u').readOnly = true;
-        document.getElementById('p').readOnly = true;
-        return;
-      }
-      if (r.ok && d.ok) { location.href = ${JSON.stringify(safeNext)}; return; }
-      err.textContent = d.error || '登录失败';
-      err.classList.remove('hidden');
-      btn.disabled = false; btn.textContent = old;
-    } catch (x) {
-      err.textContent = '网络错误：' + x.message;
-      err.classList.remove('hidden');
-    }
-    btn.disabled = false; btn.textContent = old;
-  });
-})();
-</script>
+<script src="/boot.js?v=${ASSET_V}"></script>
+<script src="${AV('login.js')}"></script>
 </body>
 </html>`;
 }

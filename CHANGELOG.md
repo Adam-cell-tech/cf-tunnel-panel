@@ -12,6 +12,16 @@
 - `package.json` 增加 `engines.node >= 20`。
 - 测试：API 113、DOM 75。
 
+## v0.13.8 — 2026-11-16
+
+### 修复
+- **登录页点「登录」没反应**（严重）：`loginPage` 的表单逻辑写在 HTML 内联 `<script>` 里，被 v0.7.1 加上的 CSP `script-src 'self'` 直接拦掉。浏览器于是走原生表单提交（`GET /login?username=…&password=…`），页面刷新一次、口令明文进了 URL 和访问日志。现已把脚本移到 `/assets/login.js`（同源外部脚本，CSP 允许），并用 `data-next` 传跳转目标。
+- **英文切换静默失效**：`window.__CFP_LANG`/`__CFP_DICT` 也是内联注入，同样被 CSP 拦。改为 `/boot.js`（gzip + `no-store`），八页与登录页都引用。
+- 清理：访问日志里 4 条带明文口令的记录已就地打码（`password=REDACTED`）。
+
+### 新增
+- API 套件新增「所有页面无内联 `<script>`」「`/boot.js` 可用且不缓存」「`/assets/login.js` 可访问」四个断言；DOM 套件新增登录页引用检查。测试总数 180 API + 91 DOM。
+
 ## v0.13.7 — 2026-11-16
 
 ### 新增

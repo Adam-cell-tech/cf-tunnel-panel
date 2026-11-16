@@ -188,6 +188,26 @@ const lg = await fetch(B + '/legacy');
 ok('/legacy 已下线（404）', lg.status === 404, String(lg.status));
 // 新增：规则命中统计 / 配置导出 YAML
 {
+  const pages = ['/login', '/', '/tunnels', '/rules', '/tools', '/observe', '/settings'];
+  let inline = [];
+  for (const pg of pages) {
+    const r = await fetch(B + pg);
+    const html = await r.text();
+    // 匹配「<script>」但不带 src 的内联标签
+    const m = html.match(/<script(?![^>]*\ssrc=)[^>]*>/gi) || [];
+    if (m.length) inline.push(pg + ':' + m.length);
+  }
+  ok('所有页面都没有内联 <script>（CSP script-src self 会拦）', inline.length === 0, inline.join(','));
+  const boot = await rawFetch(B + '/boot.js');
+  const bootTxt = await boot.text();
+  ok('/boot.js 可用且注入语言与字典', boot.status === 200 && /__CFP_LANG/.test(bootTxt) && /__CFP_DICT/.test(bootTxt),
+    `${boot.status} ${bootTxt.length}B`);
+  ok('/boot.js 是 JS 且不缓存', /javascript/.test(boot.headers.get('content-type') || '') && /no-store/.test(boot.headers.get('cache-control') || ''),
+    boot.headers.get('content-type') + ' / ' + boot.headers.get('cache-control'));
+  const loginJs = await rawFetch(B + '/assets/login.js');
+  ok('登录页脚本是外部文件', loginJs.status === 200, String(loginJs.status));
+}
+{
   const sec = await j('/api/security/attempts?hours=24');
   const d = sec.d || {};
   ok('/api/security/attempts 可用', sec.status === 200 && typeof d.total === 'number', JSON.stringify(d).slice(0, 80));

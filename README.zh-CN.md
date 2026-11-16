@@ -1378,6 +1378,14 @@ Access 集成、指标面板、TCP/UDP 支持等）与**技术选型理由**（�
 | 端到端测试 8 → 23 项 | 真 Caddy 那一套现在验证：前缀剥离、前缀原样透传、基础认证三种情况、按 Host 的域名隔离、WebSocket 101 升级、维护模式 503 与 `Retry-After`、IP 黑名单 403、admin 不监听 2019、access log 与 `trusted_proxies`，并在 `finally` 里还原规则与设置。 |
 | 审计去重 | handler 已经记了人话动作的请求，不再额外写一条 `POST /api/...` 兜底记录。 |
 
+### v0.13.8 更新
+
+| 变化 | 说明 |
+| --- | --- |
+| **登录页修复** | 登录表单的脚本原来是内联的，被自己写的 CSP（`script-src 'self'`）拦掉 → 浏览器退化成原生表单提交，账号密码跑进 URL，怎么点都进不去。脚本已挪到 `/assets/login.js`。 |
+| 语言包也外置 | `window.__CFP_LANG`/`__CFP_DICT` 同样是内联的（同样被拦，所以切英文一直是静默无效）。现在由 `/boot.js` 提供（gzip、`no-store`）。 |
+| 回归测试 | API 套件新增「任何页面都不得有内联 `<script>`」断言，DOM 套件检查登录页引用了 `login.js` 与 `/boot.js`。 |
+
 ### v0.13.7 更新
 
 | 变化 | 说明 |

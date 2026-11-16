@@ -581,6 +581,14 @@ The script snapshots the route table to `/tmp` before touching it and restores f
 | E2E coverage 8 → 23 | The real-Caddy suite now proves prefix stripping, prefix passthrough, basic auth (401/401/200), Host-based routing isolation, WebSocket 101 upgrade, maintenance 503 + `Retry-After`, IP blacklist 403, admin off 2019, access-log writer and `trusted_proxies` — and restores routes/settings in `finally`. |
 | Audit de-duplication | A request whose handler already logged a human-readable action no longer also emits the generic `POST /api/...` row. |
 
+### v0.13.8 highlights
+
+| Change | Detail |
+| --- | --- |
+| **Login page fixed** | The login form's script was inline, and the Content-Security-Policy (`script-src 'self'`) blocked it — so the browser fell back to a native form submit, sending `username`/`password` in the URL and never signing you in. The script now lives in `/assets/login.js`. |
+| Language bootstrap as a file | `window.__CFP_LANG`/`__CFP_DICT` used to be inline too (also blocked, so the English switch silently did nothing). Now served by `/boot.js` (gzip, `no-store`). |
+| Regression test | The API suite now asserts that **no page contains an inline `<script>`**, and the DOM suite checks the login page references `login.js` and `/boot.js`. |
+
 ### v0.13.7 highlights
 
 | Change | Detail |
