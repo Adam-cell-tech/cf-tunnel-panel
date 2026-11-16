@@ -23,6 +23,29 @@ const { log, parseCidrs, parseHeaderLines, parseUpstream } = require('./util');
 const _state = require('./state');
 const state = _state.stateProxy;
 const { runtimes, tunnelById } = require('./registry');
+
+// ---- 面板自身的多槽位（滚动升级） -------------------------------------------
+// 面板路由的上游是 127.0.0.1:8090 这类回环地址时，如果配置了 PANEL_SLOT_PEERS
+// （例如 "8091"），就把它展开成「所有槽位 + 主动健康检查」：
+//   - 老实例活着 → 一律走它（lb_policy: first，顺序固定，行为可预测）
+//   - 老实例挂掉 → Caddy 探活失败自动跳过，流量落到新实例，不需要人工切
+const PANEL_SLOT_RE = /^(?:https?:\/\/)?(?:127\.0\.0\.1|localhost):(\d+)\/?$/i;
+
+function panelSlots() {
+  const self = String(process.env.PORT || 8090);
+  const peers = String(process.env.PANEL_SLOT_PEERS || '')
+    .split(',').map((x) => x.trim()).filter(Boolean);
+  return [...new Set([self, ...peers])];
+}
+
+function expandPanelSlots(upstream) {
+  const m = String(upstream || '').match(PANEL_SLOT_RE);
+  if (!m) return null;
+  const slots = panelSlots();
+  if (slots.length < 2 || !slots.includes(m[1])) return null;
+  return slots.map((port) => `127.0.0.1:${port}`);
+}
+
 function buildRouteHandlers(r) {
   const handle = [];
 
@@ -47,7 +70,8 @@ function buildRouteHandlers(r) {
 
   // 3) 反向代理
   const main = parseUpstream(r.upstream);
-  const upstreams = [{ dial: main.dial }];
+  const slotUps = expandPanelSlots(r.upstream);
+  const upstreams = slotUps ? slotUps.map((dial) => ({ dial })) : [{ dial: main.dial }];
   if (r.backupUpstream) upstreams.push({ dial: parseUpstream(r.backupUpstream).dial });
 
   const proxy = { handler: 'reverse_proxy', upstreams };
@@ -57,7 +81,15 @@ function buildRouteHandlers(r) {
   proxy.transport = transport;
   if (r.timeoutSec > 0) proxy.flush_interval = 0;
 
-  if (upstreams.length > 1) {
+  if (slotUps) {
+    // 面板槽位：优先第一个（老实例），它不健康时自动跳过 → 滚动升级不需要人工切流量
+    proxy.load_balancing = { selection_policy: { policy: 'first' }, try_duration: 5e9, try_interval: 500e6 };
+    proxy.health_checks = {
+      active: { uri: '/healthz', interval: '5s', timeout: '2s', fails: 2, passes: 1 },
+    };
+    // 不要写 fail_duration / max_fails：Caddy 2.11.9 的 reverse_proxy 不认这个字段
+    // （会 400 unknown field "fail_duration"，整份配置下发失败）。被动健康检查交给默认值。
+  } else if (upstreams.length > 1) {
     // 注意：Caddy v2.11 起字段名是 selection_policy（老写法 selection 会 400 unknown field）
     proxy.load_balancing = {
       selection_policy: { policy: LB_POLICIES.includes(r.lbPolicy) ? r.lbPolicy : 'round_robin' },

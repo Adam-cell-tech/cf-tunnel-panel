@@ -37,12 +37,16 @@ async function pushCaddy() {
   try {
     // admin 端口可能刚从旧地址搬过来（2019 → 20190）：挨个试，先成功的那条以后优先用
     // 每项是 [admin 地址, 该地址允许的 Origin]：Caddy 会校验 Origin 是否在 admin.origins 里
-    const cands = [
-      [CADDY_ADMIN, CADDY_ADMIN],
-      ['http://127.0.0.1:2019', 'http://localhost:2019'],
-      ['http://localhost:2019', 'http://localhost:2019'],
-      ['http://127.0.0.1:20190', 'http://127.0.0.1:20190'],
-    ];
+    // 默认只认 CADDY_ADMIN 这一个地址。历史上有过一条"挨个试 2019/20190"的兜底，
+    // 结果一个把 CADDY_ADMIN 指向假端口（9999）的测试实例，靠兜底打到了线上 Caddy，
+    // 用它的空白配置把生产规则冲掉（2026-11-16）。要迁移 admin 端口就显式设
+    // PANEL_ADMIN_FALLBACK=1，或者改完 CADDY_ADMIN 重启一次。
+    const cands = [[CADDY_ADMIN, CADDY_ADMIN]];
+    if (process.env.PANEL_ADMIN_FALLBACK === '1') {
+      cands.push(['http://127.0.0.1:2019', 'http://localhost:2019']);
+      cands.push(['http://localhost:2019', 'http://localhost:2019']);
+      cands.push(['http://127.0.0.1:20190', 'http://127.0.0.1:20190']);
+    }
     let res = null;
     let lastErr = null;
     for (const [base, origin] of cands) {

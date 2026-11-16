@@ -5,6 +5,16 @@
 
 ---
 
+## ✅ v0.16.0 — 两个实例同时活着，切换不丢请求
+
+| 项 | 做法 | 实测 |
+| --- | --- | --- |
+| 主备选主 | `src/core/lease.js` 租约文件 + 心跳/过期，只用心跳时间戳（容器共享 PID 命名空间，pid 判断无意义） | standby 写 → 409 STANDBY，报出 leader |
+| 接管速度 | leader 退出时 `release()` 立即删租约 | 隔离双实例实测 t+4s 完成接管 |
+| 流量切换 | 面板规则下发双上游 + `selection_policy: first` + `/healthz` 主动健康检查 | `/api/caddy/config` 输出 `8090,8095` + `health_checks.active` |
+| 升级脚本 | `tools/rolling-upgrade.sh`（干跑/`--apply`/`--prune`，含回滚） | 两个方向各跑一遍通过 |
+| 安全边界 | 空状态不推 Caddy；`CADDY_ADMIN` 不再多端口回退 | 测试实例无法再冲掉生产规则 |
+
 ## ✅ v0.15.2 — 拖动排序 + 快照定时化
 
 | 项 | 实现 |

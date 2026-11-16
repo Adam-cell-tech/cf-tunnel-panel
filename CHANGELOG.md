@@ -2,6 +2,26 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.16.0 — 2026-11-16
+
+- **滚动升级（零中断）**：新增 `src/core/lease.js` —— 基于租约文件的主备选主（5s 心跳 / 15s TTL），
+  持有者才写 state、下发 Caddy、跑 cloudflared；其余实例以 standby 运行，写操作返回
+  `409 {code:"STANDBY"}` 并报出 leader。leader 退出即刻让权，standby 约 5s 接管。
+- **Caddy 双槽位**：面板自己那条规则下发成两条上游（`PORT` + `PANEL_SLOT_PEERS`），
+  `selection_policy: first` + `/healthz` 主动健康检查，切换时 Caddy 自动跳过不健康的上游。
+- **新增 `tools/rolling-upgrade.sh`**：ping-pong 双槽位升级，含 preflight、standby 就绪等待、
+  接管检测、容器改名、验证、`--prune` 清理；接管失败自动回滚。
+- **`/healthz` 增加 `mode`（leader/standby）与 `instance`**，`docker ps` 之外也能一眼看出谁在当班。
+- **修两个会咬人的问题**：
+  1. `CADDY_ADMIN` 原来会「挨个试 2019/20190」，一个把 admin 指向假端口的测试实例能靠兜底打到
+     线上 Caddy 并用它的空白配置覆盖生产规则 —— 现在只认 `CADDY_ADMIN`（`PANEL_ADMIN_FALLBACK=1` 恢复旧行为）。
+  2. `reverse_proxy.fail_duration` 在 Caddy 2.11.9 里不存在，写上去整份配置 400 下发失败
+     （表面现象是「推送成功但线上没变」），已移除。
+- **空状态保护**：启动时 `state.json` 不存在则拒绝首次 Caddy 下发（`PANEL_ALLOW_FRESH_PUSH=1` 可放行）。
+- **bootstrap 兜底从 200 改成 503 + `Retry-After`**：以前占位页返回 200，会让「线上是否可用」的检查全部假绿。
+- `docker-compose.yml` 增加 `PANEL_SLOT_PEERS`（默认 8095）。
+- 测试：API 216、DOM 113、e2e 23。
+
 ## v0.14.2 — 2026-11-16
 
 - **英文界面收口**：词典 229 → 502 条（从 jsdom 渲染出的 6 个页面采文案）；英文模式残留中文从 7%~32% 降到 0~3%，剩余为用户数据（规则名/出口名）。

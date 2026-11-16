@@ -33,7 +33,7 @@ const { SEC_HEADERS, log, logSeq, logs, parseCidrs, parseHeaderLines, parseUpstr
 
 const _state = require('./core/state');
 const { acquireLock } = _state;
-const { stateProxy, setState, deepDefault, defaultOrigin, defaultState, loadState, migrateState, newTunnel, normalizeTunnels, publicRoute, publicSettings, saveState, validateRoutes } = _state;
+const { stateProxy, setState, deepDefault, defaultOrigin, defaultState, isFreshState, loadState, migrateState, newTunnel, normalizeTunnels, publicRoute, publicSettings, saveState, validateRoutes } = _state;
 // 注意：必须是 stateProxy（指向模块内部同一个对象），直接把 state 解构出来会拿到
 // loadState() 之前那个默认对象，导致 /api/state 看到的路由/出口数量和真实的不一致。
 const state = stateProxy;
@@ -51,6 +51,7 @@ const secret = require('./core/secret');
 const ident = require('./core/ident');
 const configcode = require('./core/configcode');
 const guard = require('./core/guard');
+const lease = require('./core/lease');
 const totp = require('./core/totp');
 const perm = require('./core/perm');
 
@@ -100,6 +101,8 @@ async function handler(req, res) {
       tunnels: { total: state.tunnels.length, running },
       tunnel: running > 0 ? 'running' : state.tunnels.length ? 'stopped' : 'none',
       version: VERSION,
+      mode: lease.isLeader() ? 'leader' : 'standby',
+      instance: lease.instanceId(),
       // 代码指纹：drift=true 说明容器里是 docker cp 热替换的代码，跟镜像不一致
       code: build.code || null,
       imageCode: build.build || null,
@@ -221,6 +224,17 @@ async function handler(req, res) {
   if (auth.ok) {
     const gate = perm.check(auth.role || 'admin', req.method, p);
     if (!gate.ok) return sendJson(res, 403, { ok: false, error: gate.error, code: gate.code || 'forbidden' });
+  }
+  // 备份实例：只读。登录/登出放行（用户得能签进来看看状态），其余写操作一律 409，
+  // 免得两个进程同时改 state.json / 同时推 Caddy。
+  if (auth.ok && !lease.isLeader() && req.method !== 'GET' && req.method !== 'HEAD'
+      && p !== '/api/login' && p !== '/api/logout') {
+    return sendJson(res, 409, {
+      ok: false, code: 'STANDBY',
+      error: '当前连的是备份实例（只读）。主实例正在处理写操作，等它退出后这里会自动接管。',
+      mode: 'standby',
+      leader: (lease.status().holder || {}).id || null,
+    });
   }
   if (!auth.ok) {
     const wait = authBlockedFor(req);
@@ -1546,13 +1560,42 @@ loadState();
 // 会话持久化：落盘的只是 cookie 值的哈希，「记住我」30 天，普通登录 7 天
 const _restored = session.init(require('path').join(DATA_DIR, 'sessions.json'));
 
-// 单实例：抢不到锁就退出，避免两个面板互相覆盖 state.json / 互相推 Caddy 配置
-const lockInfo = acquireLock(require('path').join(DATA_DIR, '.state.lock'));
-if (!lockInfo.ok) {
-  const h = lockInfo.holder || {};
-  console.error(`[fatal] 已有面板实例在运行（pid ${h.pid || '?'}，启动于 ${h.at ? new Date(h.at).toISOString() : '?'}）。`
-    + ' 同一个数据目录只能跑一个面板；确实要强启请先删掉 data/.state.lock。');
-  process.exit(1);
+// 领导权租约：谁拿着租约谁负责写 state / 推 Caddy / 跑 cloudflared，
+// 其余实例是**只读备份**（滚动升级时先起备份、切换、再退老实例）。
+// 只有一件事仍然禁止：两个实例同时以「领导」身份写同一份 state。
+let leaderMode = false;
+function startLeaderWork() {
+  if (leaderMode) return;
+  leaderMode = true;
+  log('本实例成为主实例，接管出口与 Caddy 配置下发', 'panel');
+  // 空状态保护：state.json 都不存在却去推 Caddy，等于拿默认的一条规则覆盖线上配置。
+  // 真要推（首次部署）就显式设 PANEL_ALLOW_FRESH_PUSH=1。
+  if (isFreshState() && process.env.PANEL_ALLOW_FRESH_PUSH !== '1') {
+    log('[skip] 当前是从空白状态启动（没有 state.json），已跳过首次 Caddy 下发，'
+      + '避免用默认规则覆盖已有配置。确认这是全新部署就设 PANEL_ALLOW_FRESH_PUSH=1。', 'panel');
+  } else {
+    pushCaddy().catch(() => {});
+  }
+  startAll();
+  refreshUpstreamHealth().catch(() => {});
+}
+leaderMode = lease.init(require('path').join(DATA_DIR, '.leader.json'), {
+  onPromote: () => { try { startLeaderWork(); } catch (e) { log('接管失败：' + e.message, 'panel'); } },
+  onDemote: () => { leaderMode = false; log('领导权被另一个实例接走，本实例转为只读备份', 'panel'); },
+});
+if (!leaderMode) {
+  const st = lease.status();
+  log(`已有实例持有领导权（${(st.holder && st.holder.id) || '?'}）→ 本实例以**只读备份模式**启动；`
+    + '写操作会返回 409，等它退出后自动接管。', 'panel');
+}
+process.on('exit', () => lease.release());
+for (const sig of ['SIGTERM', 'SIGINT']) {
+  process.on(sig, () => {
+    log(`收到 ${sig}，让出领导权并退出`, 'panel');
+    try { if (lease.isLeader()) stopAll(); } catch { /* ignore */ }
+    lease.release();
+    process.exit(0);
+  });
 }
 
 /**
@@ -1614,13 +1657,17 @@ const tlsOpts = (() => {
 const server = tlsOpts ? https.createServer(tlsOpts, onReq) : http.createServer(onReq);
 
 server.listen(PORT, '0.0.0.0', async () => {
-  log(`面板已启动 v${VERSION}: ${tlsOpts ? 'https' : 'http'}://0.0.0.0:${PORT}（数据目录 ${DATA_DIR}）`, 'panel');
-  await pushCaddy();
-  startAll();
+  log(`面板已启动 v${VERSION}: ${tlsOpts ? 'https' : 'http'}://0.0.0.0:${PORT}（数据目录 ${DATA_DIR}）`
+    + `，模式 ${lease.isLeader() ? 'leader' : 'standby'}`, 'panel');
+  if (lease.isLeader()) {
+    // 统一走 startLeaderWork（内含「空白状态不推 Caddy」的保护）
+    leaderMode = false;
+    startLeaderWork();
+    setInterval(() => { refreshUpstreamHealth().catch(() => {}); }, 60000).unref();
+    shareJanitor();
+  }
+  // 监控与健康巡检两边都跑（只读采样，不改共享状态）
   startMonitor();
-  refreshUpstreamHealth().catch(() => {});
-  setInterval(() => { refreshUpstreamHealth().catch(() => {}); }, 60000).unref();
-  shareJanitor();
 });
 
 for (const sig of ['SIGTERM', 'SIGINT']) {

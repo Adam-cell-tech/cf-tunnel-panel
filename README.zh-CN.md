@@ -1363,6 +1363,53 @@ Access 集成、指标面板、TCP/UDP 支持等）与**技术选型理由**（�
 
 脚本会先把规则表快照到 `/tmp`，无论成败都从快照还原 —— 上一版是从「当前 state」还原，结果一次中途崩溃把线上规则全删了。
 
+## 16. 滚动升级（两个实例同时活，零中断）
+
+以前重启面板就是几秒钟 502（Caddy 没有可用上游）。现在可以两个实例同时活着，切换过程一个请求都不丢。
+
+**机制**
+
+- 实例在 `data/` 里抢一个**租约**文件（5 秒心跳、15 秒过期）。持有者是 **leader**，只有它能写
+  `state.json`、下发 Caddy 配置、拉起 `cloudflared`。
+- 其它实例以 **standby** 启动：页面和查询接口照常能用，任何写操作返回
+  `409 {"code":"STANDBY"}`，并告诉你是谁在当 leader。
+- leader 退出时立刻删租约，standby 约 5 秒内自动接管。
+- 面板自己那条规则下发成**双上游**（`:8090` + 预留槽位 `:8095`），`selection_policy: first`
+  加 `/healthz` **主动健康检查**。流量自动跟着健康的那个走 —— 不用人工切，也不会有 502。
+
+**一次性开启**
+
+```yaml
+environment:
+  PANEL_SLOT_PEERS: "8095"   # 长期预留第二个槽位
+```
+
+重建（或 recreate）一次面板容器让环境变量生效。这个端口要一直空着（只在升级过程中被占用）。
+
+**升级**
+
+```bash
+tools/rolling-upgrade.sh                  # 干跑：preflight + 打印计划，不动任何东西
+tools/rolling-upgrade.sh --apply          # 真做
+tools/rolling-upgrade.sh --apply --prune  # 顺手删掉老容器
+
+# 下次反着来
+NEXT=8090 tools/rolling-upgrade.sh --apply
+```
+
+脚本流程：在空闲槽位起新实例 → 等它进入 `standby` → 停掉老实例 → 等新实例变 `leader` →
+容器改名 → 验证 → 可选清理。新实例接管失败会自动把老实例拉回来并以非 0 退出。
+
+**坑**
+
+- 记得 `docker inspect` 看 leader 有没有 `PANEL_SLOT_PEERS`：没有的话它只知道自己的端口，
+  Caddy 只有单上游，脚本会退化成「先停后起」（1~3 秒 5xx）。
+- **别让测试实例指向生产 `CADDY_ADMIN`**。一个 `data/` 是空的实例会老老实实把它那份默认
+  （只有一条规则）的配置推上去，把你的规则冲掉。所以现在「启动时 state.json 不存在」会拒绝
+  首次下发（除非 `PANEL_ALLOW_FRESH_PUSH=1`）；`CADDY_ADMIN` 也不再自动回退到 2019/20190
+  （确实需要旧行为就设 `PANEL_ADMIN_FALLBACK=1`）。
+- 租约刻意只用时间戳：容器共享 PID 命名空间，`kill(pid, 0)` 永远成功，按 pid 判断没有意义。
+
 ## 许可证
 
 [MIT](LICENSE) —— 随便用、随便改、可以商用，保留版权声明即可。

@@ -156,6 +156,11 @@ function normalizeTunnels() {
   if (!state.tunnels.length) state.tunnels = [newTunnel({ id: 'main', name: '主隧道出口' })];
 }
 
+// 标记：state.json 不存在、用默认配置起的状态。用来防止「空白实例把线上 Caddy 冲掉」——
+// 真实事故两次：CI 的 e2e（2026-11-15）和本地起的第二个实例（2026-11-16），
+// 都是拿一份空 state 直接 pushCaddy，把线上 6 条规则冲成 1 条。
+let freshState = false;
+
 function loadState() {
   try {
     const raw = fs.readFileSync(STATE_FILE, 'utf8');
@@ -164,10 +169,16 @@ function loadState() {
     state = deepDefault(parsed, defaultState());
     state.version = 3;
     normalizeTunnels();
+    freshState = false;
   } catch (e) {
     if (e.code !== 'ENOENT') log(`[state] 读取失败，使用默认配置: ${e.message}`);
     normalizeTunnels();
+    freshState = e.code === 'ENOENT';
   }
+}
+
+function isFreshState() {
+  return freshState;
 }
 
 function saveState(reason = 'save') {
@@ -327,4 +338,4 @@ const { LB_POLICIES, METHODS } = require('./paths');
  */
 function setState(next) { state = next; }
 
-module.exports = { acquireLock, stateProxy, setState, deepDefault, defaultOrigin, defaultState, loadState, migrateState, newTunnel, normalizeTunnels, publicRoute, publicSettings, saveState, state, validateRoutes };
+module.exports = { isFreshState, acquireLock, stateProxy, setState, deepDefault, defaultOrigin, defaultState, loadState, migrateState, newTunnel, normalizeTunnels, publicRoute, publicSettings, saveState, state, validateRoutes };

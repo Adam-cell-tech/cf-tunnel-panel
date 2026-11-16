@@ -564,6 +564,60 @@ Settings → *Operator account*. Three roles, whitlist-based:
 
 The script snapshots the route table to `/tmp` before touching it and restores from the snapshot in a `finally` path — a previous version restored from live state and therefore deleted every rule when a run died in the middle.
 
+## 16. Rolling upgrade (two instances, zero downtime)
+
+Restarting the panel used to mean a few seconds of 502 while Caddy had no upstream. Now you can
+keep two instances alive and switch over without dropping a request.
+
+**How it works**
+
+- An instance holds a **lease** file in `data/` (heartbeat every 5s, TTL 15s). The holder is the
+  *leader* and is the only one allowed to write `state.json`, push Caddy config or run `cloudflared`.
+- Every other instance starts as a **standby**: pages and read APIs work, any mutation returns
+  `409 {"code":"STANDBY"}` and tells you which instance is the leader.
+- When the leader exits it deletes the lease, so a standby promotes itself within ~5s.
+- The panel route is pushed to Caddy as **two upstreams** (`:8090` and the reserved slot `:8095`)
+  with `selection_policy: first` plus an **active health check** on `/healthz`. Traffic follows the
+  healthy one automatically — no manual cut-over, no 502.
+
+**Enable it once**
+
+```yaml
+# docker-compose.yml
+environment:
+  PANEL_SLOT_PEERS: "8095"   # reserve the second slot permanently
+```
+
+Rebuild/recreate the panel container once so the env takes effect. The reserved port must stay free
+(it is only used while an upgrade is in flight).
+
+**Upgrade**
+
+```bash
+tools/rolling-upgrade.sh                  # dry run: preflight + plan, touches nothing
+tools/rolling-upgrade.sh --apply          # do it
+tools/rolling-upgrade.sh --apply --prune  # ...and delete the old container afterwards
+
+# next time just alternate the slot
+NEXT=8090 tools/rolling-upgrade.sh --apply
+```
+
+The script walks through: start new instance on the free slot → wait for `standby` → stop the old
+one → wait for it to become `leader` → rename containers → verify → optional prune. If the new
+instance fails to promote it restarts the old one and exits non-zero.
+
+**Gotchas**
+
+- `docker inspect` the leader: without `PANEL_SLOT_PEERS` it only knows its own port, Caddy gets a
+  single upstream and the script falls back to stop-then-start (1–3s of 5xx).
+- Never point a test instance at the production `CADDY_ADMIN`. A second instance with an empty
+  `data/` will happily push its default (one-route) config over yours. That is why the panel now
+  refuses to push when `state.json` did not exist at boot unless `PANEL_ALLOW_FRESH_PUSH=1`;
+  and why `CADDY_ADMIN` no longer falls back to other ports (`PANEL_ADMIN_FALLBACK=1` restores the
+  old probing behaviour if you really need it).
+- The lease is timestamp based on purpose: containers share a PID namespace, so `kill(pid, 0)`
+  would always succeed and pid checks are useless.
+
 ## License
 
 [MIT](LICENSE) — use it, change it, ship it commercially; keep the copyright notice.
