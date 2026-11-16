@@ -62,6 +62,21 @@ say "当前实例 :$CUR 健康"
 if ss -ltn 2>/dev/null | grep -q ":$NEXT "; then die "接班槽位 :$NEXT 已被占用"; fi
 say "接班槽位 :$NEXT 空闲"
 
+# 容器是谁创建的？compose 创建的容器带项目标签，而 compose 是按「服务名」找容器的。
+# 本脚本收尾会把新实例改名成 $NAME，于是 `docker compose up -d` 之后会报名字冲突
+# （实测：Error response from daemon: Conflict. The container name "/cf-tunnel-panel" is already in use）。
+# 这不是错误，但要提前讲清楚，否则下次想用 compose 部署时会一脸问号。
+COMPOSE_PROJECT=$(docker inspect "$NAME" --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)
+LABEL_VOLUME=$(docker inspect "$NAME" --format '{{range .Mounts}}{{.Source}}:{{.Destination}} {{end}}' 2>/dev/null | grep -o "$SRC/src:/app/src" || true)
+if [ -n "$COMPOSE_PROJECT" ] && [ "$COMPOSE_PROJECT" != "<no value>" ]; then
+  say "提示：$NAME 由 compose 项目「$COMPOSE_PROJECT」创建；本脚本切换后容器名归新实例所有，"
+  say "      之后再跑 docker compose up -d 会报 name 冲突 —— 先 docker rename $NAME $NAME-manual 即可。"
+fi
+if [ -n "$LABEL_VOLUME" ]; then
+  say "提示：$NAME 挂着宿主源码（$SRC/src → /app/src）；新实例会沿用同样的挂载，"
+  say "      所以升级后 /healthz 的 code 反映的是工作区，不是镜像。想验证镜像本身请用 docker compose。"
+fi
+
 SLOTS=$(docker inspect "$NAME" --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n 's/^PANEL_SLOT_PEERS=//p')
 ZERO_DOWNTIME=0
 if echo ",$SLOTS," | grep -q ",$NEXT,"; then

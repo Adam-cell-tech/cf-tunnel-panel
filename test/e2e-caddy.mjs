@@ -18,6 +18,7 @@
 import http from 'node:http';
 import net from 'node:net';
 import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { writeFileSync, readFileSync, unlinkSync, existsSync } from 'node:fs';
 
 const B = process.env.PANEL_URL || 'http://127.0.0.1:8090';
@@ -210,6 +211,60 @@ function rawGet(path, host, extra = '') {
   ok('admin 不再监听众所周知的 2019', !/"listen":"127\.0\.0\.1:2019"/.test(conf), '');
   ok('配置带 access log writer', conf.includes('"writer"') && conf.includes('access.log'), '');
   ok('配置带 trusted_proxies（真实客户端 IP）', conf.includes('trusted_proxies') && conf.includes('CF-Connecting-IP'), '');
+}
+
+// 10) 双实例：租约选主 + 只读备份（滚动升级的地基）
+// 这台机器上已经跑着一个 leader，我们再起一个共享同一份 data/ 的实例，
+// 它应当拿到「只读备份」身份：页面能看，写操作必须被 409 挡住，
+// 而且不能去推 Caddy（否则两个进程会互相覆盖配置）。
+{
+  const sys = await j('/api/system');
+  const dataDir = (sys.d && sys.d.dataDir) || '/data';
+  const standbyPort = Number(process.env.E2E_STANDBY_PORT || 8096);
+  const env = {
+    ...process.env,
+    PORT: String(standbyPort),
+    DATA_DIR: dataDir,
+    CADDY_ADMIN: process.env.CADDY_ADMIN || 'http://127.0.0.1:9999',
+    PANEL_SLOT_PEERS: String(PANEL_PORT),
+    PANEL_INSTANCE: 'e2e-standby',
+    LOG_STDOUT: '1',
+  };
+  const child = spawn(process.execPath, ['src/server.js'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let childErr = '';
+  child.stderr.on('data', (b) => { childErr += b.toString(); });
+  child.stdout.on('data', () => {});
+  const wait = async (want, ms = 20000) => {
+    const t0 = Date.now();
+    while (Date.now() - t0 < ms) {
+      try {
+        const r = await fetch(`http://127.0.0.1:${standbyPort}/healthz`);
+        const d = await r.json();
+        if (d.mode === want) return d;
+      } catch { /* 还没起来 */ }
+      await sleep(400);
+    }
+    return null;
+  };
+  const sb = await wait('standby');
+  ok('第二实例以「只读备份」起来', !!sb, sb ? `instance=${sb.instance}` : childErr.slice(-120));
+  if (sb) {
+    const r = await fetch(`http://127.0.0.1:${standbyPort}/api/state`, { headers: { Authorization: basic } });
+    ok('备份实例可以读', r.status === 200, String(r.status));
+    const w = await fetch(`http://127.0.0.1:${standbyPort}/api/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: basic },
+      body: JSON.stringify({ panelTitle: 'should not be written' }),
+    });
+    const wd = await w.json().catch(() => ({}));
+    ok('备份实例写操作被 409 拦住', w.status === 409 && wd.code === 'STANDBY', `${w.status} ${wd.code || ''}`);
+    ok('409 里指出谁是 leader', !!(wd.leader), String(wd.leader || ''));
+    const lead = await j('/healthz');
+    ok('leader 仍是原来那个', lead.d.mode === 'leader', String(lead.d.mode));
+  }
+  child.kill('SIGTERM');
+  await sleep(600);
+  try { child.kill('SIGKILL'); } catch { /* ignore */ }
 }
 
 await restoreAll();

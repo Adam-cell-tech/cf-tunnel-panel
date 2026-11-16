@@ -1,6 +1,6 @@
 {
   "name": "cf-tunnel-panel",
-  "version": "0.16.1",
+  "version": "0.16.2",
   "private": true,
   "description": "可视化 Docker 面板：用 cloudflared 隧道 + Caddy 本地反代，把内网服务发布到公网",
   "main": "src/server.js",

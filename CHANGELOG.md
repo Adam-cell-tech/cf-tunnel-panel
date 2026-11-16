@@ -2,6 +2,15 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.16.2 — 把「两个进程同时活」也纳入端到端
+
+- e2e 新增双实例段（5 条）：用同一个 `data/` 起第二实例，断言它拿到 `standby` 身份、能读
+  `/api/state`、写 `/api/settings` 被 `409 STANDBY` 拦住、409 里写明谁是 leader、
+  以及原实例仍是 leader。真 Caddy 段总计 **28 条**。
+- `tools/rolling-upgrade.sh` preflight 增加两条提示：容器若由 compose 创建，切换后
+  `docker compose up -d` 会因容器名冲突而失败（先 `docker rename` 即可）；容器若挂载了
+  宿主源码，升级后的 `code` 反映的是工作区而不是镜像（想验镜像请走 compose）。
+
 ## v0.16.1 — 镜像不再是「另一份代码」
 
 终于把镜像 rebuild 通了，之前每次 `docker compose up -d` 都会把面板退回 v0.5.0，`/healthz` 的 `drift` 也一直报警。
