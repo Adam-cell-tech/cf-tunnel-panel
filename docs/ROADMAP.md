@@ -5,6 +5,18 @@
 
 ---
 
+## ✅ v0.15.1 — 保存前的护栏
+
+| 项 | 实现 |
+| --- | --- |
+| 遮蔽检测 | `guard.shadowIssues`：host 重叠 + 路径覆盖（`/` 万能、前缀按 `/` 边界、`*` 结尾），命中即报「被第 N 条拦住」 |
+| 面板入口 | `guard.panelExposed`：上游端口 == 面板端口，一条都没有就拦 |
+| 接口 | `/api/routes`、`/api/config/apply` 返回 409 `GUARD`；`force:true` 放行；dry 返回 `warnings` |
+| 前端 | `api()` 带 `status/payload`；规则页与配置卡走确认框 → 带 force 重试 |
+| 上游校验 | `validateRoutes` 要求 `host:port` 或 `http://host:port` |
+| 配置入 git | `tools/git-snapshot.sh` 提交 `data/config/*.json`（脱敏），保留 120 份，幂等；容器内无 git，故放宿主机 cron |
+| 测试 | API 214（+4）、DOM 110、e2e 23 |
+
 ## ✅ v0.15.0 — 配置即代码
 
 | 项 | 实现 |

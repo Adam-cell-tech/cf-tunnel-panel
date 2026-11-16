@@ -20,7 +20,10 @@ async function api(path, { method = 'GET', body, raw = false } = {}) {
   if (!r.ok || (data && data.ok === false)) {
     const msg = (data && data.error) || `HTTP ${r.status}`;
     if (r.status === 403 && /只读/.test(msg)) showReadonly(msg);
-    throw new Error(msg);
+    const err = new Error(msg);
+    err.status = r.status;
+    err.payload = data;
+    throw err;
   }
   return data;
 }

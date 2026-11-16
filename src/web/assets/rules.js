@@ -247,11 +247,25 @@ function syncFromDom() {
   });
 }
 
-async function save() {
+async function save(force) {
   syncFromDom();
   try {
     $('#btnSave').disabled = true;
-    const d = await api('/api/routes', { method: 'POST', body: { routes: rules } });
+    let d;
+    try {
+      d = await api('/api/routes', { method: 'POST', body: force ? { routes: rules, force: true } : { routes: rules } });
+    } catch (e) {
+      // 护栏拦截：把「哪条规则会收不到流量」讲清楚，确认后带 force 再提交
+      if (e.status === 409 && e.payload && e.payload.code === 'GUARD') {
+        const list = (e.payload.issues || []).map((x, i) => `${i + 1}. ${x.reason}`).join('\n');
+        if (!confirm(`这些规则有问题：\n\n${list}\n\n仍然要保存吗？（错的规则会收不到流量）`)) {
+          toast('已取消保存', 'warn');
+          return;
+        }
+        return save(true);
+      }
+      throw e;
+    }
     rules = d.routes;
     dirty = false;
     if (window.__cfpSetUnsaved) window.__cfpSetUnsaved('rules', false);

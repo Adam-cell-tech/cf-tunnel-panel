@@ -50,6 +50,7 @@ const session = _session;
 const secret = require('./core/secret');
 const ident = require('./core/ident');
 const configcode = require('./core/configcode');
+const guard = require('./core/guard');
 const totp = require('./core/totp');
 const perm = require('./core/perm');
 
@@ -475,7 +476,12 @@ async function handler(req, res) {
   if (p === '/api/routes' && req.method === 'POST') {
     try {
       const body = await readBody(req);
-      state.routes = validateRoutes(body.routes, state.routes);
+      const nextRoutes = validateRoutes(body.routes, state.routes);
+      const g = guard.inspect(nextRoutes, { panelPort: PORT });
+      if (g.blocked && !body.force) {
+        return sendJson(res, 409, { ok: false, code: 'GUARD', issues: g.issues, error: g.issues[0].reason, hint: '确认无误就带 force:true 再提交' });
+      }
+      state.routes = nextRoutes;
       saveState('routes');
       await pushCaddy();
       return sendJson(res, 200, { ok: true, routes: state.routes.map(publicRoute), caddy });
@@ -866,7 +872,11 @@ async function handler(req, res) {
       };
       const d = configcode.diffView(prevCfg, nextCfg);
       const touchesTunnels = d.added.concat(d.removed, d.changed).some((x) => x.kind === 'tunnels');
-      if (dry) return sendJson(res, 200, { ok: true, dry: true, diff: d, touchesTunnels, routes: nextRoutes.length, tunnels: nextTunnels.length });
+      const g = guard.inspect(nextRoutes, { panelPort: PORT });
+      if (dry) return sendJson(res, 200, { ok: true, dry: true, diff: d, touchesTunnels, routes: nextRoutes.length, tunnels: nextTunnels.length, warnings: g.issues });
+      if (g.blocked && !body.force) {
+        return sendJson(res, 409, { ok: false, code: 'GUARD', issues: g.issues, error: g.issues[0].reason, hint: '确认无误就带 force:true 再提交' });
+      }
       const file = configcode.writeSnapshot(DATA_DIR, prevCfg, 'before-apply');
       state.routes = nextRoutes;
       state.tunnels = nextTunnels;

@@ -467,10 +467,24 @@ function bindCfg() {
   $('#btnCfgApply').addEventListener('click', async () => {
     let cfg;
     try { cfg = readCfg(); } catch (e) { msg.textContent = e.message; return; }
+    const applyCfg = async (force) => {
+      msg.textContent = '应用中…';
+      return api('/api/config/apply', { method: 'POST', body: force ? { config: cfg, force: true } : { config: cfg } });
+    };
     if (!confirm('用这份配置整份替换？routes 会全量替换，apply 前会自动存一份快照。')) return;
     try {
-      msg.textContent = '应用中…';
-      const d = await api('/api/config/apply', { method: 'POST', body: { config: cfg } });
+      let d;
+      try {
+        d = await applyCfg(false);
+      } catch (e) {
+        if (e.status === 409 && e.payload && e.payload.code === 'GUARD') {
+          const list = (e.payload.issues || []).map((x, i) => `${i + 1}. ${x.reason}`).join('\n');
+          if (!confirm(`这份配置有问题：\n\n${list}\n\n仍然要应用吗？`)) { msg.textContent = '已取消'; return; }
+          d = await applyCfg(true);
+        } else {
+          throw e;
+        }
+      }
       renderCfgDiff(d.diff);
       msg.textContent = `已应用：${d.routes} 条规则 / ${d.tunnels} 个出口（快照 ${d.file}）`;
       toast('配置已应用', 'ok');

@@ -579,6 +579,18 @@ The script snapshots the route table to `/tmp` before touching it and restores f
 | E2E coverage 8 → 23 | The real-Caddy suite now proves prefix stripping, prefix passthrough, basic auth (401/401/200), Host-based routing isolation, WebSocket 101 upgrade, maintenance 503 + `Retry-After`, IP blacklist 403, admin off 2019, access-log writer and `trusted_proxies` — and restores routes/settings in `finally`. |
 | Audit de-duplication | A request whose handler already logged a human-readable action no longer also emits the generic `POST /api/...` row. |
 
+### v0.15.1 highlights — guardrails before saving
+
+| Guard | What it catches | Escape hatch |
+| --- | --- | --- |
+| Shadowed route | A catch-all (`path: /`) or a broader prefix sitting **in front of** rules that can never then receive traffic. Mirrors what Caddy's first-match ordering does. | `force: true` |
+| Panel cut-off | A route set where **no rule points at the panel's own port** — save it and you can never open the panel again. | `force: true` |
+| Bad upstream | Upstreams must be `host:port` or `http://host:port`; a bare name like `not-a-url` is rejected at validation time instead of failing at runtime. | fix the value |
+
+Both `POST /api/routes` and `POST /api/config/apply` return **409 `{code:"GUARD", issues:[…]}`**, and the UI turns that into a confirm dialog that lists exactly which rule will go dark — then retries with `force`. Dry-run applies return the same list as `warnings` so you can see it before touching anything.
+
+Also in this release: `tools/git-snapshot.sh` now commits the **declarative snapshots** (`data/config/*.json`, no tokens, no password hashes) instead of only `state.json`, keeps the last 120 in the repo, and is idempotent (second run prints "no changes, skipping").
+
 ### v0.15.0 highlights — config as code
 
 | Change | Detail |

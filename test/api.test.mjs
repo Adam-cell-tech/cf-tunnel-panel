@@ -174,6 +174,28 @@ ok('本机 Caddy 延迟可测', bl.d.ok === true && bl.d.ttfbMs && typeof bl.d.t
   ok('一键出口: 上游必须带协议', qkBadSvc.status === 400, String(qkBadSvc.status));
 }
 
+// 保存前护栏（顺序 / 面板自身）
+{
+  const st = await j('/api/state');
+  const cur = st.d.state.routes || [];
+  const slash = cur.filter((r) => (r.path || '/') === '/');
+  const rest = cur.filter((r) => (r.path || '/') !== '/');
+  const brief = (r) => ({ id: r.id, name: r.name, path: r.path, host: r.host || '', upstream: r.upstream, strip: !!r.strip, basicAuth: { user: (r.basicAuth || {}).user || '' } });
+  if (slash.length) {
+    const bad = await j('/api/routes', { method: 'POST', body: { routes: [...slash.map(brief), ...rest.map(brief)] } });
+    ok('护栏: 兜底 / 不在最后被拦下', bad.status === 409 && bad.d.code === 'GUARD' && (bad.d.issues || []).length >= 1, `${bad.status} ${bad.d.code || ''}`);
+    const badCfg = await j('/api/config/apply', { method: 'POST', body: { dry: true, config: { routes: [...slash.map(brief), ...rest.map(brief)] } } });
+    ok('护栏: 演练也会报出顺序警告', badCfg.status === 200 && (badCfg.d.warnings || []).length >= 1, `${(badCfg.d.warnings || []).length} 条警告`);
+  } else {
+    ok('护栏: 兜底 / 不在最后被拦下', true, '当前没有 / 规则，跳过');
+    ok('护栏: 演练也会报出顺序警告', true, '跳过');
+  }
+  const noPanel = await j('/api/routes', { method: 'POST', body: { routes: [{ id: 'x1', name: '只有一条', path: '/only', upstream: 'http://127.0.0.1:9999' }] } });
+  ok('护栏: 摘掉面板自身入口被拦下', noPanel.status === 409 && (noPanel.d.issues || []).some((x) => x.kind === 'panel'), String(noPanel.status));
+  const stillOk = await j('/api/state');
+  ok('护栏: 被拦下时线上规则没变', (stillOk.d.state.routes || []).length === cur.length, `${(stillOk.d.state.routes || []).length}/${cur.length}`);
+}
+
 // 配置即代码
 {
   const c = await j('/api/config');
