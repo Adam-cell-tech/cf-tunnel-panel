@@ -1,14 +1,37 @@
 {
-  "admin": { "listen": "127.0.0.1:20190", "origins": ["127.0.0.1:20190", "localhost:20190"] },
-  "logging": { "logs": { "default": { "level": "INFO" } } },
+  "admin": {
+    "listen": "127.0.0.1:20190",
+    "origins": [
+      "127.0.0.1:20190",
+      "localhost:20190"
+    ]
+  },
+  "logging": {
+    "logs": {
+      "default": {
+        "level": "INFO"
+      }
+    }
+  },
   "apps": {
     "http": {
       "servers": {
         "main": {
-          "listen": [":8080"],
+          "listen": [
+            ":8080"
+          ],
           "logs": {},
           "routes": [
-            { "handle": { "handler": "static_response", "status_code": 404, "body": "e2e bootstrap: no route matched\n" }, "terminal": true }
+            {
+              "handle": [
+                {
+                  "handler": "static_response",
+                  "status_code": 404,
+                  "body": "e2e bootstrap: no route matched\n"
+                }
+              ],
+              "terminal": true
+            }
           ]
         }
       }
