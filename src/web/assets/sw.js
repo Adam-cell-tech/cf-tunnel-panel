@@ -1,6 +1,6 @@
 // 只缓存静态资源，页面与 /api 一律走网络（配置随时会变，缓存界面会让人抓狂）
-const CACHE = 'cfp-static-v1';
-const ASSETS = ['/assets/app.css', '/assets/app.js', '/assets/icon.svg'];
+const CACHE = 'cfp-static-v2';
+const ASSETS = ['/assets/app.css', '/assets/app.js', '/assets/icon.svg', '/assets/offline.html'];
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
@@ -9,6 +9,12 @@ self.addEventListener('activate', (e) => {
 });
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
+  // 导航请求失败（断网/隧道断）时给一个能看懂的离线页，而不是浏览器的白屏
+  if (e.request.mode === 'navigate') {
+    e.respondWith(fetch(e.request).catch(() => caches.match('/assets/offline.html').then((hit) => hit
+      || new Response('<!doctype html><meta charset="utf-8"><p style="font:16px system-ui;padding:24px">现在没有网络，连不上面板。</p>', { headers: { 'Content-Type': 'text/html; charset=utf-8' } }))));
+    return;
+  }
   if (e.request.method !== 'GET' || !url.pathname.startsWith('/assets/')) return;
   if (url.pathname.startsWith('/assets/sw.js')) return;
   e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {

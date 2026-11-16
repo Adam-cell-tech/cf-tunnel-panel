@@ -318,7 +318,10 @@ pre.log .l-system{color:#a0a8b4}
 .subnav a{font-size:12.5px;padding:3px 9px;border-radius:999px;color:var(--dim);border:1px solid transparent}
 .subnav a:hover{color:var(--fg);border-color:var(--line)}
 .subnav a:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
-@media (max-width:720px){.subnav{overflow-x:auto;flex-wrap:nowrap;padding:6px 8px}.subnav a{white-space:nowrap}}
+@media (max-width:720px){.subnav{overflow-x:auto;flex-wrap:nowrap;padding:6px 8px}.subnav a{white-space:nowrap}
+  /* 窄屏图太矮会挤刻度：抬高一点，刻度字号也收小 */
+  .chart{height:126px}
+  .chart-x{font-size:10px}}
 
 /* v0.13.5：从「按规则看流量」跳过来时定位到的那条规则 */
 .rule.flash { animation: ruleFlash 1.6s ease-out; }

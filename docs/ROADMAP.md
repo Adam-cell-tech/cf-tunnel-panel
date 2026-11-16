@@ -5,6 +5,17 @@
 
 ---
 
+## ✅ v0.14.1 — 轮询变轻、断网有话说
+
+| 项 | 实现 |
+| --- | --- |
+| 协商缓存 | `sendJson` 输出 `W/"len-sha1[-gz|-id]"` + `private,no-cache`；304 无正文 |
+| 离线页 | `sw.js` v2 + `offline.html`（navigate 失败兜底，缓存本地） |
+| 设置搜索 | `#cardSearch` 过滤 `.card[id^="sec-"]`，chips 联动 |
+| 窄屏图表 | `.chart{height:126px}`、`.chart-x{font-size:10px}` |
+
+测试：API 193、DOM 97、e2e 23。
+
 ## ✅ v0.14.0 — 从看到数字到能追下去
 
 | 项 | 实现 |

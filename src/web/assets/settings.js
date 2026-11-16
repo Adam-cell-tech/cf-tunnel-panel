@@ -171,6 +171,7 @@ function fill() {
   $('#evUrl').checked = !!(n.events && n.events.urlChange);
   $('#evCaddy').checked = !!(n.events && n.events.caddyFail);
   if ($('#evSessionIp')) $('#evSessionIp').checked = !!(n.events && n.events.sessionIp);
+
   if ($('#evTunnelUp')) $('#evTunnelUp').checked = !(n.events && n.events.tunnelUp === false);
   if ($('#evErrorSpike')) $('#evErrorSpike').checked = !!(n.events && n.events.errorSpike);
   if ($('#evLoginFail')) $('#evLoginFail').checked = !!(n.events && n.events.loginFail);
@@ -487,3 +488,31 @@ $('#btnOper').addEventListener('click', async () => {
   } catch (e) { $('#operMsg').textContent = e.message; }
 });
 
+// 设置项搜索：按卡片标题 + 正文做包含匹配（不区分大小写），没命中的整张卡隐藏
+function applyCardSearch() {
+  const box = $('#cardSearch');
+  if (!box) return;
+  const q = (box.value || '').trim().toLowerCase();
+  const cards = [...document.querySelectorAll('.card[id^="sec-"]')];
+  let shown = 0;
+  cards.forEach((c) => {
+    const title = (c.querySelector('h2') || {}).textContent || '';
+    const hit = !q || (title + ' ' + (c.textContent || '')).toLowerCase().includes(q);
+    c.classList.toggle('hidden', !hit);
+    if (hit) shown += 1;
+  });
+  const chips = [...document.querySelectorAll('.subnav a')];
+  chips.forEach((a) => {
+    const id = (a.getAttribute('href') || '').slice(1);
+    const card = document.getElementById(id);
+    a.classList.toggle('hidden', !!(card && card.classList.contains('hidden')));
+  });
+  const hint = $('#searchHint');
+  if (hint) hint.textContent = q ? `${shown} / ${cards.length} 个分区匹配` : '';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const box = $('#cardSearch');
+  if (!box) return;
+  box.addEventListener('input', applyCardSearch);
+});

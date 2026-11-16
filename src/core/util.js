@@ -6,6 +6,7 @@ const zlib = require('zlib');
  */
 
 const http=require('http'); const https=require('https');
+const crypto=require('crypto');
 
 const { LOG_MAX } = require('./paths');
 function rid() {
@@ -43,8 +44,23 @@ function sendJson(res, code, obj) {
   const buf = Buffer.from(JSON.stringify(obj), 'utf8');
   const req = res.req || {};
   const ae = String((req.headers && req.headers['accept-encoding']) || '');
-  const base = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store, no-transform', Vary: 'Accept-Encoding' };
-  if (buf.length > 1024 && /\bgzip\b/.test(ae)) {
+  const gzOk = buf.length > 1024 && /\bgzip\b/.test(ae);
+  // 面板每 5 秒轮询 /api/state，内容没变就没必要重发正文。
+  // 注意 Cache-Control 必须是 private,no-cache（允许存、但每次要回源校验）——
+  // 原来的 no-store 会让浏览器根本不发 If-None-Match，ETag 就废了。
+  const tag = `W/"${buf.length.toString(16)}-${crypto.createHash('sha1').update(buf).digest('hex').slice(0, 12)}${gzOk ? '-gz' : '-id'}"`;
+  const base = {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'private, no-cache',
+    ETag: tag,
+    Vary: 'Accept-Encoding',
+  };
+  const inm = String((req.headers && req.headers['if-none-match']) || '');
+  if (code === 200 && inm && inm.split(',').map((x) => x.trim()).includes(tag)) {
+    res.writeHead(304, base);
+    return res.end();
+  }
+  if (gzOk) {
     const gz = zlib.gzipSync(buf, { level: 6 });
     res.writeHead(code, Object.assign(base, { 'Content-Encoding': 'gzip', 'Content-Length': gz.length }));
     return res.end(gz);

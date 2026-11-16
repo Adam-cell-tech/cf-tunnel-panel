@@ -89,7 +89,7 @@ Cloudflare 边缘（TLS 在这里终结，隐藏你真实 IP）
 | 观测 | `/observe` | 访问统计（5 条/页、最新在前）+ 面板日志实时流（关键字过滤、下载） |
 | 设置 | `/settings` | 站点 / 维护模式 / 安全 / 掉线通知 / 面板登录 / 备份回滚 / 导入导出 |
 
-> 旧版单页面还在：右上「旧版」或直接访问 `/legacy`。改前端只需替换 `src/web/` 下的文件再 `docker cp`，不用重建镜像。
+> 改前端只需替换 `src/web/` 下的文件再 `docker cp`，不用重建镜像（旧的 96KB 单页 `/legacy` 已在 v0.12.0 删除）。
 
 > **界面语言**：面板自带中文 + 英文，点左下角 `EN` / `中` 切换；选择存在 cookie（`cfp_lang`），同时决定 `<html lang>`。
 
@@ -1215,7 +1215,6 @@ cf-tunnel-panel/
 │   ├── assets/app.js       #   公共工具：api/esc/toast/主题/Ctrl+K/分页
 │   ├── assets/*.js         #   每个页面一个脚本（overview/tunnels/rules/tools/observe/settings）
 │   └── pages/*.html        #   每个页面的 HTML 片段，由后端套上侧栏外壳
-├── src/ui.html             # 旧版单页（保留在 /legacy，方便回退）
 ├── test/                   # 端到端测试（api + jsdom），见 §11.1
 ├── data/                   # state.json（0600）+ backups/ + caddy-logs/
 └── docs/ROADMAP.md         # 技术路线图
@@ -1377,6 +1376,16 @@ Access 集成、指标面板、TCP/UDP 支持等）与**技术选型理由**（�
 | 恢复码可重生成 | `POST /api/totp/recovery`：用当前验证码**或**一个旧恢复码，换回 10 个新恢复码，旧的立刻作废。设置页「二次验证」卡里有「重新生成恢复码」按钮，新码只显示一次，库里只存 sha256。 |
 | 端到端测试 8 → 23 项 | 真 Caddy 那一套现在验证：前缀剥离、前缀原样透传、基础认证三种情况、按 Host 的域名隔离、WebSocket 101 升级、维护模式 503 与 `Retry-After`、IP 黑名单 403、admin 不监听 2019、access log 与 `trusted_proxies`，并在 `finally` 里还原规则与设置。 |
 | 审计去重 | handler 已经记了人话动作的请求，不再额外写一条 `POST /api/...` 兜底记录。 |
+
+### v0.14.1 更新
+
+| 变化 | 说明 |
+| --- | --- |
+| JSON 带 ETag / 304 | `sendJson` 的每个响应都带弱 ETag（`W/"<长度>-<sha1>"`，按编码分 `-gz`/`-id`）与 `Cache-Control: private, no-cache`，5 秒一次的 `/api/state` 轮询改成协商校验，不再整包重传。**能生效的前提是把 `no-store` 去掉**——`no-store` 会让浏览器根本不发 `If-None-Match`。 |
+| 离线页 | `sw.js`（缓存 v2）现在给失败的导航请求返回 `assets/offline.html`：一张「连不上面板」的说明卡，列出该检查的三件事，由缓存本地提供、不依赖网络。 |
+| 设置项搜索 | 分区 chips 上方加了搜索框，按标题 + 正文过滤 13 张设置卡；被隐藏卡片的 chip 一起消失，并显示「2 / 13 个分区匹配」。 |
+| 窄屏图表 | 720px 以下图高 96 → 126px、刻度字号降到 10px，小时刻度不再互相压。 |
+| 文档 | 清掉最后几处 `/legacy` 旧说法（那份 96KB 单页在 v0.12.0 就删了）。 |
 
 ### v0.14.0 更新
 

@@ -12,6 +12,19 @@
 - `package.json` 增加 `engines.node >= 20`。
 - 测试：API 113、DOM 75。
 
+## v0.14.1 — 2026-11-16
+
+### 新增
+- Service Worker 离线兜底页 `src/web/assets/offline.html`（缓存版本升到 v2，navigate 失败时返回）。
+- 设置页卡片搜索 `#cardSearch`：按标题 + 正文过滤 13 个分区，chips 同步隐藏并显示命中计数。
+- 窄屏（≤720px）图表高度 96 → 126px、刻度字号 10px。
+
+### 变更
+- **JSON 响应统一加 ETag 并支持 304**：`sendJson` 输出弱 ETag（按 gzip/identity 分后缀）+ `Cache-Control: private, no-cache`，`If-None-Match` 命中返回 304 且无正文。原来写的是 `no-store`，浏览器因此从不发起协商缓存，这也是这条优化以前做不成的原因。
+
+### 修复
+- 清理 README（中英）里 `/legacy` 的过时描述。
+
 ## v0.14.0 — 2026-11-16
 
 ### 新增

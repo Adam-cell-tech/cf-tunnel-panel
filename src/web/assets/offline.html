@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>离线 · cf-tunnel-panel</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center;
+         background: #14161b; color: #e6e9ef;
+         font: 15px/1.7 system-ui, -apple-system, "Segoe UI", "Noto Sans SC", sans-serif; }
+  .box { max-width: 520px; padding: 28px 26px; border: 1px solid #2b2f38; border-radius: 14px; background: #1b1f27; }
+  h1 { margin: 0 0 10px; font-size: 19px; }
+  p { margin: 8px 0; color: #b9c0cc; }
+  ul { margin: 8px 0 0; padding-left: 20px; color: #b9c0cc; }
+  .tip { margin-top: 14px; font-size: 13px; color: #8b93a1; }
+  a { color: #6fa8ff; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <h1>现在连不上面板</h1>
+    <p>页面本身没问题，是这台设备当前没有网络（或者隧道那边断了）。</p>
+    <ul>
+      <li>手机/电脑的 WiFi 是否还连着</li>
+      <li>家里的机器是否开机、<code>cf-tunnel-panel</code> 容器是否在跑</li>
+      <li>Cloudflare 后台那条隧道是否 healthy</li>
+    </ul>
+    <p class="tip">恢复网络后刷新即可。这个页面由 Service Worker 本地提供，不依赖服务器。</p>
+  </div>
+</body>
+</html>

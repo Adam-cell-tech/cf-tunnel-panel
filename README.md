@@ -82,7 +82,6 @@ rules), `./caddy.bootstrap.json` (initial Caddy config, replaced at runtime).
 | **Observe** | access log with filters + live log (pause, errors only, download) |
 | **Settings** | site / maintenance / security / notifications / panel login / read-only account / backups / about |
 
-`/legacy` still serves the old single-page UI, in case you ever need it.
 
 > **Interface language:** the panel ships Chinese + English. Click the `EN` / `中` button at the bottom-left to switch; the choice is a cookie (`cfp_lang`) and also drives `<html lang>`.
 
@@ -458,7 +457,6 @@ cf-tunnel-panel/
 │   ├── assets/app.css       # design system: dark/light, responsive
 │   ├── assets/*.js          # one script per page
 │   └── pages/*.html         # page fragments, wrapped by the backend shell
-├── src/ui.html              # legacy single page (served at /legacy)
 ├── test/                    # end-to-end tests (API + jsdom)
 ├── tools/                   # bench.sh, fix-perms.sh, git-snapshot.sh
 ├── data/                    # state.json + backups/ + caddy-logs/ (gitignored)
@@ -580,6 +578,16 @@ The script snapshots the route table to `/tmp` before touching it and restores f
 | Recovery-code rotation | `POST /api/totp/recovery` takes a current TOTP code **or** one old recovery code and returns 10 fresh ones; the old set is voided. Settings → 2FA has the new "重新生成恢复码" button. Only hashes are stored. |
 | E2E coverage 8 → 23 | The real-Caddy suite now proves prefix stripping, prefix passthrough, basic auth (401/401/200), Host-based routing isolation, WebSocket 101 upgrade, maintenance 503 + `Retry-After`, IP blacklist 403, admin off 2019, access-log writer and `trusted_proxies` — and restores routes/settings in `finally`. |
 | Audit de-duplication | A request whose handler already logged a human-readable action no longer also emits the generic `POST /api/...` row. |
+
+### v0.14.1 highlights
+
+| Change | Detail |
+| --- | --- |
+| JSON gets ETag / 304 | Every `sendJson` response now carries a weak ETag (`W/"<len>-<sha1>"`, `-gz`/`-id` per encoding) and `Cache-Control: private, no-cache`, so the 5-second `/api/state` poll revalidates instead of re-downloading. This only works because `no-store` was removed — with `no-store` browsers never send `If-None-Match`. |
+| Offline page | `sw.js` (cache v2) now answers failed navigations with `assets/offline.html`: a short "can't reach the panel" card listing the three things to check, served from cache with no network. |
+| Settings search | A search box above the section chips filters the 13 setting cards by title + body text; chips of hidden cards disappear and a counter shows `2 / 13 个分区匹配`. |
+| Mobile charts | Under 720 px the chart height goes 96 → 126 px and axis labels drop to 10 px, so the hour ticks stop colliding. |
+| Docs | Removed the last stale `/legacy` references (the 96 KB single page was deleted in v0.12.0). |
 
 ### v0.14.0 highlights
 

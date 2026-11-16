@@ -629,5 +629,25 @@ try {
   ok('通知事件：默认开启 tunnelUp', ev.tunnelUp !== false, String(ev.tunnelUp));
 }
 
+// ---------------------------------------------------------------- v0.14.1 新增
+{
+  const first = await rawFetch(B + '/api/state', { headers: { Authorization: basic } });
+  const etag = first.headers.get('etag');
+  ok('缓存协商：/api/state 带 ETag', !!etag && etag.startsWith('W/"'), String(etag));
+  ok('缓存协商：可协商缓存(private,no-cache)', /private/.test(first.headers.get('cache-control') || '') && /no-cache/.test(first.headers.get('cache-control') || ''), first.headers.get('cache-control'));
+  const second = await rawFetch(B + '/api/state', { headers: { Authorization: basic, 'If-None-Match': etag } });
+  ok('缓存协商：内容没变返回 304', second.status === 304, String(second.status));
+  const secondBody = await second.text();
+  ok('缓存协商：304 没有正文', secondBody.length === 0, String(secondBody.length));
+
+  const off = await rawFetch(B + '/assets/offline.html');
+  ok('离线页：可匿名访问', off.status === 200, String(off.status));
+  const offText = await off.text();
+  ok('离线页：是能看懂的说明', /连不上面板|offline/i.test(offText), offText.slice(0, 30));
+  const sw = await rawFetch(B + '/assets/sw.js');
+  const swText = await sw.text();
+  ok('Service Worker：带离线兜底', /offline\.html/.test(swText) && /navigate/.test(swText), '');
+}
+
 console.log(`\n${pass}/${pass + fail} 通过`);
 process.exit(fail ? 1 : 0);

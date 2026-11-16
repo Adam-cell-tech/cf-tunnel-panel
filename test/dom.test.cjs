@@ -168,6 +168,18 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('设置: 有分页控件', !!doc.querySelector('#backupList .pager') || bk < 5, '');
     const sn = doc.querySelectorAll('.subnav a').length;
     chk('设置: 分区导航 ≥10 个锚点', sn >= 10, String(sn));
+    chk('设置: 有设置项搜索框', !!doc.querySelector('#cardSearch'), '');
+    {
+      const sb = doc.querySelector('#cardSearch');
+      const before = [...doc.querySelectorAll('.card[id^="sec-"]')].filter((c) => !c.classList.contains('hidden')).length;
+      if (sb) {
+        sb.value = '备份';
+        sb.dispatchEvent(new win.Event('input', { bubbles: true }));
+        await new Promise((r) => setTimeout(r, 60));
+        const after = [...doc.querySelectorAll('.card[id^="sec-"]')].filter((c) => !c.classList.contains('hidden')).length;
+        chk('设置: 搜索能收窄卡片', after > 0 && after < before, `${before} → ${after}`);
+      } else { chk('设置: 搜索能收窄卡片', false, 'no input'); }
+    }
     chk('设置: 分区锚点都能对上卡片', !!doc.querySelector('#sec-backup') && !!doc.querySelector('#sec-totp'), '');
     const rh = doc.querySelectorAll('#notifyHist [data-resend]').length;
     chk('设置: 通知记录带重发按钮', rh >= 0, String(rh));
