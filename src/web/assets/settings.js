@@ -72,15 +72,21 @@ async function loadNotifyHist() {
     const d = await api('/api/notify/history');
     const items = d.items || [];
     box.innerHTML = items.length
-      ? `<div class="tbl-wrap"><table class="stackable"><thead><tr><th>时间</th><th>事件</th><th>标题</th><th>结果</th><th>详情</th></tr></thead><tbody>${items.map((it) => {
+      ? `<div class="tbl-wrap"><table class="stackable"><thead><tr><th>时间</th><th>事件</th><th>标题</th><th>结果</th><th>详情</th><th>操作</th></tr></thead><tbody>${items.map((it) => {
         const st = NOTIFY_STATUS[it.status] || [it.status || '—', ''];
         return `<tr><td class="mono" data-label="时间">${new Date(it.t).toLocaleTimeString('zh-CN', { hour12: false })}</td>
           <td data-label="事件"><span class="mono">${esc(it.event)}</span></td>
           <td data-label="标题">${esc(it.title || '')}</td>
           <td data-label="结果"><span class="tag ${st[1]}">${esc(st[0])}</span></td>
-          <td class="muted" data-label="详情">${esc(it.extra || '')}</td></tr>`;
+          <td class="muted" data-label="详情">${esc(it.extra || '')}</td>
+          <td data-label="操作"><button class="mini" data-resend="${it.seq || ''}">重发</button></td></tr>`;
       }).join('')}</tbody></table></div>`
       : '<div class="empty">还没有发过通知（配置 webhook 后，掉线/换域名会走这里）</div>';
+    box.querySelectorAll('[data-resend]').forEach((b) => b.addEventListener('click', async () => {
+      b.disabled = true; b.textContent = '发送中…';
+      try { await api('/api/notify/resend', { method: 'POST', body: { seq: Number(b.dataset.resend) || 0 } }); b.textContent = '已重发'; await loadNotifyHist(); }
+      catch (e) { b.disabled = false; b.textContent = '重发'; alert('重发失败：' + e.message); }
+    }));
   } catch (e) {
     box.innerHTML = `<div class="hint err">${esc(e.message)}</div>`;
   }

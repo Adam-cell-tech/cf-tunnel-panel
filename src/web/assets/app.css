@@ -311,3 +311,11 @@ pre.log .l-system{color:#a0a8b4}
 .login-card .brand{display:flex;gap:10px;align-items:center}
 .login-card h1{font-weight:600}
 .login-card input{width:100%}
+
+/* 设置页的分区导航：卡片太多，滚动时始终能点 */
+.subnav{position:sticky;top:0;z-index:20;display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px;margin:-4px 0 2px;
+  background:var(--bg2);border:1px solid var(--line);border-radius:12px;backdrop-filter:blur(6px)}
+.subnav a{font-size:12.5px;padding:3px 9px;border-radius:999px;color:var(--dim);border:1px solid transparent}
+.subnav a:hover{color:var(--fg);border-color:var(--line)}
+.subnav a:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+@media (max-width:720px){.subnav{overflow-x:auto;flex-wrap:nowrap;padding:6px 8px}.subnav a{white-space:nowrap}}

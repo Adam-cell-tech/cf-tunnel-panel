@@ -174,6 +174,20 @@ async function handler(req, res) {
     return sendJson(res, 200, { ok: true });
   }
 
+  // 静态资源不需要登录：登录页自己也要用 app.css，而且它们不含任何密钥。
+  // 放在鉴权之前还有个好处：Cloudflare 能把这些 URL 当公开资源缓存。
+  if (p.startsWith('/assets/') && (req.method === 'GET' || req.method === 'HEAD')) {
+    const name = path.basename(p.slice('/assets/'.length));
+    const file = path.join(ASSET_DIR, name);
+    if (fs.existsSync(file) && fs.statSync(file).isFile()) {
+      const type = ASSET_TYPES[path.extname(name).toLowerCase()] || 'application/octet-stream';
+      return serveText(req, res, fs.readFileSync(file), type, 'public, max-age=300',
+        { 'CDN-Cache-Control': 'public, max-age=86400', 'Cloudflare-CDN-Cache-Control': 'public, max-age=86400' });
+    }
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    return res.end('404');
+  }
+
   const auth = checkAuth(req);
   req.__who = auth.who || '(未登录)';
   // 角色权限矩阵：admin 全通；operator 只能碰运维类写接口；viewer 只读
@@ -267,21 +281,11 @@ async function handler(req, res) {
     }
   }
 
-  if (p.startsWith('/assets/')) {
-    const name = path.basename(p.slice('/assets/'.length));
-    const file = path.join(ASSET_DIR, name);
-    if (fs.existsSync(file) && fs.statSync(file).isFile()) {
-      const type = ASSET_TYPES[path.extname(name).toLowerCase()] || 'application/octet-stream';
-      return serveText(req, res, fs.readFileSync(file), type);
-    }
-    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-    return res.end('404');
-  }
-
   // 新版多页面
   const page = PAGES.find((x) => x.path === p || x.path === p.replace(/\/$/, ''));
   if (page) {
-    return serveText(req, res, pageShell(page.path, readPage(page.file), langOf(req)), 'text/html; charset=utf-8', 'no-store');
+    return serveText(req, res, pageShell(page.path, readPage(page.file), langOf(req)), 'text/html; charset=utf-8',
+      'no-store, no-transform', { 'Cloudflare-CDN-Cache-Control': 'no-store' });
   }
 
   // 旧版单页（保留以便随时回退）
@@ -1074,7 +1078,81 @@ async function handler(req, res) {
   }
   if (p === '/api/history') return sendJson(res, 200, { ok: true, points: rtHistory, max: HISTORY_MAX });
   if (p === '/api/notify/history') return sendJson(res, 200, { ok: true, items: notifyHistory.slice().reverse() });
+  if (p === '/api/notify/resend' && req.method === 'POST') {
+    let body = {};
+    try { body = await readBody(req); } catch { body = {}; }
+    const seqN = Number(body.seq || 0);
+    const entry = notifyHistory.find((x) => x.seq === seqN) || notifyHistory[notifyHistory.length - 1];
+    if (!entry) return sendJson(res, 400, { ok: false, error: '还没有任何通知记录可以重发' });
+    const n = state.settings.notify || {};
+    if (!n.url) return sendJson(res, 400, { ok: false, error: '还没配置通知地址（设置 → 掉线通知）' });
+    const sent = await notify(entry.event, entry.title, entry.text || '', { force: true, ignoreDisabled: true });
+    auditRecord({ actor: auth.who, ip: clientIpOf(req), method: 'POST', path: p, status: sent ? 200 : 502, action: '重发通知', target: `${entry.event} · ${entry.title}` });
+    if (!sent) return sendJson(res, 502, { ok: false, error: '重发失败，看下面的「通知发送记录」里最新一条的原因' });
+    return sendJson(res, 200, { ok: true, event: entry.event, title: entry.title });
+  }
+
   if (p === '/api/system') return sendJson(res, 200, { ok: true, ...systemInfo() });
+
+  // 清 Cloudflare 边缘缓存：不传 urls = 清空整个域名
+  if (p === '/api/cf/cache/purge' && req.method === 'POST') {
+    let body = {};
+    try { body = await readBody(req); } catch { body = {}; }
+    try {
+      const zone = (state.settings.cf || {}).zoneId;
+      if (!zone) throw new Error('还没填 Zone ID（设置 → Cloudflare API）');
+      const urls = Array.isArray(body.urls) ? body.urls.filter((u) => /^https?:\/\//.test(String(u))).slice(0, 30) : [];
+      const payload = urls.length ? { files: urls } : { purge_everything: true };
+      const r = await cfApi(`/zones/${zone}/purge_cache`, { method: 'POST', body: payload });
+      auditRecord({ actor: auth.who, ip: clientIpOf(req), method: 'POST', path: p, status: 200, action: '清理 Cloudflare 缓存', target: urls.length ? `${urls.length} 个 URL` : '整个域名' });
+      log(urls.length ? `已清理 ${urls.length} 个 URL 的边缘缓存` : '已清空整个域名的边缘缓存', 'panel');
+      return sendJson(res, 200, { ok: true, purged: urls.length ? urls.length : 'all', result: (r && r.result) || null });
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: e.message });
+    }
+  }
+
+  // 读 / 建「缓存静态资源」这条 Cache Rule（/assets/* 边缘缓存 1 天，其余不缓存）
+  if (p === '/api/cf/cache/rule' && req.method === 'GET') {
+    try {
+      const zone = (state.settings.cf || {}).zoneId;
+      if (!zone) throw new Error('还没填 Zone ID（设置 → Cloudflare API）');
+      const r = await cfApi(`/zones/${zone}/rulesets/phases/http_request_cache_settings/entrypoint`);
+      const rules = (((r && r.rules) || [])).map((x) => ({ id: x.id, description: x.description, enabled: x.enabled, expression: x.expression }));
+      return sendJson(res, 200, { ok: true, rules });
+    } catch (e) {
+      return sendJson(res, 200, { ok: false, rules: [], error: e.message });
+    }
+  }
+  if (p === '/api/cf/cache/rule' && req.method === 'POST') {
+    let body = {};
+    try { body = await readBody(req); } catch { body = {}; }
+    try {
+      const zone = (state.settings.cf || {}).zoneId;
+      if (!zone) throw new Error('还没填 Zone ID（设置 → Cloudflare API）');
+      const desc = 'cf-tunnel-panel: cache /assets/* at the edge';
+      let cur = null;
+      try { const g = await cfApi(`/zones/${zone}/rulesets/phases/http_request_cache_settings/entrypoint`); cur = g || null; } catch { cur = null; }
+      const rules = ((cur && cur.rules) || []).filter((x) => x.description !== desc);
+      if (body.enable !== false) {
+        rules.push({
+          description: desc,
+          expression: '(starts_with(http.request.uri.path, "/assets/"))',
+          action: 'set_cache_settings',
+          action_parameters: { cache: true, edge_ttl: { mode: 'override_origin', default: 86400 }, browser_ttl: { mode: 'respect_origin' } },
+          enabled: true,
+        });
+      }
+      const r = cur
+        ? await cfApi(`/zones/${zone}/rulesets/${cur.id}`, { method: 'PUT', body: { rules } })
+        : await cfApi(`/zones/${zone}/rulesets/phases/http_request_cache_settings/entrypoint`, { method: 'PUT', body: { rules } });
+      auditRecord({ actor: auth.who, ip: clientIpOf(req), method: 'POST', path: p, status: 200, action: body.enable === false ? '关闭静态资源缓存规则' : '开启静态资源缓存规则', target: zone });
+      log(body.enable === false ? '已关闭静态资源缓存规则' : '已开启静态资源缓存规则（/assets/* 边缘 1 天）', 'panel');
+      return sendJson(res, 200, { ok: true, rules: ((r && r.rules) || []).length });
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: e.message + '（这个操作需要 Token 带 Zone → Cache Rules → Edit 权限，也可以在 Cloudflare 后台手动建）' });
+    }
+  }
 
   if (p === '/api/cf/verify' && req.method === 'GET') {
     try {

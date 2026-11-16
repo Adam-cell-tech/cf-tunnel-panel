@@ -441,3 +441,39 @@ async function runBench() {
 });
 
 })();
+
+(function bindCacheTools() {
+  const msg = document.getElementById('cacheRuleMsg');
+  const out = document.getElementById('cacheRuleOut');
+  const pmsg = document.getElementById('purgeMsg');
+  const on = document.getElementById('btnCacheRuleState');
+  if (!on) return;
+  const show = (t) => { if (out) { out.textContent = t; out.classList.remove('hidden'); } };
+  on.addEventListener('click', async () => {
+    msg.textContent = '读取中…';
+    try {
+      const d = await api('/api/cf/cache/rule');
+      if (!d.ok) { msg.textContent = d.error || '读不到'; show(''); return; }
+      msg.textContent = (d.rules || []).length + ' 条缓存规则';
+      show((d.rules || []).map((r) => `${r.enabled ? '✅' : '⏸'} ${r.description || r.id}\n   ${r.expression}`).join('\n\n') || '（这个域名的缓存阶段还没有任何规则）');
+    } catch (e) { msg.textContent = e.message; }
+  });
+  document.getElementById('btnCacheRuleOn').addEventListener('click', async () => {
+    msg.textContent = '写入中…';
+    try { const d = await api('/api/cf/cache/rule', { method: 'POST', body: { enable: true } }); msg.textContent = '已开启（共 ' + d.rules + ' 条规则）'; }
+    catch (e) { msg.textContent = e.message; }
+  });
+  document.getElementById('btnCacheRuleOff').addEventListener('click', async () => {
+    if (!confirm('关掉静态资源边缘缓存？')) return;
+    msg.textContent = '写入中…';
+    try { const d = await api('/api/cf/cache/rule', { method: 'POST', body: { enable: false } }); msg.textContent = '已关闭（剩 ' + d.rules + ' 条规则）'; }
+    catch (e) { msg.textContent = e.message; }
+  });
+  document.getElementById('btnPurge').addEventListener('click', async () => {
+    const urls = (document.getElementById('purgeUrls').value || '').split(',').map((x) => x.trim()).filter(Boolean);
+    if (!confirm(urls.length ? `清理这 ${urls.length} 个 URL 的边缘缓存？` : '清空整个域名的边缘缓存？')) return;
+    pmsg.textContent = '清理中…';
+    try { const d = await api('/api/cf/cache/purge', { method: 'POST', body: { urls } }); pmsg.textContent = '已清理：' + d.purged; }
+    catch (e) { pmsg.textContent = e.message; }
+  });
+})();

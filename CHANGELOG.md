@@ -12,6 +12,20 @@
 - `package.json` 增加 `engines.node >= 20`。
 - 测试：API 113、DOM 75。
 
+## v0.13.2 — 2026-11-16
+
+### 新增
+- **Cloudflare 边缘缓存**：静态资源响应加 `Cache-Control: public, max-age=300` + `Cloudflare-CDN-Cache-Control: public, max-age=86400`；新增 `GET/POST /api/cf/cache/rule`（自动建/删「/assets/* 边缘缓存 1 天」的 Cache Rule）与 `POST /api/cf/cache/purge`（按 URL 或整域名清边缘缓存）；工具箱页新增「边缘缓存」操作区。实测公网 `cf-cache-status` 由 `DYNAMIC` → `MISS` → `HIT`（`age` 递增）。
+- **通知重发**：`POST /api/notify/resend {seq}`，设置页「通知发送记录」每行加「重发」按钮（绕过静默时段/冷却/事件开关，用于验证 webhook 到底通不通）。
+- **设置页分区导航**：卡片加 `#sec-*` 锚点并新增吸顶 `.subnav`，13 个卡片可一键跳转，窄屏横向滚动。
+
+### 变更
+- `/assets/*` **不再要求登录**（放在鉴权之前）：登录页自己也要加载 `app.css`，之前未登录时 CSS 是 401，登录页等于无样式；顺带让 Cloudflare 能把这些 URL 当公开资源缓存。
+- JSON 响应 gzip：`sendJson` 在体积 >1KB 且客户端接受 gzip 时压缩（`/api/state` 4851B → 1559B，降 68%）。
+- 文本响应的 ETag 区分编码（`-gz` / `-id` 后缀），避免中间缓存把压缩字节发给不支持 gzip 的客户端。
+
+### 修复
+- `/api/cf/cache/rule` 取 Cloudflare 返回值时多套了一层 `.result`（`cfApi` 已经解包），导致规则建好了却报 `rules: 0`。
 ## v0.13.1 — 2026-11-16
 
 ### 新增

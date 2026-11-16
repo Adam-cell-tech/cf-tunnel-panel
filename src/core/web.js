@@ -138,10 +138,15 @@ function loginPage({ next = '/', error = '', lang = 'zh' } = {}) {
 }
 
 // 文本响应：带 ETag（命中 304）+ gzip，省流量也省得每次重传
-function serveText(req, res, body, type, cache = 'no-cache') {
+// extra 用来加 CDN 侧的头（例如 Cloudflare-CDN-Cache-Control：让边缘缓存更久，浏览器只缓存 5 分钟）
+function serveText(req, res, body, type, cache = 'no-cache', extra = {}) {
   const buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body), 'utf8');
-  const etag = 'W/"' + buf.length.toString(16) + '-' + crypto.createHash('sha1').update(buf).digest('hex').slice(0, 12) + '"';
-  const headers = { 'Content-Type': type, 'Cache-Control': cache, ETag: etag, Vary: 'Accept-Encoding', ...SEC_HEADERS };
+  const ae0 = String(req.headers['accept-encoding'] || '');
+  const canGz = buf.length > 512 && /\bgzip\b/.test(ae0) && /text|json|javascript|svg/.test(type);
+  // ETag 必须区分「压缩版 / 原版」：同一个 URL 两种编码若共用一个 ETag，
+  // 中间缓存可能把 gzip 的字节当原文发给不支持 gzip 的客户端。
+  const etag = 'W/"' + buf.length.toString(16) + '-' + crypto.createHash('sha1').update(buf).digest('hex').slice(0, 12) + (canGz ? '-gz' : '-id') + '"';
+  const headers = Object.assign({ 'Content-Type': type, 'Cache-Control': cache, ETag: etag, Vary: 'Accept-Encoding' }, SEC_HEADERS, extra);
   if (/^text\/html/.test(type)) {
     headers['Content-Security-Policy'] = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'";
   }
@@ -149,8 +154,7 @@ function serveText(req, res, body, type, cache = 'no-cache') {
     res.writeHead(304, headers);
     return res.end();
   }
-  const ae = String(req.headers['accept-encoding'] || '');
-  if (buf.length > 512 && /\bgzip\b/.test(ae) && /text|json|javascript|svg/.test(type)) {
+  if (canGz) {
     const gz = zlib.gzipSync(buf, { level: 6 });
     headers['Content-Encoding'] = 'gzip';
     headers['Content-Length'] = gz.length;

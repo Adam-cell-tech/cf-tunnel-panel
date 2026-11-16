@@ -146,6 +146,11 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('设置: 备份每页 ≤5 行', bk <= 5, String(bk));
     chk('设置: 维护模式字段回填', typeof doc.querySelector('#maintOn').checked === 'boolean', '');
     chk('设置: 有分页控件', !!doc.querySelector('#backupList .pager') || bk < 5, '');
+    const sn = doc.querySelectorAll('.subnav a').length;
+    chk('设置: 分区导航 ≥10 个锚点', sn >= 10, String(sn));
+    chk('设置: 分区锚点都能对上卡片', !!doc.querySelector('#sec-backup') && !!doc.querySelector('#sec-totp'), '');
+    const rh = doc.querySelectorAll('#notifyHist [data-resend]').length;
+    chk('设置: 通知记录带重发按钮', rh >= 0, String(rh));
   }
 
   // ---- v0.8.0：P0/P1/P2 新交互 ----

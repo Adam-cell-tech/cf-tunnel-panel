@@ -101,6 +101,23 @@
       </div>
       <div class="hint" id="cfTip">Token 权限只要 <b>Account · Cloudflare Tunnel · Edit</b> 和 <b>Zone · DNS · Edit</b> 两项就够；再加上 <b>Account · Account Settings · Read</b> 和 <b>Zone · Zone · Read</b>，面板才能自动列出账号和域名。</div>
       <div id="cfList"></div>
+      <div class="sub" style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+        <b>边缘缓存</b>：静态资源（/assets/*）本机已下发 <code class="mono">Cache-Control: public, max-age=300</code> +
+        <code class="mono">Cloudflare-CDN-Cache-Control: max-age=86400</code>。要让 Cloudflare 真缓存，还需要一条 Cache Rule
+        （需 Token 带 <code class="mono">Zone → Cache Rules → Edit</code>；没有权限就去后台手建，表达式一样）。
+      </div>
+      <div class="row" style="margin-top:8px;align-items:center;flex-wrap:wrap">
+        <button class="sm ghost" id="btnCacheRuleState">查看缓存规则</button>
+        <button class="sm" id="btnCacheRuleOn">开启 /assets 边缘缓存</button>
+        <button class="sm ghost" id="btnCacheRuleOff">关闭</button>
+        <span class="muted" id="cacheRuleMsg"></span>
+      </div>
+      <pre class="out hidden" id="cacheRuleOut"></pre>
+      <div class="row" style="margin-top:8px;align-items:center;flex-wrap:wrap">
+        <input id="purgeUrls" placeholder="要清理的 URL（逗号分隔，留空 = 清空整个域名）" style="flex:1;min-width:260px" />
+        <button class="sm ghost" id="btnPurge">清理边缘缓存</button>
+        <span class="muted" id="purgeMsg"></span>
+      </div>
       <!-- 公共主机名：直接读写隧道 ingress，不用再去 Cloudflare 后台点 -->
       <div id="hostBox" class="hidden" style="margin-top:12px;border-top:1px dashed var(--line);padding-top:12px">
         <div class="row" style="justify-content:space-between;align-items:center">

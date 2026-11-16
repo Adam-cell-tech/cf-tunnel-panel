@@ -5,6 +5,18 @@
 
 ---
 
+## ✅ v0.13.2 — 传输层与体验收尾
+
+| 项 | 实现要点 |
+| --- | --- |
+| 边缘缓存 | 资源头 `public, max-age=300` + `Cloudflare-CDN-Cache-Control: 86400`；`GET/POST /api/cf/cache/rule`（Cache Rule）、`POST /api/cf/cache/purge`；实测 DYNAMIC→MISS→HIT |
+| 静态资源免登录 | 移到 `checkAuth` 之前（登录页要 app.css；也让 CF 能公开缓存） |
+| JSON gzip | `sendJson` >1KB 且接受 gzip 时压缩，`/api/state` 降 68% |
+| ETag 分编码 | `-gz` / `-id` 后缀，避免代理把压缩体发给不支持的客户端 |
+| 通知重发 | `POST /api/notify/resend`（force + ignoreDisabled）+ 设置页按钮 |
+| 分区导航 | 设置页 `.subnav` 吸顶 13 锚点 |
+| 测试 | API 156（+9：缓存头/匿名资源/ETag/gzip/重发/缓存规则）、DOM 78（+3：子导航/锚点/重发按钮） |
+
 ## ✅ v0.13.1 — 恢复码轮换 + 端到端测试补齐
 
 | 项 | 实现要点 |

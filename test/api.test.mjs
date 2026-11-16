@@ -465,6 +465,38 @@ ok('退出全部设备：返回踢掉数量并清 cookie', all.status === 200 &&
   ok('TOTP：关闭后 enabled=false', st3.d.state.settings.totp.enabled === false);
 }
 
+// ========== 传输层：静态资源缓存 + JSON gzip + 通知重发 ==========
+{
+  // 静态资源不需要登录（登录页自己要加载 app.css）
+  const anon = await rawFetch(B + '/assets/app.css', { headers: { 'Accept-Encoding': 'gzip' } });
+  ok('静态资源可匿名访问', anon.status === 200, String(anon.status));
+  const ac = anon.headers.get('cache-control') || '';
+  const cdn = anon.headers.get('cloudflare-cdn-cache-control') || anon.headers.get('cdn-cache-control') || '';
+  ok('静态资源带浏览器缓存头', /public/.test(ac) && /max-age=300/.test(ac), ac);
+  ok('静态资源带边缘缓存头', /max-age=86400/.test(cdn), cdn);
+  ok('静态资源 ETag 区分编码', /-gz"$|-id"$/.test(anon.headers.get('etag') || ''), anon.headers.get('etag') || '');
+
+  // 页面绝不能被 CDN 缓存（里面有版本号、登录态）
+  const page = await fetch(B + '/settings');
+  ok('页面响应禁止 CDN 缓存', /no-store/.test(page.headers.get('cloudflare-cdn-cache-control') || ''), String(page.headers.get('cloudflare-cdn-cache-control')));
+
+  // JSON 压缩：/api/state 明文 ~5KB，gzip 后应显著变小
+  const gz = await rawFetch(B + '/api/state', { headers: { Authorization: basic, 'Accept-Encoding': 'gzip' } });
+  const gzLen = Number(gz.headers.get('content-length') || 0);
+  ok('大 JSON 响应走 gzip', /gzip/.test(gz.headers.get('content-encoding') || '') && gzLen > 0 && gzLen < 4800, `${gz.headers.get('content-encoding')} ${gzLen}B`);
+}
+
+{
+  // 通知重发：没有地址 / 没有记录时给人话错误，不是 500
+  const r = await j('/api/notify/resend', { method: 'POST', body: {} });
+  ok('重发通知：无记录时 400 且有人话原因', r.status === 400 && /通知/.test(r.d.error || ''), `${r.status} ${r.d.error || ''}`);
+  // 缓存规则：不管 token 有没有权限，接口都要给出结构化结果
+  const cr = await j('/api/cf/cache/rule');
+  ok('缓存规则：接口返回结构稳定', cr.status === 200 && typeof cr.d.ok === 'boolean' && Array.isArray(cr.d.rules), `${cr.status}`);
+  const pg = await j('/api/cf/cache/purge', { method: 'POST', body: { urls: [] } });
+  ok('清理缓存：未配置/无权限时 400 不崩', pg.status === 200 || pg.status === 400, String(pg.status));
+}
+
 // ========== 角色：operator / viewer ==========
 {
   const setOp = await j('/api/operator', { method: 'POST', body: { user: 'qa-oper', pass: 'qapass123' } });

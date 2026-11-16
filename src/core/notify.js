@@ -29,8 +29,9 @@ function inQuietHours(spec, now = new Date()) {
   });
 }
 
-function recordNotify(event, title, status, extra = '') {
-  notifyHistory.push({ t: Date.now(), event, title, status, extra: String(extra || '') });
+let notifySeq = 0;
+function recordNotify(event, title, status, extra = '', text = '') {
+  notifyHistory.push({ seq: ++notifySeq, t: Date.now(), event, title, status, extra: String(extra || ''), text: String(text || '') });
   if (notifyHistory.length > 50) notifyHistory.splice(0, notifyHistory.length - 50);
 }
 
@@ -43,18 +44,18 @@ async function notify(event, title, text, opts = {}) {
   const n = state.settings.notify || {};
   if (!n.url) return false;
   const ev = n.events || {};
-  if (ev[event] === false) return false;
+  if (ev[event] === false && !opts.ignoreDisabled) return false;
   if (!opts.force) {
     if (inQuietHours(n.quietHours)) {
       log(`通知被静默时段拦下（${event}，当前静默 ${n.quietHours}）`, 'panel');
-      recordNotify(event, title, 'skipped', '静默时段');
+      recordNotify(event, title, 'skipped', '静默时段', text);
       return false;
     }
     const cdMs = Math.max(0, Number(n.cooldownSec || 0) * 1000);
     const last = lastNotify.get(event) || 0;
     if (cdMs > 0 && Date.now() - last < cdMs) {
       log(`通知冷却中（${event}，距上次 ${Math.round((Date.now() - last) / 1000)}s < ${n.cooldownSec}s）`, 'panel');
-      recordNotify(event, title, 'skipped', '冷却中');
+      recordNotify(event, title, 'skipped', '冷却中', text);
       return false;
     }
     lastNotify.set(event, Date.now());
@@ -84,11 +85,11 @@ async function notify(event, title, text, opts = {}) {
     else if (n.format === 'bark') { url = url.replace(/\/+$/, '') + '/' + encodeURIComponent(title) + '/' + encodeURIComponent(text); body = '{}'; }
     const r = await fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(8000) });
     log(`通知已发送（${event}）HTTP ${r.status}`, 'panel');
-    recordNotify(event, title, r.ok ? 'ok' : 'fail', `HTTP ${r.status}`);
+    recordNotify(event, title, r.ok ? 'ok' : 'fail', `HTTP ${r.status}`, text);
     return r.ok;
   } catch (e) {
     log(`通知发送失败（${event}）：${e.message}`, 'panel');
-    recordNotify(event, title, 'fail', e.message);
+    recordNotify(event, title, 'fail', e.message, text);
     return false;
   }
 }

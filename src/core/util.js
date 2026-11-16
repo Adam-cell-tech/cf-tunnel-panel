@@ -1,4 +1,5 @@
 'use strict';
+const zlib = require('zlib');
 /**
  * 通用工具：日志环形缓冲、JSON 收发、解析器、限流、安全头
  * 从 src/server.js 按职责拆出（v0.9.0），仅做搬运，行为不变。
@@ -33,10 +34,23 @@ function log(line, source = 'panel') {
  * 直接塞给 cloudflared 只会得到 "Provided Tunnel token is not valid."，所以这里先"抠"出来。
  * token 本体 = base64url(JSON {a:账号, t:隧道id, s:密钥})。
  */
+/**
+ * JSON 响应。体积超过 1KB 且客户端接受 gzip 时压缩 —— 面板是走在隧道上的，
+ * 家宽上行只有 3.4Mbps，/api/state 这种 5KB 的响应压到 1.5KB 感知很明显。
+ * req 从 res.req 取（Node 自带），不用改所有调用点。
+ */
 function sendJson(res, code, obj) {
-  const body = JSON.stringify(obj);
-  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-  res.end(body);
+  const buf = Buffer.from(JSON.stringify(obj), 'utf8');
+  const req = res.req || {};
+  const ae = String((req.headers && req.headers['accept-encoding']) || '');
+  const base = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store, no-transform', Vary: 'Accept-Encoding' };
+  if (buf.length > 1024 && /\bgzip\b/.test(ae)) {
+    const gz = zlib.gzipSync(buf, { level: 6 });
+    res.writeHead(code, Object.assign(base, { 'Content-Encoding': 'gzip', 'Content-Length': gz.length }));
+    return res.end(gz);
+  }
+  res.writeHead(code, Object.assign(base, { 'Content-Length': buf.length }));
+  return res.end(buf);
 }
 
 function readBody(req, limit = 512 * 1024) {

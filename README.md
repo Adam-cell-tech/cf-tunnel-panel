@@ -580,3 +580,13 @@ The script snapshots the route table to `/tmp` before touching it and restores f
 | Recovery-code rotation | `POST /api/totp/recovery` takes a current TOTP code **or** one old recovery code and returns 10 fresh ones; the old set is voided. Settings → 2FA has the new "重新生成恢复码" button. Only hashes are stored. |
 | E2E coverage 8 → 23 | The real-Caddy suite now proves prefix stripping, prefix passthrough, basic auth (401/401/200), Host-based routing isolation, WebSocket 101 upgrade, maintenance 503 + `Retry-After`, IP blacklist 403, admin off 2019, access-log writer and `trusted_proxies` — and restores routes/settings in `finally`. |
 | Audit de-duplication | A request whose handler already logged a human-readable action no longer also emits the generic `POST /api/...` row. |
+
+### v0.13.2 highlights
+
+| Change | Detail |
+| --- | --- |
+| Edge caching for assets | Static files answer with `Cache-Control: public, max-age=300` and `Cloudflare-CDN-Cache-Control: public, max-age=86400`. Tools → *Edge cache* can create the matching Cache Rule and purge by URL or whole zone (`cf-cache-status` went `DYNAMIC` → `MISS` → `HIT`). |
+| Asset auth removed | `/assets/*` is served before authentication, because the login page itself needs `app.css` — it used to 401 and render unstyled. |
+| JSON gzip | Responses over 1 KB are gzipped when the client accepts it: `/api/state` 4851 B → 1559 B. |
+| Notify resend | `POST /api/notify/resend {seq}` + a *resend* button per row in Settings → notification log, bypassing quiet hours and cooldowns so you can prove the webhook works. |
+| Settings section nav | Sticky `.subnav` with 13 anchors. |

@@ -1377,3 +1377,13 @@ Access 集成、指标面板、TCP/UDP 支持等）与**技术选型理由**（�
 | 恢复码可重生成 | `POST /api/totp/recovery`：用当前验证码**或**一个旧恢复码，换回 10 个新恢复码，旧的立刻作废。设置页「二次验证」卡里有「重新生成恢复码」按钮，新码只显示一次，库里只存 sha256。 |
 | 端到端测试 8 → 23 项 | 真 Caddy 那一套现在验证：前缀剥离、前缀原样透传、基础认证三种情况、按 Host 的域名隔离、WebSocket 101 升级、维护模式 503 与 `Retry-After`、IP 黑名单 403、admin 不监听 2019、access log 与 `trusted_proxies`，并在 `finally` 里还原规则与设置。 |
 | 审计去重 | handler 已经记了人话动作的请求，不再额外写一条 `POST /api/...` 兜底记录。 |
+
+### v0.13.2 更新
+
+| 变化 | 说明 |
+| --- | --- |
+| 静态资源边缘缓存 | `/assets/*` 响应带 `Cache-Control: public, max-age=300` 与 `Cloudflare-CDN-Cache-Control: public, max-age=86400`；工具箱「边缘缓存」可一键建 Cache Rule、按 URL 或整域名清缓存（实测 `cf-cache-status` 由 `DYNAMIC` → `MISS` → `HIT`）。 |
+| 静态资源免登录 | `/assets/*` 移到鉴权之前——登录页自己要用 `app.css`，之前未登录是 401，登录页等于没样式。 |
+| JSON 压缩 | 超过 1KB 的 JSON 在客户端接受时 gzip：`/api/state` 4851B → 1559B。 |
+| 通知重发 | `POST /api/notify/resend {seq}` + 通知记录每行「重发」按钮，绕过静默与冷却，用来验证 webhook 通不通。 |
+| 设置页分区导航 | 吸顶 `.subnav`，13 个锚点一键跳转。 |

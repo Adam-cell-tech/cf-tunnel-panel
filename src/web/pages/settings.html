@@ -4,7 +4,12 @@
 </div>
 
 <div class="content stack">
-  <div class="card">
+  <nav class="subnav" aria-label="设置分区">
+    <a href="#sec-site">站点</a><a href="#sec-maint">维护</a><a href="#sec-security">安全</a><a href="#sec-notify">通知</a>
+    <a href="#sec-login">登录</a><a href="#sec-sessions">会话</a><a href="#sec-viewer">只读</a><a href="#sec-totp">双因子</a>
+    <a href="#sec-operator">运维</a><a href="#sec-nhist">通知记录</a><a href="#sec-backup">备份</a><a href="#sec-io">导入导出</a><a href="#sec-about">关于</a>
+  </nav>
+  <div id="sec-site" class="card">
     <div class="hd"><h2>站点</h2><div class="sub">只影响面板与 Caddy 的对外行为</div></div>
     <div class="bd stack">
       <div class="form-grid">
@@ -15,7 +20,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div id="sec-maint" class="card">
     <div class="hd"><h2>维护模式</h2><div class="sub">打开后整站返回 503，隧道和规则都不用动</div></div>
     <div class="bd stack">
       <label class="inline"><input class="chk" type="checkbox" id="maintOn" /> 开启维护模式</label>
@@ -26,7 +31,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div id="sec-security" class="card">
     <div class="hd"><h2>安全</h2><div class="sub">IP 黑名单最先匹配；限流需要自定义 Caddy 镜像</div></div>
     <div class="bd stack">
       <div class="field"><label>全局 IP 黑名单（逗号分隔，支持 CIDR）</label><input id="ipDeny" placeholder="1.2.3.4, 10.0.0.0/8" /></div>
@@ -39,7 +44,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div id="sec-notify" class="card">
     <div class="hd"><h2>掉线通知</h2><div class="sub">出口掉线 / 换域名 / Caddy 下发失败时推一条</div></div>
     <div class="bd stack">
       <div class="form-grid">
@@ -79,7 +84,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div id="sec-login" class="card">
     <div class="hd"><h2>面板登录</h2><div class="sub">设置后浏览器会弹 HTTP Basic 登录框</div></div>
     <div class="bd">
       <div class="form-grid">
@@ -90,7 +95,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div id="sec-sessions" class="card">
     <div class="hd"><h2>登录会话</h2><div class="sub">谁在什么设备上登录着，可以逐个踢掉</div>
       <div class="right"><button class="sm" id="btnSessRefresh">刷新</button><button class="sm ghost" id="btnSessKickOthers">踢掉其它设备</button><button class="sm ghost" id="btnSessRevokeAll">退出全部设备</button></div></div>
     <div class="bd">
@@ -99,7 +104,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div id="sec-viewer" class="card">
     <div class="hd"><h2>只读账号</h2><div class="sub">给「只想看看状态」的人：能看所有页面，改不了任何配置</div></div>
     <div class="bd">
       <div class="form-grid">
@@ -111,7 +116,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div id="sec-totp" class="card">
     <div class="hd"><h2>二次验证（TOTP）</h2><div class="sub">手机验证器 App 的 6 位数字，登录时多一道关</div></div>
     <div class="bd">
       <div class="hint" id="totpMsg">开启后，浏览器登录要先输口令、再输验证器里的 6 位数字。curl / 脚本仍可用 Basic（当作机器凭证），所以别把账号口令写进公共脚本。</div>
@@ -150,7 +155,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div id="sec-operator" class="card">
     <div class="hd"><h2>运维账号（operator）</h2><div class="sub">能改隧道和规则，但碰不到凭证类设置</div></div>
     <div class="bd">
       <div class="form-grid">
@@ -170,18 +175,18 @@
     </div>
   </div>
 
-  <div class="card flush">
+  <div id="sec-nhist" class="card flush">
     <div class="hd"><h2>通知发送记录</h2><div class="sub">最近 50 条，包含被静默/冷却拦下的</div><div class="right"><button class="sm ghost" id="btnNotifyHist">刷新</button></div></div>
     <div class="bd tight" id="notifyHist"><div class="empty">读取中…</div></div>
   </div>
 
-  <div class="card flush">
+  <div id="sec-backup" class="card flush">
     <div class="hd"><h2>备份与回滚</h2><div class="sub">每次保存都会留一份，最多 20 份</div><div class="right"><button class="sm ghost" id="btnBackupRefresh">刷新</button></div></div>
     <div class="bd tight" id="backupList"><div class="empty">读取中…</div></div>
     <div class="bd tight" id="diffOut"></div>
   </div>
 
-  <div class="card">
+  <div id="sec-io" class="card">
     <div class="hd"><h2>导入 / 导出</h2><div class="sub">整份配置搬家；导出默认不含 token 与密码</div></div>
     <div class="bd">
       <div class="row">
@@ -193,7 +198,7 @@
     </div>
   </div>
 
-  <div class="card">
+  <div id="sec-about" class="card">
     <div class="hd"><h2>关于</h2></div>
     <div class="bd stack">
       <div class="row"><span class="tag" id="verTag">版本 —</span><a class="sm" href="/healthz" target="_blank" rel="noreferrer">/healthz</a><a class="sm" href="/metrics" target="_blank" rel="noreferrer">/metrics</a><a class="sm" href="/badge.svg" target="_blank" rel="noreferrer">徽章</a></div>
