@@ -27,6 +27,8 @@ function readPage(file) {
 
 // 整页外壳：左侧导航 + 顶部标题栏 + 页面主体
 function pageShell(active, body, lang = 'zh') {
+  // 备份实例的页面也要显示「另一个实例刚改过的」配置
+  try { require('./state').maybeReloadState(1000); } catch {}
   const title = state.settings.panelTitle || 'Cloudflare 隧道面板';
   const nav = PAGES.map((pg) => {
     const on = pg.path === active ? ' active' : '';

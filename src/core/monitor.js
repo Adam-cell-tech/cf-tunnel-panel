@@ -16,6 +16,20 @@ const { pushCaddy } = require('./pusher');
 const { readAccess, sampleHistory, securityAttempts } = require('./insight');
 const audit = require('./audit');
 const { notify } = require('./notify');
+const lease = require('./lease');
+
+/**
+ * 只有 leader 才发通知。
+ * 横向扩展下两个实例都跑这份巡检、读的是同一份 access.log，
+ * 不门控就会出现「一条故障，两份告警」——用户会以为出了两次事。
+ * 采样（历史曲线）仍各实例本地做，那是给各自页面看的。
+ */
+function alertOnlyLeader(event, title, text, opts) {
+  let leader = true;
+  try { leader = lease.isLeader(); } catch { leader = true; }
+  if (!leader) return;
+  return notify(event, title, text, opts);
+}
 let seenCaddyOk = true;
 let histTick = 0;
 let lastSpike = 0;      // 上次 5xx 告警时间（防刷屏）
@@ -32,7 +46,7 @@ function startMonitor() {
         const now = rt.status || 'stopped';
         const before = prevTunnelStatus.get(t.id);
         if (before && before !== 'running' && now === 'running' && t.enabled) {
-          notify('tunnelUp', `出口「${t.name}」已恢复`,
+          alertOnlyLeader('tunnelUp', `出口「${t.name}」已恢复`,
             `${t.name} 重新上线（此前状态：${before}）\n地址：${publicUrlOf(t) || '(等待分配)'}\n主机：${os.hostname()}`);
         }
         prevTunnelStatus.set(t.id, now);
@@ -48,7 +62,7 @@ function startMonitor() {
         const bad = recent.filter((r) => Number(r.status) >= 500);
         if (recent.length >= 20 && bad.length / recent.length >= 0.1 && now - lastSpike > 15 * 60 * 1000) {
           lastSpike = now;
-          notify('errorSpike', '面板：5 分钟内 5xx 比例偏高',
+          alertOnlyLeader('errorSpike', '面板：5 分钟内 5xx 比例偏高',
             `${bad.length}/${recent.length} 个请求是 5xx（${Math.round((bad.length / recent.length) * 100)}%）\n主机：${os.hostname()}`);
         }
         // 公网有人扫 /db /term 这类服务：单 IP 10 分钟内 401/403 超过 20 次就提醒一次
@@ -56,14 +70,14 @@ function startMonitor() {
         const worst = (sec.byIp || [])[0];
         if (worst && worst.count >= 20 && now - lastScanAlert > 30 * 60 * 1000) {
           lastScanAlert = now;
-          notify('authScan', '面板：有 IP 在反复试探受保护服务',
+          alertOnlyLeader('authScan', '面板：有 IP 在反复试探受保护服务',
             `${worst.ip} 在 10 分钟内被拒 ${worst.count} 次\n打的规则：${(worst.rules || []).join('、') || '未命中规则'}\n可以在「代理规则」里给该路径加 IP 白名单或基础认证。`);
         }
         const fails = (audit.list({ limit: 200 }).rows || []).filter((a) => a.action === '登录失败' && now - (a.at || 0) < 10 * 60 * 1000);
         if (fails.length >= 5 && now - lastLoginAlert > 15 * 60 * 1000) {
           lastLoginAlert = now;
           const ips = [...new Set(fails.map((f) => f.ip))].slice(0, 3).join('、');
-          notify('loginFail', '面板：10 分钟内多次登录失败',
+          alertOnlyLeader('loginFail', '面板：10 分钟内多次登录失败',
             `${fails.length} 次失败，来源：${ips}\n如果不是你自己，建议改口令并开只读账号。`);
         }
       } catch {}
@@ -75,16 +89,16 @@ function startMonitor() {
       const prev = seenRt.get(t.id);
       if (prev) {
         if (cur.status !== prev.status && (cur.status === 'error' || (prev.status === 'running' && cur.status === 'stopped'))) {
-          notify('tunnelDown', `出口「${t.name}」${cur.status === 'error' ? '异常' : '已停止'}`,
+          alertOnlyLeader('tunnelDown', `出口「${t.name}」${cur.status === 'error' ? '异常' : '已停止'}`,
             `${rt.lastError || '进程不在了'}\n模式：${t.mode}\n主机：${os.hostname()}`);
         }
         if (cur.url && prev.url && cur.url !== prev.url) {
-          notify('urlChange', `出口「${t.name}」换了公网域名`, `旧：${prev.url}\n新：${cur.url}`);
+          alertOnlyLeader('urlChange', `出口「${t.name}」换了公网域名`, `旧：${prev.url}\n新：${cur.url}`);
         }
       }
       seenRt.set(t.id, cur);
     }
-    if (seenCaddyOk && !caddy.ok) notify('caddyFail', 'Caddy 配置下发失败', String(caddy.error || '未知错误'));
+    if (seenCaddyOk && !caddy.ok) alertOnlyLeader('caddyFail', 'Caddy 配置下发失败', String(caddy.error || '未知错误'));
     seenCaddyOk = caddy.ok;
   }, 5000).unref();
 }

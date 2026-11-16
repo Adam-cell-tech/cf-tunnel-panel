@@ -32,6 +32,7 @@ const _util = require('./core/util');
 const { SEC_HEADERS, log, logSeq, logs, parseCidrs, parseHeaderLines, parseUpstream, rateLimited, readBody, rid, rlHits, sendJson, sseClients } = _util;
 
 const _state = require('./core/state');
+const { maybeReloadState } = _state;
 const { acquireLock } = _state;
 const { stateProxy, setState, deepDefault, defaultOrigin, defaultState, isFreshState, loadState, migrateState, newTunnel, normalizeTunnels, publicRoute, publicSettings, saveState, validateRoutes } = _state;
 // 注意：必须是 stateProxy（指向模块内部同一个对象），直接把 state 解构出来会拿到
@@ -339,6 +340,7 @@ async function handler(req, res) {
   }
 
   if (p === '/api/state' && req.method === 'GET') {
+    maybeReloadState();   // 另一实例可能刚改过配置
     return sendJson(res, 200, {
       version: VERSION,
       state: {
@@ -448,8 +450,15 @@ async function handler(req, res) {
   if (p === '/api/audit.csv' && req.method === 'GET') {
     const url = new URL(req.url, 'http://x');
     const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 2000, 1), 5000);
-    const items = auditList({ limit, q: url.searchParams.get('q') || '' }).items || [];
-    const esc = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+    const items = auditList({ limit, q: url.searchParams.get('q') || '' }).rows || [];
+    // CSV 单元格：①引号双写；②防 Excel 公式注入 —— 以 = + - @ 开头的单元格
+    // 会被 Excel 当公式执行（规则名/对象名都是用户可填的），前面垫一个单引号。
+    const cell = (v) => {
+      let t = String(v == null ? '' : v);
+      if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
+      return `"${t.replace(/"/g, '""')}"`;
+    };
+    const esc = cell;
     const head = ['时间', '谁', 'IP', '方法', '路径', '状态', '耗时ms', '动作', '对象', '结果'];
     const lines = [head.map(esc).join(',')];
     for (const a of items) {
@@ -593,7 +602,14 @@ async function handler(req, res) {
       }
       saveState('settings');
       await pushCaddy();
-      return sendJson(res, 200, { ok: true, settings: publicSettings(), caddy });
+      // 有些选项在当前镜像里根本执行不了（例如标准 caddy 没有 rate_limit 模块）。
+      // 静默失效比报错更糟：用户以为开了限流，其实一条都没拦。这里显式回告。
+      const warnings = [];
+      const rl = (state.settings.security || {}).rateLimit || {};
+      if (rl.enabled && process.env.CADDY_RATELIMIT !== '1') {
+        warnings.push('限流已勾选，但当前 Caddy 镜像不含 rate_limit 模块，实际没有生效（见 docs/RATELIMIT.md，需自定义镜像并设 CADDY_RATELIMIT=1）');
+      }
+      return sendJson(res, 200, { ok: true, settings: publicSettings(), caddy, warnings });
     } catch (e) {
       return sendJson(res, 400, { ok: false, error: e.message });
     }
@@ -673,9 +689,8 @@ async function handler(req, res) {
     else if (oPass) state.operator.pass = secret.hash(oPass);
     saveState('operator');
     clearBasicCache();
-    const kicked = oUser ? session.revokeAll() : 0;
-    if (kicked) res.setHeader('Set-Cookie', session.clearCookieHeader());
-    log(oUser ? `运维账号已设置：${oUser}（旧会话已全部失效）` : '运维账号已关闭', 'panel');
+    const kicked = oUser ? session.revokeUser(oUser, auth.sid) : 0;
+    log(oUser ? `运维账号已设置：${oUser}` + (kicked ? `（该账号 ${kicked} 个会话已失效）` : '') : '运维账号已关闭', 'panel');
     return sendJson(res, 200, { ok: true, operator: { user: oUser, hasPass: !!state.operator.pass }, revoked: kicked, relogin: kicked > 0 });
   }
 
@@ -759,6 +774,7 @@ async function handler(req, res) {
   if (p === '/api/qr' && req.method === 'GET') {
     const text = url.searchParams.get('text') || state.tunnels.map(publicUrlOf).filter(Boolean)[0] || '';
     if (!text) return sendJson(res, 400, { ok: false, error: '没有可编码的内容' });
+    if (text.length > 1200) return sendJson(res, 400, { ok: false, error: '内容太长（最多 1200 字符），二维码会密到扫不出来' });
     try {
       return sendJson(res, 200, { ok: true, text, dataUrl: await QRCode.toDataURL(text, { margin: 1, width: 360, errorCorrectionLevel: 'M' }) });
     } catch (e) {
@@ -826,6 +842,11 @@ async function handler(req, res) {
 
   if (p === '/api/export' && req.method === 'GET') {
     const full = url.searchParams.get('full') === '1';
+    // 含密钥的导出只给管理员：GET 对「只读/运维」账号都是放行的，
+    // 不加这道门，只读账号点一下就能把隧道 token、CF API token、TOTP 密钥全导出。
+    if (full && (auth.role || 'admin') !== 'admin') {
+      return sendJson(res, 403, { ok: false, code: 'readonly', error: '只有管理员能导出含密钥的配置' });
+    }
     const copy = JSON.parse(JSON.stringify(state));
     if (!full) {
       (copy.tunnels || []).forEach((t) => { t.token = ''; });
@@ -1020,9 +1041,9 @@ async function handler(req, res) {
       }
       saveState('viewer');
       clearBasicCache();
-      const kickedViewer = session.revokeAll();
-      if (kickedViewer) res.setHeader('Set-Cookie', session.clearCookieHeader());
-      log(user ? `已设置只读账号 ${user}` : '已关闭只读账号', 'panel');
+      // 只踢「这个只读账号」自己的会话：管理员在设置页加/改只读账号，不该把自己踢下线
+      const kickedViewer = user ? session.revokeUser(user, auth.sid) : 0;
+      log(user ? `已设置只读账号 ${user}` + (kickedViewer ? `（该账号 ${kickedViewer} 个会话已失效）` : '') : '已关闭只读账号', 'panel');
       return sendJson(res, 200, { ok: true, viewer: { user: state.viewer.user, hasPass: !!state.viewer.pass }, relogin: kickedViewer > 0, revoked: kickedViewer });
     } catch (e) {
       return sendJson(res, 400, { ok: false, error: e.message });

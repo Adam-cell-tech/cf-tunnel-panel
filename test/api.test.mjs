@@ -759,6 +759,59 @@ try {
   ok('i18n：词典规模 ≥ 480 条', dictKeys >= 480, String(dictKeys));
 }
 
+// ========== 横向扩展：跨实例共享（会话 / 配置 / 审计）==========
+{
+  // 会话是共享的：另一个实例登录的会话在这里也要认（本机跑不出双实例，就验「撤销后立刻失效」）
+  const l1 = await rawFetch(B + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: 'admin', pass: PASS }) });
+  const ck = String(l1.headers.get('set-cookie') || '').split(';')[0];
+  ok('会话：登录拿到 cookie', /^cfp_sid=/.test(ck), ck.slice(0, 16));
+
+  // 只读账号：设它不该把管理员踢下线（早先 revokeAll 就是这个坑）
+  const ro1 = await rawFetch(B + '/api/viewer', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: basic }, body: JSON.stringify({ user: 'qa-ro2', pass: 'qaropass1' }) });
+  ok('只读账号：可设置', ro1.status === 200, String(ro1.status));
+  const stillAdmin = await rawFetch(B + '/api/state', { headers: { Authorization: basic } });
+  ok('只读账号：设置后管理员仍可用', stillAdmin.status === 200, String(stillAdmin.status));
+
+  const roLogin = await rawFetch(B + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: 'qa-ro2', pass: 'qaropass1' }) });
+  const roCk = String(roLogin.headers.get('set-cookie') || '').split(';')[0];
+  const roState = await rawFetch(B + '/api/state', { headers: { cookie: roCk } });
+  ok('只读账号：能登录并只读', roState.status === 200, String(roState.status));
+
+  // 只读账号不能导出含密钥的配置（GET 对只读是放行的，必须单独挡）
+  const roFull = await rawFetch(B + '/api/export?full=1', { headers: { cookie: roCk } });
+  ok('只读账号：不能导出含密钥配置（403）', roFull.status === 403, String(roFull.status));
+  const roPlain = await rawFetch(B + '/api/export', { headers: { cookie: roCk } });
+  ok('只读账号：脱敏导出仍可用', roPlain.status === 200, String(roPlain.status));
+
+  // 改只读口令：只踢这个账号的会话，不动管理员
+  const ro2 = await rawFetch(B + '/api/viewer', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: basic }, body: JSON.stringify({ user: 'qa-ro2', pass: 'qaropass2' }) });
+  ok('只读账号：改口令返回踢掉的会话数', ro2.status === 200, String(ro2.status));
+  await new Promise((r) => setTimeout(r, 300));
+  const roAfter = await rawFetch(B + '/api/state', { headers: { cookie: roCk } });
+  ok('只读账号：改口令后旧会话失效', roAfter.status === 401 || roAfter.status === 302, String(roAfter.status));
+  const adminAfter = await rawFetch(B + '/api/state', { headers: { Authorization: basic } });
+  ok('只读账号：改口令不影响管理员', adminAfter.status === 200, String(adminAfter.status));
+  await rawFetch(B + '/api/viewer', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: basic }, body: JSON.stringify({ user: '' }) });
+
+  // 审计 CSV：真的带数据行（曾经字段名写错，导出只有表头）
+  await j('/api/routes', { method: 'POST', body: { routes: (await j('/api/state')).d.state.routes } });
+  const csv = await rawFetch(B + '/api/audit.csv?limit=20', { headers: { Authorization: basic } });
+  const csvText = await csv.text();
+  const csvRows = csvText.split('\r\n').filter((x) => x.trim().length > 0);
+  ok('审计 CSV：除表头外有数据行', csvRows.length >= 2, `行数=${csvRows.length}`);
+  ok('审计 CSV：含动作列内容', /修改代理规则|保存|登录/.test(csvText), '');
+
+  // 链路自测：必须能把 Host 发出去（fetch 不能覆盖 Host，改用 http.request）
+  const cur = await j('/api/curl', { method: 'POST', body: { path: '/?__host=localhost' } });
+  ok('链路自测：回显 Host', cur.status === 200 && cur.d.host === 'localhost', JSON.stringify(cur.d.host));
+
+  // 配置跨实例可见：本实例写完后 /api/state 立刻读到
+  const t1 = await j('/api/settings', { method: 'POST', body: { panelTitle: '横向扩展测试' } });
+  const t2 = await j('/api/state');
+  ok('配置：写入后立即生效', t2.d.state.settings.panelTitle === '横向扩展测试', t2.d.state.settings.panelTitle || '');
+  await j('/api/settings', { method: 'POST', body: { panelTitle: 'Cloudflare 隧道面板' } });
+}
+
 await restoreRoutes();
 
 console.log(`\n${pass}/${pass + fail} 通过`);

@@ -12,6 +12,9 @@ const path=require('path');
 const { BACKUP_DIR, DATA_DIR, LOGLEVELS, PROTOCOLS, STATE_FILE } = require('./paths');
 const { log, parseCidrs, parseHeaderLines, parseUpstream, rid } = require('./util');
 let state = defaultState();
+let lastMtime = 0;        // 上次读到的 state.json mtime
+let lastWriteAt = 0;      // 本实例上次写盘的时刻
+let lastCheckAt = 0;
 
 function defaultState() {
   return {
@@ -163,6 +166,10 @@ let freshState = false;
 
 function loadState() {
   try {
+    const st = fs.statSync(STATE_FILE);
+    lastMtime = st.mtimeMs || 0;
+  } catch { /* 文件不存在时由下面的 catch 处理 */ }
+  try {
     const raw = fs.readFileSync(STATE_FILE, 'utf8');
     const parsed = JSON.parse(raw);
     migrateState(parsed);
@@ -181,11 +188,43 @@ function isFreshState() {
   return freshState;
 }
 
+
+/**
+ * 另一实例改了配置 → 本实例的 state 也要跟着刷新（横向扩展）。
+ *
+ * 为什么必须有：Caddy 会把页面请求轮流发给两个实例，如果备份实例一直用
+ * 启动时那份 state，用户改完规则切到另一个实例的页面就会看到旧配置，
+ * 甚至会以为自己没保存成功。
+ *
+ * 只在磁盘比我们「新」时才重新加载，并且不会覆盖本实例刚写下去的内容。
+ */
+function maybeReloadState(maxAgeMs = 2000) {
+  const now = Date.now();
+  if (now - lastCheckAt < maxAgeMs) return false;
+  lastCheckAt = now;
+  let mtime = 0;
+  try { mtime = fs.statSync(STATE_FILE).mtimeMs || 0; } catch { return false; }
+  if (!mtime || mtime <= lastMtime || mtime <= lastWriteAt) return false;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+    migrateState(parsed);
+    const next = deepDefault(parsed, defaultState());
+    next.version = 3;
+    state = next;
+    normalizeTunnels();
+    lastMtime = mtime;
+    log('检测到另一个实例改了配置，已重新加载 state.json', 'panel');
+    return true;
+  } catch { return false; }
+}
+
 function saveState(reason = 'save') {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const tmp = STATE_FILE + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(state, null, 2), { mode: 0o600 });
   fs.renameSync(tmp, STATE_FILE);
+  lastWriteAt = Date.now();
+  try { lastMtime = fs.statSync(STATE_FILE).mtimeMs || lastMtime; } catch {}
   // 每次保存留一份滚动备份，最多 20 份（小白改坏了可以回滚）
   try {
     fs.mkdirSync(BACKUP_DIR, { recursive: true });
@@ -342,4 +381,4 @@ const { LB_POLICIES, METHODS } = require('./paths');
  */
 function setState(next) { state = next; }
 
-module.exports = { isFreshState, acquireLock, stateProxy, setState, deepDefault, defaultOrigin, defaultState, loadState, migrateState, newTunnel, normalizeTunnels, publicRoute, publicSettings, saveState, state, validateRoutes };
+module.exports = { isFreshState, maybeReloadState, acquireLock, stateProxy, setState, deepDefault, defaultOrigin, defaultState, loadState, migrateState, newTunnel, normalizeTunnels, publicRoute, publicSettings, saveState, state, validateRoutes };

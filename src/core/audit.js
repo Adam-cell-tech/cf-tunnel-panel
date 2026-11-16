@@ -145,10 +145,13 @@ function byHour(hours = 12) {
 /** 读审计：内存优先；进程刚重启时回落到文件 */
 function list({ limit = 100, q = '' } = {}) {
   const n = Math.min(Math.max(Number(limit) || 100, 1), 500);
-  let rows = buffer.slice();
-  if (!rows.length) rows = readFileTail();
+  // 读文件而不是只读内存：横向扩展下另一个实例记的条目也要看得见，
+  // 重启后历史也还在（内存环形只是写盘失败的兜底）。
+  let rows = readFileTail();
+  if (!rows.length) rows = buffer.slice();
+  const total = rows.length;
   rows = rows.filter((r) => matches(r, q)).reverse().slice(0, n);
-  return { ok: true, available: rows.length > 0 || buffer.length > 0, count: buffer.length, rows };
+  return { ok: true, available: rows.length > 0 || total > 0, count: total, rows };
 }
 
 function readFileTail() {

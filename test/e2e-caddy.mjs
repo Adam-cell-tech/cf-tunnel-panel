@@ -261,6 +261,34 @@ function rawGet(path, host, extra = '') {
     ok('409 里指出谁是 leader', !!(wd.leader), String(wd.leader || ''));
     const lead = await j('/healthz');
     ok('leader 仍是原来那个', lead.d.mode === 'leader', String(lead.d.mode));
+
+    // 会话跨实例：在 leader 登录的会话，备份实例也必须认（否则页面被轮询到备份实例就掉登录）
+    // 没开面板登录（没有面板账号）时无从登录，跳过这两条。
+    const st0 = (await j('/api/state')).d.state || {};
+    const authOn = !!(st0.panel && st0.panel.user) && !!PASS;
+    const lg = authOn ? await fetch(B + '/api/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user: USER, pass: PASS }),
+    }) : { status: 0, headers: new Map() };
+    const ck = String(lg.headers.get('set-cookie') || '').split(';')[0];
+    if (authOn) ok('登录成功（用于跨实例会话检查）', lg.status === 200 && /^cfp_sid=/.test(ck), String(lg.status));
+    if (authOn && /^cfp_sid=/.test(ck)) {
+      const st = await fetch(`http://127.0.0.1:${standbyPort}/api/state`, { headers: { cookie: ck } });
+      ok('备份实例认得 leader 登录的会话', st.status === 200, String(st.status));
+      const pg = await fetch(`http://127.0.0.1:${standbyPort}/`, { headers: { cookie: ck }, redirect: 'manual' });
+      ok('备份实例的页面不会把已登录用户弹回登录页', pg.status === 200, String(pg.status));
+    }
+
+    // 配置跨实例：leader 改完，备份实例的 /api/state 要能反映（否则用户看到旧配置）
+    const beforeTitle = (await j('/api/state')).d.state.settings.panelTitle;
+    const tmpTitle = 'e2e 跨实例标题';
+    await j('/api/settings', { method: 'POST', body: { panelTitle: tmpTitle } });
+    await sleep(2600);
+    const sbR = await fetch(`http://127.0.0.1:${standbyPort}/api/state`, { headers: { Authorization: basic } });
+    const sbD = await sbR.json().catch(() => ({}));
+    ok('备份实例看到 leader 刚改的配置', !!(sbD.state && sbD.state.settings && sbD.state.settings.panelTitle === tmpTitle),
+      (sbD.state && sbD.state.settings && sbD.state.settings.panelTitle) || '');
+    await j('/api/settings', { method: 'POST', body: { panelTitle: beforeTitle } });
   }
   child.kill('SIGTERM');
   await sleep(600);

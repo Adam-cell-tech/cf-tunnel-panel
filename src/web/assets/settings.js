@@ -214,8 +214,10 @@ async function save() {
     },
   };
   try {
-    await api('/api/settings', { method: 'POST', body });
-    toast('设置已保存并下发', 'ok');
+    const r = await api('/api/settings', { method: 'POST', body });
+    const warn = (r && Array.isArray(r.warnings)) ? r.warnings : [];
+    if (warn.length) toast('设置已保存，但有 ' + warn.length + ' 项没生效：' + warn[0], 'warn', 8000);
+    else toast('设置已保存并下发', 'ok');
     const d = await loadState();
     ST = d;
     fill();

@@ -55,30 +55,51 @@ async function probeUpstream(raw) {
 // ---------------------------------------------------------------- 访问统计
 /** 读 Caddy access log 的最后若干行，解析成面板能直接展示的表格 + 汇总。 */
 /** 按小时聚合 access.log：总数 / 2xx / 4xx-5xx，给概览页画趋势图。 */
+/**
+ * 用面板自己的身份去请求本机 Caddy（链路自测：规则有没有生效、返回什么状态码）。
+ *
+ * 为什么不用 fetch：Node 的 fetch/undici **不允许覆盖 Host 头**，
+ * 而 Caddy 是按 Host 分流规则的 —— 用 fetch 测「指定域名」永远是错的
+ * （测出来像是规则没配，其实是 Host 没发出去）。这里用 http.request 手写 Host。
+ */
 async function curlSelf(target) {
   const listen = String(state.settings.caddyListen || ':8080');
   const port = listen.split(':').pop() || '8080';
   let p = String(target || '/').trim();
   if (!p.startsWith('/')) p = '/' + p;
-  const host = new URL(`http://x${p}`).searchParams.get('__host') || '';
+  let host = '';
+  try { host = new URL(`http://x${p}`).searchParams.get('__host') || ''; } catch { host = ''; }
+  const url = `http://127.0.0.1:${port}${p}`;
   const started = Date.now();
-  try {
-    const r = await fetch(`http://127.0.0.1:${port}${p}`, {
-      redirect: 'manual',
-      headers: host ? { Host: host } : {},
-      signal: AbortSignal.timeout(10000),
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (obj) => { if (!done) { done = true; resolve(obj); } };
+    const req = http.request({
+      host: '127.0.0.1', port: Number(port), path: p, method: 'GET',
+      headers: Object.assign({ 'User-Agent': 'cf-tunnel-panel-curl' }, host ? { Host: host } : {}),
+      timeout: 10000,
+    }, (res) => {
+      const chunks = [];
+      let size = 0;
+      res.on('data', (c) => {
+        size += c.length;
+        if (chunks.length < 64 && size <= 512 * 1024) chunks.push(c);
+      });
+      res.on('end', () => {
+        const buf = Buffer.concat(chunks);
+        const headers = {};
+        for (const [k, v] of Object.entries(res.headers)) headers[k] = Array.isArray(v) ? v.join(', ') : v;
+        finish({
+          ok: true, url, status: res.statusCode, ms: Date.now() - started, bytes: size,
+          host, headers,
+          preview: buf.toString('utf8', 0, 600).replace(/\s+/g, ' ').trim(),
+        });
+      });
     });
-    const buf = Buffer.from(await r.arrayBuffer());
-    const headers = {};
-    r.headers.forEach((v, k) => { headers[k] = v; });
-    return {
-      ok: true, url: `http://127.0.0.1:${port}${p}`, status: r.status,
-      ms: Date.now() - started, bytes: buf.length, headers,
-      preview: buf.toString('utf8', 0, 600).replace(/\s+/g, ' ').trim(),
-    };
-  } catch (e) {
-    return { ok: false, url: `http://127.0.0.1:${port}${p}`, error: e.message, ms: Date.now() - started };
-  }
+    req.on('timeout', () => { req.destroy(new Error('请求超时（10 秒）')); });
+    req.on('error', (e) => finish({ ok: false, url, error: e.message, ms: Date.now() - started, host }));
+    req.end();
+  });
 }
 
 /** 走本机 Caddy 做一次 WebSocket 握手，判断这条规则到底能不能升级成功。 */
