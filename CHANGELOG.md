@@ -19,6 +19,16 @@
 - 工具箱新增「一键新建出口」卡（`#btnQuick/#qkHost/#qkSvc/#qkName/#qkLocal/#qkDry/#btnQkRun/#qkOut`），结果以表格展示。
 - 测试：API 200、DOM 106、e2e 23。
 
+## v0.15.2 — 2026-11-16
+
+- **规则拖动排序**（`src/web/assets/rules.js` + `app.css`）
+  - 卡片 `draggable="true"` + 抓手 `.drag`（`⠿`，title 说明「顺序就是优先级」）
+  - `dragstart` 记住源索引、`dragover` 按落点上半/下半给 `.dropbefore`/`.dropafter` 蓝线、`drop` 里 `splice` 重排后 `markDirty()` + `render()`
+  - 从 `input/select/textarea/button/a` 起手一律 `preventDefault`（那是选文字，不是拖排序）
+  - 只动同作用域：跨作用域卡片本来就不显示，天然隔离
+- 快照 cron 落地：宿主机 `*/15 * * * * … tools/git-snapshot.sh`，实测首次提交 `426236c`、二次「配置没变化，跳过提交」
+- 测试：DOM **113**（+3：卡片可拖拽 / 有抓手 / 保留 ↑↓），API 214、e2e 23
+
 ## v0.15.1 — 2026-11-16
 
 - **保存前的护栏**（`src/core/guard.js`，新增）

@@ -341,3 +341,10 @@ pre.log .l-system{color:#a0a8b4}
 .chart-x{position:relative;height:15px;margin-top:2px;font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
 .chart-x span{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap}
 .chart{display:block;width:100%}
+
+/* 规则拖动排序 */
+.rule .drag{ cursor:grab; color:var(--dim); font-size:15px; line-height:1; user-select:none; padding:0 2px; }
+.rule .drag:active{ cursor:grabbing; }
+.rule.dragging{ opacity:.55; }
+.rule.dropbefore{ box-shadow:0 -3px 0 0 var(--acc) inset; }
+.rule.dropafter{ box-shadow:0 3px 0 0 var(--acc) inset; }

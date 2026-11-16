@@ -579,6 +579,17 @@ The script snapshots the route table to `/tmp` before touching it and restores f
 | E2E coverage 8 → 23 | The real-Caddy suite now proves prefix stripping, prefix passthrough, basic auth (401/401/200), Host-based routing isolation, WebSocket 101 upgrade, maintenance 503 + `Retry-After`, IP blacklist 403, admin off 2019, access-log writer and `trusted_proxies` — and restores routes/settings in `finally`. |
 | Audit de-duplication | A request whose handler already logged a human-readable action no longer also emits the generic `POST /api/...` row. |
 
+### v0.15.2 highlights — reorder by dragging
+
+Route order **is** priority in Caddy (first match wins), so ordering had to stop being invisible. Every rule card now has a grip (`⠿`) you can drag:
+
+- drag a card onto another to move it **before** or **after** (the drop line tells you which)
+- only rules in the current scope move; other scopes are untouched
+- dragging from inside an input is treated as text selection, not reordering
+- `↑` / `↓` buttons stay for keyboard/mobile use, and the unsaved-changes bar turns on immediately
+
+Also in this release: the config-snapshot cron is installed and verified — `*/15` on the host runs `tools/git-snapshot.sh`, which commits `data/config/*.json` (declarative, token-free) and skips silently when nothing changed.
+
 ### v0.15.1 highlights — guardrails before saving
 
 | Guard | What it catches | Escape hatch |

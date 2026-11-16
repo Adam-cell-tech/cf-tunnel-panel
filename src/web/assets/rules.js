@@ -50,8 +50,9 @@ function upDot(url) {
 function ruleHtml(r, i) {
   const scoped = !!r.tunnelId;
   const auth = r.basicAuth || {};
-  return `<div class="rule" data-i="${i}">
+  return `<div class="rule" data-i="${i}" draggable="true">
     <div class="rule-h">
+      <span class="drag" title="按住拖动可以调整顺序（顺序就是优先级：上面的先命中）" aria-label="拖动排序">⠿</span>
       <span class="idx">${i + 1}</span>
       <input data-k="name" value="${esc(r.name || '')}" placeholder="规则名字（可留空）" style="max-width:200px" />
       <span class="tag ${scoped ? 'acc' : ''}">${scoped ? '专属' : '全局'}</span>
@@ -358,6 +359,55 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     markDirty();
+  });
+
+  // 拖动排序：只允许在同作用域内移动（拖动时其他作用域的卡片本来就不显示）
+  let dragFrom = -1;
+  const list = $('#ruleList');
+  list.addEventListener('dragstart', (e) => {
+    const card = e.target.closest('.rule');
+    if (!card) return;
+    // 从输入框里拖是选文字，不要触发排序
+    if (e.target.closest('input,select,textarea,button,a')) { e.preventDefault(); return; }
+    dragFrom = parseInt(card.dataset.i, 10);
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', String(dragFrom)); } catch { /* 某些浏览器只读 */ }
+  });
+  list.addEventListener('dragend', () => {
+    dragFrom = -1;
+    list.querySelectorAll('.rule').forEach((el) => el.classList.remove('dragging', 'dropbefore', 'dropafter'));
+  });
+  list.addEventListener('dragover', (e) => {
+    if (dragFrom < 0) return;
+    const card = e.target.closest('.rule');
+    if (!card) return;
+    e.preventDefault();
+    const rect = card.getBoundingClientRect();
+    const after = e.clientY > rect.top + rect.height / 2;
+    list.querySelectorAll('.rule').forEach((el) => el.classList.remove('dropbefore', 'dropafter'));
+    card.classList.add(after ? 'dropafter' : 'dropbefore');
+  });
+  list.addEventListener('drop', (e) => {
+    if (dragFrom < 0) return;
+    const card = e.target.closest('.rule');
+    if (!card) return;
+    e.preventDefault();
+    const to = parseInt(card.dataset.i, 10);
+    const rect = card.getBoundingClientRect();
+    const after = e.clientY > rect.top + rect.height / 2;
+    syncFromDom();
+    list.querySelectorAll('.rule').forEach((el) => el.classList.remove('dropbefore', 'dropafter', 'dragging'));
+    const from = dragFrom;
+    dragFrom = -1;
+    if (from === to) return;
+    const moved = rules.splice(from, 1)[0];
+    let target = to + (after ? 1 : 0);
+    if (from < target) target -= 1;
+    rules.splice(target, 0, moved);
+    markDirty();
+    render();
+    toast('顺序已调整（记得点保存生效）', 'ok');
   });
 
   $('#ruleList').addEventListener('click', async (e) => {

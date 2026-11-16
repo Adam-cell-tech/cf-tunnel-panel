@@ -321,6 +321,14 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
   }
 
   {
+    const { dom, doc } = await open('/rules', 1500);
+    const card = doc.querySelector('#ruleList .rule');
+    chk('规则排序: 卡片可拖拽', !!card && card.getAttribute('draggable') === 'true', card ? String(card.getAttribute('draggable')) : 'no card');
+    chk('规则排序: 有拖动抓手', !!doc.querySelector('#ruleList .rule .drag'), '');
+    chk('规则排序: 保留上下移按钮', !!doc.querySelector('#ruleList [data-act="up"]'), '');
+    dom.window.close();
+  }
+  {
     const { dom, doc, win } = await open('/settings', 1600);
     chk('配置即代码: 卡片存在', !!doc.querySelector('#sec-code'), '');
     chk('配置即代码: 有编辑器与按钮', !!(doc.querySelector('#cfgText') && doc.querySelector('#btnCfgApply') && doc.querySelector('#btnCfgDry')), '');
