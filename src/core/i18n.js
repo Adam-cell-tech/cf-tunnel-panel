@@ -191,6 +191,19 @@ const EN = {
 
 
 // 页面正文（说明文案、提示、卡片副标题）—— 逐条人工翻译，不机翻
+// v0.13.3 新增（资源指纹即时生效 / 缓存预热 / 通知模板）
+const EN_V0133 = {
+  '自定义标题（可选）': 'Custom title (optional)',
+  '自定义正文（可选）': 'Custom body (optional)',
+  '占位符：{event} {title} {text} {host} {time} {running} {total}': 'Placeholders: {event} {title} {text} {host} {time} {running} {total}',
+  '留空用默认：{event} · {host}': 'Leave empty for default: {event} · {host}',
+  '留空用默认；不含 {text} 时原正文会自动附在后面': 'Leave empty for default; if {text} is absent the original body is appended',
+  '例：{time}｜{host}｜在线 {running}/{total}': 'e.g. {time} | {host} | online {running}/{total}',
+  '预热缓存': 'Warm cache',
+  '预热中…（会从公网把关键资源拉一遍）': 'Warming… (pulls key assets through the edge)',
+};
+Object.assign(EN, EN_V0133);
+
 const EN_PAGES = {
   '加签密钥（可选）': 'Signing secret (optional)',
   '机器人安全设置里勾了「加签」才需要；只勾「自定义关键词」就留空': 'Only needed when the bot has signing enabled; leave empty if you use a keyword instead',

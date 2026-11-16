@@ -32,6 +32,8 @@ function defaultState() {
         events: { tunnelDown: true, urlChange: true, caddyFail: true, sessionIp: true, errorSpike: true, loginFail: true },
         cooldownSec: 300,  // 同一事件多少秒内不重复提醒（0 = 不冷却）
         quietHours: '',    // 静默时段，如 "23:00-07:00"，可逗号分隔多段
+        // 自定义文案模板（留空 = 用默认）：可用占位符 {event} {title} {text} {host} {time} {running}/{total}
+        template: { title: '', text: '' },
       },
       // Cloudflare API（可选）：在面板里建隧道、建 CNAME、删隧道
       cf: { token: '', accountId: '', zoneId: '' },
@@ -293,6 +295,7 @@ function publicSettings() {
     hasSecret: !!s.notify.secret,
     cooldownSec: s.notify.cooldownSec || 0,
     quietHours: s.notify.quietHours || '',
+    template: { title: (s.notify.template && s.notify.template.title) || '', text: (s.notify.template && s.notify.template.text) || '' },
   };
   return s;
 }

@@ -1378,6 +1378,14 @@ Access 集成、指标面板、TCP/UDP 支持等）与**技术选型理由**（�
 | 端到端测试 8 → 23 项 | 真 Caddy 那一套现在验证：前缀剥离、前缀原样透传、基础认证三种情况、按 Host 的域名隔离、WebSocket 101 升级、维护模式 503 与 `Retry-After`、IP 黑名单 403、admin 不监听 2019、access log 与 `trusted_proxies`，并在 `finally` 里还原规则与设置。 |
 | 审计去重 | handler 已经记了人话动作的请求，不再额外写一条 `POST /api/...` 兜底记录。 |
 
+### v0.13.3 更新
+
+| 变化 | 说明 |
+| --- | --- |
+| 资源指纹 `?v=` | 页面引用资源时带上代码指纹（`/assets/app.css?v=<code-hash>`），这类 URL 回 `Cache-Control: public, max-age=31536000, immutable`——代码一变 URL 就变，等于天然自动失效；没指纹的老 URL 仍是 300 秒。 |
+| 缓存预热 | `POST /api/cf/cache/warm`（工具箱「预热缓存」）从公网域名把 `/login` 和带指纹的资源拉一遍，逐条回 `cf-cache-status`、`age`、机房、耗时。实测资源 `MISS 1109ms` → `HIT age=19 260ms`。 |
+| 通知文案模板 | `settings.notify.template {title, text}`，支持 `{event} {title} {text} {host} {time} {running} {total}`；留空 = 老默认。自定义正文里不写 `{text}` 时，原正文会自动附在后面，细节不会丢。 |
+
 ### v0.13.2 更新
 
 | 变化 | 说明 |

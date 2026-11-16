@@ -10,6 +10,11 @@ const path=require('path');
 
 const { PAGES, PAGE_DIR } = require('./paths');
 const i18n = require('./i18n');
+const { buildInfo } = require('./ident');
+
+// 资源指纹：代码一变，URL 就变 → 可以给 /assets/* 上「一年 immutable」长缓存
+const ASSET_V = (() => { try { return (buildInfo().code || 'dev').slice(0, 8); } catch { return 'dev'; } })();
+const AV = (f) => `/assets/${f}?v=${ASSET_V}`;
 const _state = require('./state');
 const state = _state.stateProxy;
 function readPage(file) {
@@ -37,7 +42,7 @@ function pageShell(active, body, lang = 'zh') {
   <meta name="theme-color" content="#1b7f5a" />
   <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${i18n.t(lang, activePage.title)} · ${title}</title>
-<link rel="stylesheet" href="/assets/app.css">
+<link rel="stylesheet" href="${AV('app.css')}">
 <link rel="icon" href="/badge.svg" type="image/svg+xml">
 </head>
 <body>
@@ -61,8 +66,8 @@ ${body}
   </main>
 </div>
 <script>window.__CFP_LANG=${JSON.stringify(lang === 'en' ? 'en' : 'zh')};window.__CFP_DICT=${i18n.clientDict()};</script>
-<script src="/assets/app.js"></script>
-<script src="/assets/${activePage.file}.js"></script>
+<script src="${AV('app.js')}"></script>
+<script src="${AV(activePage.file + '.js')}"></script>
 </body>
 </html>`;
 }
@@ -77,7 +82,7 @@ function loginPage({ next = '/', error = '', lang = 'zh' } = {}) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${i18n.t(lang, '登录')} · ${title}</title>
-<link rel="stylesheet" href="/assets/app.css">
+<link rel="stylesheet" href="${AV('app.css')}">
 <link rel="icon" href="/badge.svg" type="image/svg+xml">
 </head>
 <body class="login-body">

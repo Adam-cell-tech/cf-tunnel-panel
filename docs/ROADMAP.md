@@ -5,6 +5,18 @@
 
 ---
 
+## ✅ v0.13.3 — 缓存生命周期闭环
+
+| 项 | 实现 | 实测 |
+| --- | --- | --- |
+| 资源指纹 | `web.js` 的 `AV()` 给每个 `<link>/<script>` 拼 `?v=<codeHash[0:8]>` | 登录页输出 `app.css?v=a366b028` |
+| 一年 immutable | `server.js` 的 `/assets/` 分支检测 `?v=` → `max-age=31536000, immutable` | 带指纹 `immutable`，无指纹仍 `300` |
+| 预热 | `POST /api/cf/cache/warm`，并发拉关键 URL，回 `cf-cache-status/age/colo/ms` | 资源 `MISS 1109ms` → `HIT age=19 260ms` |
+| 通知模板 | `notify.template` + `applyTemplate()`，`{text}` 缺失时自动附原正文 | 端到端打到本地 sink：标题 `[tunnelDown] host`，正文含时间与在线数 |
+| 事件开关回归 | `notify.events` 之前只回写 4 项，会把关掉的 `errorSpike/loginFail` 又打开 | 现在 6 项都保留 |
+
+测试：API 163、DOM 79、e2e 23。
+
 ## ✅ v0.13.2 — 传输层与体验收尾
 
 | 项 | 实现要点 |

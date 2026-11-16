@@ -469,6 +469,18 @@ async function runBench() {
     try { const d = await api('/api/cf/cache/rule', { method: 'POST', body: { enable: false } }); msg.textContent = '已关闭（剩 ' + d.rules + ' 条规则）'; }
     catch (e) { msg.textContent = e.message; }
   });
+  const wmsg = document.getElementById('warmMsg');
+  document.getElementById('btnWarm').addEventListener('click', async () => {
+    if (wmsg) wmsg.textContent = '预热中…（会从公网把关键资源拉一遍）';
+    try {
+      const d = await api('/api/cf/cache/warm', { method: 'POST', body: {} });
+      const rows = (d.results || []).map((r) => `${r.path} → ${r.status || 'ERR'} ${r.cache || ''}${r.age ? ' age=' + r.age : ''}${r.colo ? ' [' + r.colo + ']' : ''} ${r.ms}ms`).join('\n');
+      if (wmsg) wmsg.textContent = `${d.host}：${d.hit}/${d.total} 命中缓存（版本 ${d.version}）`;
+      const out = document.getElementById('cacheRuleOut');
+      if (out) { out.textContent = rows; out.classList.remove('hidden'); }
+    } catch (e) { if (wmsg) wmsg.textContent = e.message; }
+  });
+
   document.getElementById('btnPurge').addEventListener('click', async () => {
     const urls = (document.getElementById('purgeUrls').value || '').split(',').map((x) => x.trim()).filter(Boolean);
     if (!confirm(urls.length ? `清理这 ${urls.length} 个 URL 的边缘缓存？` : '清空整个域名的边缘缓存？')) return;

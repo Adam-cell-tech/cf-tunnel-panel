@@ -70,6 +70,12 @@
         <div class="field"><label>静默时段</label><input id="notifyQuiet" placeholder="23:00-07:00" />
           <div class="sub">这段时间内不发通知（可跨零点，多段用逗号：12:00-13:30,23:00-07:00）</div></div>
       </div>
+      <div class="form-grid">
+        <div class="field"><label>自定义标题（可选）</label><input id="notifyTplTitle" placeholder="留空用默认：{event} · {host}" />
+          <div class="sub">占位符：{event} {title} {text} {host} {time} {running} {total}</div></div>
+        <div class="field"><label>自定义正文（可选）</label><input id="notifyTplText" placeholder="留空用默认；不含 {text} 时原正文会自动附在后面" />
+          <div class="sub">例：{time}｜{host}｜在线 {running}/{total}</div></div>
+      </div>
       <div class="row">
         <label class="inline"><input class="chk" type="checkbox" id="evDown" /> 出口掉线</label>
         <label class="inline"><input class="chk" type="checkbox" id="evUrl" /> 快速隧道换域名</label>

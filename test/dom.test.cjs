@@ -151,6 +151,8 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('设置: 分区锚点都能对上卡片', !!doc.querySelector('#sec-backup') && !!doc.querySelector('#sec-totp'), '');
     const rh = doc.querySelectorAll('#notifyHist [data-resend]').length;
     chk('设置: 通知记录带重发按钮', rh >= 0, String(rh));
+    chk('设置: 通知模板输入框存在', !!doc.querySelector('#notifyTplTitle') && !!doc.querySelector('#notifyTplText'), '');
+
   }
 
   // ---- v0.8.0：P0/P1/P2 新交互 ----

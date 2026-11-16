@@ -181,8 +181,12 @@ async function handler(req, res) {
     const file = path.join(ASSET_DIR, name);
     if (fs.existsSync(file) && fs.statSync(file).isFile()) {
       const type = ASSET_TYPES[path.extname(name).toLowerCase()] || 'application/octet-stream';
-      return serveText(req, res, fs.readFileSync(file), type, 'public, max-age=300',
-        { 'CDN-Cache-Control': 'public, max-age=86400', 'Cloudflare-CDN-Cache-Control': 'public, max-age=86400' });
+      // 页面引用资源时带 ?v=<代码指纹>：URL 随代码变化，可以放心给「一年 + immutable」
+      const hashed = /[?&]v=/.test(req.url || '');
+      const cc = hashed ? 'public, max-age=31536000, immutable' : 'public, max-age=300';
+      const cdn = hashed ? 'public, max-age=31536000' : 'public, max-age=86400';
+      return serveText(req, res, fs.readFileSync(file), type, cc,
+        { 'CDN-Cache-Control': cdn, 'Cloudflare-CDN-Cache-Control': cdn });
     }
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     return res.end('404');
@@ -483,10 +487,16 @@ async function handler(req, res) {
               urlChange: n.events.urlChange !== false,
               caddyFail: n.events.caddyFail !== false,
               sessionIp: n.events.sessionIp !== false,
+              errorSpike: n.events.errorSpike !== false,
+              loginFail: n.events.loginFail !== false,
             }
             : (prevN.events || { tunnelDown: true, urlChange: true, caddyFail: true, sessionIp: true }),
           cooldownSec: Math.max(0, Math.min(86400, Number(cool) || 0)),
           quietHours: quiet,
+          template: {
+            title: String((n.template && n.template.title) !== undefined ? n.template.title : ((prevN.template || {}).title || '')).slice(0, 120),
+            text: String((n.template && n.template.text) !== undefined ? n.template.text : ((prevN.template || {}).text || '')).slice(0, 500),
+          },
         };
       }
       if (body.cf && typeof body.cf === 'object') {
@@ -1151,6 +1161,43 @@ async function handler(req, res) {
       return sendJson(res, 200, { ok: true, rules: ((r && r.rules) || []).length });
     } catch (e) {
       return sendJson(res, 400, { ok: false, error: e.message + '（这个操作需要 Token 带 Zone → Cache Rules → Edit 权限，也可以在 Cloudflare 后台手动建）' });
+    }
+  }
+
+  // 缓存预热：按当前代码指纹把关键资源在边缘拉一遍（清缓存后立刻有热数据）
+  if (p === '/api/cf/cache/warm' && req.method === 'POST') {
+    let body = {};
+    try { body = await readBody(req); } catch { body = {}; }
+    try {
+      const named = publicTunnels().find((t) => t.mode === 'named' && t.publicHostname);
+      const host = String(body.host || (named && named.publicHostname) || '').trim();
+      if (!host) throw new Error('没有可用的公网域名：先在「隧道出口」里配一条命名隧道，或在请求里带 host');
+      const base = /^https?:\/\//i.test(host) ? host.replace(/\/+$/, '') : `https://${host}`;
+      const v = (() => { try { return (ident.buildInfo().code || 'dev').slice(0, 8); } catch { return 'dev'; } })();
+      const def = ['/login', `/assets/app.css?v=${v}`, `/assets/app.js?v=${v}`, '/badge.svg'];
+      const paths = (Array.isArray(body.paths) && body.paths.length ? body.paths : def).slice(0, 12)
+        .map((x) => (String(x).startsWith('/') ? String(x) : '/' + String(x)));
+      const out = [];
+      for (const path0 of paths) {
+        const t0 = Date.now();
+        try {
+          const r = await fetch(base + path0, { method: 'GET', headers: { 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(10000) });
+          await r.arrayBuffer();
+          out.push({
+            path: path0, status: r.status, ms: Date.now() - t0,
+            cache: r.headers.get('cf-cache-status') || '', age: r.headers.get('age') || '',
+            colo: (() => { const c = r.headers.get('cf-ray') || ''; const m = /-([A-Z]{3})$/i.exec(c); return m ? m[1].toUpperCase() : ''; })(),
+          });
+        } catch (e) {
+          out.push({ path: path0, status: 0, ms: Date.now() - t0, error: e.message });
+        }
+      }
+      const hit = out.filter((x) => x.cache === 'HIT').length;
+      auditRecord({ actor: auth.who, ip: clientIpOf(req), method: 'POST', path: p, status: 200, action: '预热边缘缓存', target: `${host} · ${out.length} 个路径` });
+      log(`缓存预热：${host} → ${out.length} 个路径，HIT ${hit} 个`, 'panel');
+      return sendJson(res, 200, { ok: true, host: base, version: v, hit, total: out.length, results: out });
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: e.message });
     }
   }
 

@@ -11,6 +11,17 @@
 const { log } = require('./util');
 const _state = require('./state');
 const state = _state.stateProxy;
+/**
+ * 自定义文案：把 {event}/{title}/{text}/{host}/{time}/{running}/{total} 换成实际值。
+ * 模板里没用到 {text} 时，正文会自动追加原内容，避免「自定义后看不到细节」。
+ */
+function applyTemplate(tpl, vars) {
+  const raw = String(tpl || '');
+  if (!raw) return '';
+  const out = raw.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
+  return out.replace(/\s+$/, '');
+}
+
 function inQuietHours(spec, now = new Date()) {
   const raw = String(spec || '').trim();
   if (!raw) return false;
@@ -60,6 +71,18 @@ async function notify(event, title, text, opts = {}) {
     }
     lastNotify.set(event, Date.now());
   }
+  // 自定义模板（留空则保持默认：标题 + 换行 + 正文）
+  const running = (state.tunnels || []).filter((t) => t.enabled).length;
+  const vars = {
+    event, title, text, host: os.hostname(),
+    time: new Date().toLocaleString('zh-CN', { hour12: false }),
+    running, total: (state.tunnels || []).length,
+  };
+  const tplTitle = applyTemplate(n.template && n.template.title, vars);
+  const tplText = applyTemplate(n.template && n.template.text, vars);
+  if (tplTitle) title = tplTitle;
+  if (tplText) text = /\{text\}/.test(String((n.template || {}).text || '')) ? tplText : `${tplText}\n${text}`;
+  else if (tplTitle) text = `${text}`;
   const line = `${title}\n${text}`;
   try {
     let url = String(n.url).trim();
@@ -99,4 +122,4 @@ const notifyHistory = [];     // 最近 50 条通知结果，面板里能看到�
 
 const lastNotify = new Map(); // event -> 上次发送时间
 
-module.exports = { inQuietHours, notify, notifyHistory, recordNotify };
+module.exports = { applyTemplate, inQuietHours, notify, notifyHistory, recordNotify };

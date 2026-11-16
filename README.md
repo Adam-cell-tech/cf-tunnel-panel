@@ -581,6 +581,14 @@ The script snapshots the route table to `/tmp` before touching it and restores f
 | E2E coverage 8 → 23 | The real-Caddy suite now proves prefix stripping, prefix passthrough, basic auth (401/401/200), Host-based routing isolation, WebSocket 101 upgrade, maintenance 503 + `Retry-After`, IP blacklist 403, admin off 2019, access-log writer and `trusted_proxies` — and restores routes/settings in `finally`. |
 | Audit de-duplication | A request whose handler already logged a human-readable action no longer also emits the generic `POST /api/...` row. |
 
+### v0.13.3 highlights
+
+| Change | Detail |
+| --- | --- |
+| Asset fingerprint (`?v=`) | Pages reference `/assets/app.css?v=<code-hash>` etc. Fingerprinted URLs answer `Cache-Control: public, max-age=31536000, immutable` — the URL changes whenever the code does, so a deploy is a cache-buster by construction. Unversioned URLs keep the old 300 s behaviour. |
+| Cache warm-up | `POST /api/cf/cache/warm` (Tools → *Warm cache*) pulls `/login` + the fingerprinted assets through the public hostname and reports `cf-cache-status`, `age`, colo and latency per URL. Measured: assets `MISS 1109 ms` → `HIT age=19 260 ms`. |
+| Notify templates | `settings.notify.template {title, text}` with `{event} {title} {text} {host} {time} {running} {total}`. Empty = the old default. If your custom text does not mention `{text}`, the original body is appended so detail is never lost. |
+
 ### v0.13.2 highlights
 
 | Change | Detail |

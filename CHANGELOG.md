@@ -12,6 +12,16 @@
 - `package.json` 增加 `engines.node >= 20`。
 - 测试：API 113、DOM 75。
 
+## v0.13.3 — 2026-11-16
+
+### 新增
+- **资源指纹 + 一年 immutable 长缓存**：页面引用 `/assets/*` 时带 `?v=<代码指纹前 8 位>`，这类请求回 `Cache-Control: public, max-age=31536000, immutable` 与一年期的 `CDN-Cache-Control`；无指纹的请求保持 `max-age=300`。代码一改 URL 就变，天然绕开旧缓存。
+- **缓存预热** `POST /api/cf/cache/warm`：按当前指纹从公网域名拉 `/login` + 关键资源（可传 `paths` 覆盖，最多 12 条），逐条返回 `cf-cache-status` / `age` / 机房 / 耗时，工具箱加「预热缓存」按钮。
+- **通知文案模板**：`notify.template {title, text}`，占位符 `{event} {title} {text} {host} {time} {running} {total}`；正文不含 `{text}` 时自动把原正文附在末尾。
+
+### 修复
+- `POST /api/settings` 的 `notify.events` 之前只回写四项，会把手动关掉的 `errorSpike` / `loginFail` 又打开；现在六个开关都保留。
+
 ## v0.13.2 — 2026-11-16
 
 ### 新增

@@ -116,7 +116,9 @@
       <div class="row" style="margin-top:8px;align-items:center;flex-wrap:wrap">
         <input id="purgeUrls" placeholder="要清理的 URL（逗号分隔，留空 = 清空整个域名）" style="flex:1;min-width:260px" />
         <button class="sm ghost" id="btnPurge">清理边缘缓存</button>
+        <button class="sm ghost" id="btnWarm">预热缓存</button>
         <span class="muted" id="purgeMsg"></span>
+        <span class="muted" id="warmMsg"></span>
       </div>
       <!-- 公共主机名：直接读写隧道 ingress，不用再去 Cloudflare 后台点 -->
       <div id="hostBox" class="hidden" style="margin-top:12px;border-top:1px dashed var(--line);padding-top:12px">

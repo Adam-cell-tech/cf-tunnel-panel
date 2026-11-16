@@ -175,6 +175,9 @@ function fill() {
   if ($('#evLoginFail')) $('#evLoginFail').checked = !!(n.events && n.events.loginFail);
   $('#notifyCool').value = n.cooldownSec === undefined ? 300 : n.cooldownSec;
   $('#notifyQuiet').value = n.quietHours || '';
+  const tpl = n.template || {};
+  if ($('#notifyTplTitle')) $('#notifyTplTitle').value = tpl.title || '';
+  if ($('#notifyTplText')) $('#notifyTplText').value = tpl.text || '';
   $('#panelUser').value = (ST.state.panel && ST.state.panel.user) || '';
   $('#verTag').textContent = '版本 ' + (ST.version || '—');
   applyNotifyFmt();
@@ -199,6 +202,10 @@ async function save() {
         loginFail: $('#evLoginFail') ? $('#evLoginFail').checked : true },
       cooldownSec: Number($('#notifyCool').value) || 0,
       quietHours: $('#notifyQuiet').value.trim(),
+      template: {
+        title: ($('#notifyTplTitle') && $('#notifyTplTitle').value.trim()) || '',
+        text: ($('#notifyTplText') && $('#notifyTplText').value.trim()) || '',
+      },
     },
   };
   try {

@@ -476,6 +476,28 @@ ok('退出全部设备：返回踢掉数量并清 cookie', all.status === 200 &&
   ok('静态资源带边缘缓存头', /max-age=86400/.test(cdn), cdn);
   ok('静态资源 ETag 区分编码', /-gz"$|-id"$/.test(anon.headers.get('etag') || ''), anon.headers.get('etag') || '');
 
+  // v0.13.3：带 ?v= 指纹的资源走「一年 immutable」，没指纹的仍是 300s
+  const hashed = await fetch(B + '/assets/app.css?v=deadbeef');
+  const hcc = hashed.headers.get('cache-control') || '';
+  ok('指纹资源一年 immutable', /max-age=31536000/.test(hcc) && /immutable/.test(hcc), hcc);
+  const plain = await fetch(B + '/assets/app.css');
+  ok('无指纹资源仍是短缓存', /max-age=300/.test(plain.headers.get('cache-control') || ''), plain.headers.get('cache-control') || '');
+  const loginHtml = await (await fetch(B + '/login')).text();
+  ok('登录页资源引用带指纹', /app\.css\?v=[a-f0-9]{6,}/.test(loginHtml), (loginHtml.match(/app\.css\?v=[a-f0-9]+/) || [''])[0]);
+
+  // v0.13.3：通知文案模板可保存并回读（占位符原样存，渲染在发送时做）
+  const tplSave = await j('/api/settings', { method: 'POST', body: { notify: { template: { title: '[{event}] {host}', text: '{time} 在线 {running}/{total}' } } } });
+  ok('通知模板可保存', tplSave.status === 200, String(tplSave.status));
+  const tplState = await j('/api/state');
+  const tpl = (tplState.d.state.settings.notify || {}).template || {};
+  ok('通知模板回读正确', tpl.title === '[{event}] {host}' && tpl.text === '{time} 在线 {running}/{total}', JSON.stringify(tpl));
+  const tplClear = await j('/api/settings', { method: 'POST', body: { notify: { template: { title: '', text: '' } } } });
+  ok('通知模板可清空', tplClear.status === 200, String(tplClear.status));
+
+  // v0.13.3：缓存预热接口（无命名隧道时给人话 400，不能 500）
+  const warm = await j('/api/cf/cache/warm', { method: 'POST', body: {} });
+  ok('预热接口可用', warm.status === 200 || warm.status === 400, `${warm.status} ${JSON.stringify(warm.d).slice(0, 80)}`);
+
   // 页面绝不能被 CDN 缓存（里面有版本号、登录态）
   const page = await fetch(B + '/settings');
   ok('页面响应禁止 CDN 缓存', /no-store/.test(page.headers.get('cloudflare-cdn-cache-control') || ''), String(page.headers.get('cloudflare-cdn-cache-control')));
