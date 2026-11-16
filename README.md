@@ -577,8 +577,14 @@ keep two instances alive and switch over without dropping a request.
   `409 {"code":"STANDBY"}` and tells you which instance is the leader.
 - When the leader exits it deletes the lease, so a standby promotes itself within ~5s.
 - The panel route is pushed to Caddy as **two upstreams** (`:8090` and the reserved slot `:8095`)
-  with `selection_policy: first` plus an **active health check** on `/healthz`. Traffic follows the
-  healthy one automatically — no manual cut-over, no 502.
+  with `selection_policy: round_robin`, `try_duration 3s` and an **active health check** on
+  `/healthz` (2s interval, 1s timeout, 2 fails). When one instance dies Caddy keeps retrying the
+  other within the same request, then drops the dead slot from rotation.
+- A standby also keeps a **warm cloudflared connector** for every *named* tunnel, so the tunnel
+  never loses its last connector during handover. (Quick tunnels are skipped on purpose: their
+  hostname is assigned per process, so two connectors would fight.)
+- Measured on the live deployment (probing `https://…/healthz` every 250ms across a switch):
+  before the warm connector **7 × 530 ≈ 6s** of errors; after it **1 × 530 ≈ 0.25s**.
 
 **Enable it once**
 

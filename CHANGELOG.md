@@ -19,6 +19,9 @@
      （表面现象是「推送成功但线上没变」），已移除。
 - **空状态保护**：启动时 `state.json` 不存在则拒绝首次 Caddy 下发（`PANEL_ALLOW_FRESH_PUSH=1` 可放行）。
 - **bootstrap 兜底从 200 改成 503 + `Retry-After`**：以前占位页返回 200，会让「线上是否可用」的检查全部假绿。
+- **备份实例常驻 cloudflared 热备连接器**（仅命名隧道）：交接时隧道不会丢掉最后一个 connector。
+  线上实测切换窗口从 **7 次 530（≈6s）** 降到 **1 次 530（≈0.25s）**；负载均衡策略也从 `first`
+  改成 `round_robin` + `try_duration 3s`（`first` 会在健康检查尚未剔除死上游时反复重试同一台）。
 - `docker-compose.yml` 增加 `PANEL_SLOT_PEERS`（默认 8095）。
 - 测试：API 216、DOM 113、e2e 23。
 

@@ -83,9 +83,13 @@ function buildRouteHandlers(r) {
 
   if (slotUps) {
     // 面板槽位：优先第一个（老实例），它不健康时自动跳过 → 滚动升级不需要人工切流量
-    proxy.load_balancing = { selection_policy: { policy: 'first' }, try_duration: 5e9, try_interval: 500e6 };
+    // 用 round_robin 而不是 first：两台都健康时轮询（滚动升级期间短暂并存，代码版本可能不同但
+    // 共享同一份 data/，行为一致）；一台挂掉时健康检查把它剔除，且重试会立刻落到另一台上 ——
+    // 用 first 会在「老实例刚停、健康检查还没标记不健康」那段窗口里反复重试同一台死上游，
+    // 实测表现为 3~5 秒的 502。
+    proxy.load_balancing = { selection_policy: { policy: 'round_robin' }, try_duration: 3e9, try_interval: 250e6 };
     proxy.health_checks = {
-      active: { uri: '/healthz', interval: '5s', timeout: '2s', fails: 2, passes: 1 },
+      active: { uri: '/healthz', interval: '2s', timeout: '1s', fails: 2, passes: 1 },
     };
     // 不要写 fail_duration / max_fails：Caddy 2.11.9 的 reverse_proxy 不认这个字段
     // （会 400 unknown field "fail_duration"，整份配置下发失败）。被动健康检查交给默认值。

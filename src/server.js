@@ -1587,6 +1587,28 @@ if (!leaderMode) {
   const st = lease.status();
   log(`已有实例持有领导权（${(st.holder && st.holder.id) || '?'}）→ 本实例以**只读备份模式**启动；`
     + '写操作会返回 409，等它退出后自动接管。', 'panel');
+  // 备份实例也把 cloudflared 拉起来当「热连接器」：隧道连接属于进程而不是 state，
+  // 老实例退出时会带走它自己的连接器，如果备份这边还没连上，Cloudflare 那边就有几秒
+  // 没有 connector 可用（实测 530 约 6 秒）。两个连接器同时在线是无害的，CF 会自己挑。
+  // 只给**命名隧道**当热备：快速隧道的域名是每次进程新连时随机分配的，
+  // 两个实例各连一条只会互相打架（还会撞 Cloudflare 的快速隧道限流）。
+  const warm = () => {
+    for (const t of state.tunnels) {
+      if (!t.enabled || t.mode !== 'named' || !t.token) continue;
+      const rt = tunnelRt(t.id);
+      if (!rt.proc && !rt.fatal) startTunnel(t.id);
+    }
+  };
+  try { warm(); } catch (e) { log('热备连接器启动失败: ' + e.message, 'panel'); }
+  setInterval(() => {
+    try {
+      for (const t of state.tunnels) {
+        const rt = tunnelRt(t.id);
+        if (t.enabled && t.mode === 'named' && t.token && !rt.proc && !rt.fatal) startTunnel(t.id);
+        if ((!t.enabled || t.mode !== 'named') && rt.proc) stopTunnel(t.id, true);
+      }
+    } catch { /* ignore */ }
+  }, 10000).unref();
 }
 process.on('exit', () => lease.release());
 for (const sig of ['SIGTERM', 'SIGINT']) {

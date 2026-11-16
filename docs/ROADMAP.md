@@ -14,6 +14,8 @@
 | 流量切换 | 面板规则下发双上游 + `selection_policy: first` + `/healthz` 主动健康检查 | `/api/caddy/config` 输出 `8090,8095` + `health_checks.active` |
 | 升级脚本 | `tools/rolling-upgrade.sh`（干跑/`--apply`/`--prune`，含回滚） | 两个方向各跑一遍通过 |
 | 安全边界 | 空状态不推 Caddy；`CADDY_ADMIN` 不再多端口回退 | 测试实例无法再冲掉生产规则 |
+| 暖连接器 | standby 为命名隧道常驻 cloudflared，交接不断隧道 | 切换窗口 6s → 0.25s（1 次 530） |
+| 负载均衡 | `round_robin` + `try_duration 3s` + 2s/2fail 主动检查 | `first` 会反复重试死上游，实测 3~5s 502 |
 
 ## ✅ v0.15.2 — 拖动排序 + 快照定时化
 
