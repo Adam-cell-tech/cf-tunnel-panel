@@ -14,6 +14,7 @@ const { publicUrlOf, tunnelRt } = require('./registry');
 const { caddy } = require('./caddy');
 const { pushCaddy } = require('./pusher');
 const { readAccess, sampleHistory, securityAttempts } = require('./insight');
+const history = require('./history');
 const audit = require('./audit');
 const { notify } = require('./notify');
 const lease = require('./lease');
@@ -89,7 +90,14 @@ function startMonitor() {
     }
     // 采样只由 leader 写：曲线是「集群视角」，两台都写会互相覆盖/重复；
     // 写进同一个文件后两边读到的就是同一份历史（v0.19.0）。
-    if (histTick % 12 === 0 && safeLeader()) sampleHistory();
+    // 触发条件看「文件里最后一条采样有多旧」而不是 tick 计数：
+    // 以前按 histTick % 12 采样，进程一重启相位就归零，主备切换时会漏掉整整一分钟（v0.19.1 修）。
+    if (safeLeader()) {
+      try {
+        const last = history.sampleList().slice(-1)[0];
+        if (!last || Date.now() - last.t >= 55000) sampleHistory();
+      } catch { if (histTick % 12 === 0) sampleHistory(); }
+    }
     for (const t of state.tunnels) {
       const rt = tunnelRt(t.id);
       const cur = { status: rt.status, url: rt.url };
