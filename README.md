@@ -579,6 +579,15 @@ The script snapshots the route table to `/tmp` before touching it and restores f
 | E2E coverage 8 → 23 | The real-Caddy suite now proves prefix stripping, prefix passthrough, basic auth (401/401/200), Host-based routing isolation, WebSocket 101 upgrade, maintenance 503 + `Retry-After`, IP blacklist 403, admin off 2019, access-log writer and `trusted_proxies` — and restores routes/settings in `finally`. |
 | Audit de-duplication | A request whose handler already logged a human-readable action no longer also emits the generic `POST /api/...` row. |
 
+### v0.14.3 highlights
+
+| Change | Detail |
+| --- | --- |
+| One-click exit (cloud + local) | `POST /api/cf/tunnels/quick` does the four steps that used to be four tabs: create the tunnel, fetch its token, **write the ingress config (the public hostname — a CNAME alone gives you error 1033)**, create the CNAME, and optionally register a local exit and start `cloudflared`. It then polls the public URL for up to 15 s and reports what it saw. |
+| Dry run | Tick "dry run" and the endpoint returns the exact API calls it *would* make, without touching Cloudflare — good for checking permissions before committing. |
+| Step-by-step report | The Toolbox shows a table of steps with pass/fail and the raw detail per step, so a failure tells you which of the five steps and why. |
+| Tests | API 200, DOM 106 (dry-run plan renders, validation of hostname/service). |
+
 ### v0.14.2 highlights
 
 | Change | Detail |

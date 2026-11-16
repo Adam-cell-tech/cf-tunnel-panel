@@ -10,6 +10,15 @@
 - 允许单字文本节点翻译（`测`/`删` 这类按钮此前被 `key.length > 1` 挡掉）。
 - 测试：API 196、DOM 102、e2e 23。
 
+## v0.14.3 — 2026-11-16
+
+- **一键新建出口**：`POST /api/cf/tunnels/quick` —— 建隧道 → 取 token → 写 ingress（公共主机名）→ 建 CNAME → 可选落成本机出口并启动 → 轮询公网自测（最多 15 秒），逐步骤返回 `{name, ok, detail}`。
+- **修最容易踩的坑**：只建 CNAME 不写 ingress 会 1033，现在同一步完成（保留已有 ingress 条目与末尾 `http_status:404`）。
+- **只演练模式**：`dry:true` 返回 5 步计划（含具体接口路径），不调 Cloudflare。
+- 校验：主机名必须是带点的完整域名、上游必须带协议，均返回 400 人话提示。
+- 工具箱新增「一键新建出口」卡（`#btnQuick/#qkHost/#qkSvc/#qkName/#qkLocal/#qkDry/#btnQkRun/#qkOut`），结果以表格展示。
+- 测试：API 200、DOM 106、e2e 23。
+
 ## v0.11.2
 
 - **口令只存 bcrypt 哈希**：`state.json` 里 `panel.pass` / `viewer.pass` 改为 `$2b$10$…`；启动时自动把历史明文迁移成哈希（`migrate-secrets`）。

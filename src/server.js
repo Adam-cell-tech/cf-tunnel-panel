@@ -1144,6 +1144,89 @@ async function handler(req, res) {
       return sendJson(res, 400, { ok: false, error: e.message });
     }
   }
+  // 一键新建出口：建隧道 → 拿 token → 写 ingress（公共主机名）→ 建 CNAME → 可选落成本机出口
+  if (p === '/api/cf/tunnels/quick' && req.method === 'POST') {
+    let body = {};
+    try { body = await readBody(req); } catch { body = {}; }
+    const cf = state.settings.cf || {};
+    const steps = [];
+    const step = (name, ok2, detail) => { steps.push({ name, ok: ok2, detail: detail || '' }); return ok2; };
+    const hostname = String(body.hostname || '').trim().toLowerCase();
+    const service = String(body.service || 'http://127.0.0.1:8080').trim();
+    const name = String(body.name || '').trim() || `panel-${Math.random().toString(16).slice(2, 8)}`;
+    const dry = !!body.dry;
+    if (!/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(hostname) || hostname.indexOf('.') < 1) {
+      return sendJson(res, 400, { ok: false, error: '公共主机名要写完整域名，例如 dsh2.example.com', steps });
+    }
+    if (!/^(https?|ssh|tcp|rdp):\/\/[^\s]+$/.test(service)) return sendJson(res, 400, { ok: false, error: '上游要带协议，例如 http://127.0.0.1:8080', steps });
+    if (!dry && !cf.accountId) return sendJson(res, 400, { ok: false, error: '还没填 Account ID（设置 → Cloudflare API）', steps });
+    if (!dry && !cf.token) return sendJson(res, 400, { ok: false, error: '还没填 API Token（设置 → Cloudflare API）', steps });
+    if (dry) {
+      return sendJson(res, 200, {
+        ok: true, dry: true, name, hostname, service,
+        plan: [
+          { step: 1, api: `POST /accounts/${cf.accountId || '<账户>'}/cfd_tunnel`, note: `建隧道「${name}」（config_src=cloudflare）` },
+          { step: 2, api: `GET /accounts/${cf.accountId || '<账户>'}/cfd_tunnel/<id>/token`, note: '拿隧道 token（写进本机出口）' },
+          { step: 3, api: `PUT /accounts/${cf.accountId || '<账户>'}/cfd_tunnel/<id>/configurations`, note: `ingress: ${hostname} → ${service}，末尾留 http_status:404` },
+          { step: 4, api: `POST /zones/${cf.zoneId || '<域名>'}/dns_records`, note: `CNAME ${hostname} → <id>.cfargotunnel.com（proxied）` },
+          { step: 5, api: '(local)', note: body.addLocal ? '把这套写进本机出口并启动 cloudflared' : '只建云端，不动本机' },
+        ],
+      });
+    }
+    try {
+      const tun = await cfApi(`/accounts/${cf.accountId}/cfd_tunnel`, { method: 'POST', body: { name, config_src: 'cloudflare' } });
+      step('1. 建隧道', true, `${name} · ${tun.id}`);
+      let token = '';
+      try { token = await cfApi(`/accounts/${cf.accountId}/cfd_tunnel/${tun.id}/token`); step('2. 取 token', true, token.slice(0, 12) + '…'); } catch (e) { step('2. 取 token', false, e.message); }
+      let ingressOk = false;
+      try {
+        const cur = await cfApi(`/accounts/${cf.accountId}/cfd_tunnel/${tun.id}/configurations`).catch(() => ({ config: {} }));
+        const curIngress = (cur && cur.config && Array.isArray(cur.config.ingress)) ? cur.config.ingress.slice() : [];
+        const rest = curIngress.filter((x) => x && x.hostname && !/cfargotunnel|http_status/.test(String(x.service)));
+        const tail = curIngress.filter((x) => x && !x.hostname);
+        const next = rest.concat([{ hostname, service }], tail.length ? tail : [{ service: 'http_status:404' }]);
+        await cfApi(`/accounts/${cf.accountId}/cfd_tunnel/${tun.id}/configurations`, { method: 'PUT', body: { config: { ingress: next } } });
+        ingressOk = true;
+        step('3. 写公共主机名', true, `${hostname} → ${service}（共 ${next.length} 条 ingress）`);
+      } catch (e) { step('3. 写公共主机名', false, e.message); }
+      let dnsId = null;
+      if (cf.zoneId) {
+        try {
+          const dns = await cfApi(`/zones/${cf.zoneId}/dns_records`, { method: 'POST', body: { type: 'CNAME', name: hostname, content: `${tun.id}.cfargotunnel.com`, proxied: true, comment: 'created by cf-tunnel-panel' } });
+          dnsId = dns.id; step('4. 建 CNAME', true, hostname);
+        } catch (e) { step('4. 建 CNAME', false, e.message); }
+      } else {
+        step('4. 建 CNAME', false, '没填 zoneId，CNAME 需要你在 Cloudflare 后台手建');
+      }
+      let localId = null;
+      if (body.addLocal !== false && token) {
+        const t = applyTunnelFields(newTunnel(), { name, mode: 'named', token, publicHostname: hostname, origin: service.startsWith('http') ? 'http://127.0.0.1:8080' : 'http://127.0.0.1:8080' });
+        state.tunnels.push(t);
+        saveState('cf-tunnel-quick');
+        if (t.enabled) startTunnel(t.id);
+        localId = t.id;
+        step('5. 加本机出口', true, `${name}（已启动）`);
+      } else {
+        step('5. 加本机出口', true, '跳过（只建云端）');
+      }
+      const url = `https://${hostname}`;
+      let publicStatus = null;
+      for (let i = 0; i < 6; i++) {
+        await new Promise((r) => setTimeout(r, 2500));
+        try {
+          const rr = await fetch(url, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(6000) });
+          publicStatus = rr.status;
+          if (rr.status < 500) break;
+        } catch (e) { publicStatus = 'x'; }
+      }
+      step('6. 公网自测', publicStatus && publicStatus !== 'x', publicStatus ? `${url} → ${publicStatus}` : `${url} 暂时连不上（DNS 可能还要 1~2 分钟）`);
+      auditRecord({ actor: auth.who, ip: clientIpOf(req), method: 'POST', path: p, status: 200, action: '一键新建出口', target: `${name} → ${hostname}` });
+      return sendJson(res, 200, { ok: ingressOk && !!localId, name, tunnelId: tun.id, hostname, service, dnsId, localId, steps, url, publicStatus });
+    } catch (e) {
+      step('失败', false, e.message);
+      return sendJson(res, 400, { ok: false, error: e.message, steps });
+    }
+  }
   const cdm = p.match(/^\/api\/cf\/tunnels\/([\w-]+)\/delete$/);
   // --- Cloudflare API 增强：验证 token / 账号域名发现 / 隧道详情 / DNS 记录 ---
   if (p === '/api/traffic') {

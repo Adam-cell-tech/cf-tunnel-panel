@@ -321,6 +321,21 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
   }
 
   {
+    const { dom, doc, win } = await open('/tools', 1400);
+    chk('工具箱: 一键新建出口按钮存在', !!doc.querySelector('#btnQuick'), '');
+    const box = doc.querySelector('#quickBox');
+    chk('工具箱: 一键面板默认收起', !!box && box.classList.contains('hidden'), '');
+    doc.querySelector('#btnQuick').click();
+    chk('工具箱: 点击后展开', !!box && !box.classList.contains('hidden'), '');
+    doc.querySelector('#qkHost').value = 'qa.example.com';
+    doc.querySelector('#qkDry').checked = true;
+    doc.querySelector('#btnQkRun').click();
+    await new Promise((r) => setTimeout(r, 1200));
+    const out = doc.querySelector('#qkOut');
+    chk('工具箱: 演练结果显示计划表', /configurations|dns_records/.test(out.innerHTML), out.innerHTML.slice(0, 60));
+    dom.window.close();
+  }
+  {
     const { dom, doc, win } = await open('/settings', 1400);
     chk('i18n: 暴露了翻译函数', typeof win.__cfpT === 'function', typeof win.__cfpT);
     const dict = win.__CFP_DICT || {};

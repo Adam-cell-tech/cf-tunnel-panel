@@ -83,6 +83,7 @@
         <button class="primary" id="btnCfSave">保存 API 配置</button>
         <button class="sm ghost" id="btnCfList">刷新云端隧道</button>
         <button class="sm ghost" id="btnCfCreate" aria-expanded="false">新建隧道</button>
+        <button class="sm ghost" id="btnQuick" aria-expanded="false">一键新建出口</button>
         <span class="muted" id="cfMsg"></span>
       </div>
       <div id="newTunBox" class="hidden" style="border:1px solid var(--line);border-radius:10px;padding:12px">
@@ -98,6 +99,23 @@
           <span class="muted" id="newTunMsg"></span>
         </div>
         <div class="hint">建完记得去 Cloudflare → 该隧道 → 路由 → 添加路由，把公共主机名指到本机 Caddy（HTTP → 127.0.0.1:8080）；只建 CNAME 会 1033。</div>
+      </div>
+      <div id="quickBox" class="hidden" style="border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:10px">
+        <div class="hint" style="margin-top:0">一条龙：建隧道 → 取 token → 写公共主机名（ingress）→ 建 CNAME → 落成本机出口 → 公网自测。
+          以前要在这四步里来回切后台，现在一次填完。</div>
+        <div class="form-grid" style="margin-top:10px">
+          <div class="field"><label>公共主机名（完整域名）</label><input id="qkHost" placeholder="dsh2.example.com" /></div>
+          <div class="field"><label>本机上游</label><input id="qkSvc" value="http://127.0.0.1:8080" /></div>
+          <div class="field"><label>隧道名字</label><input id="qkName" placeholder="留空自动生成" /></div>
+          <div class="field"><label class="inline"><input class="chk" type="checkbox" id="qkLocal" checked /> 同时加成本机出口并启动</label></div>
+          <div class="field"><label class="inline"><input class="chk" type="checkbox" id="qkDry" /> 只演练（不调 Cloudflare，先看会做什么）</label></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="primary" id="btnQkRun">开始</button>
+          <button class="sm ghost" id="btnQkClose">收起</button>
+          <span class="muted" id="qkMsg"></span>
+        </div>
+        <div id="qkOut" style="margin-top:10px"></div>
       </div>
       <div class="hint" id="cfTip">Token 权限只要 <b>Account · Cloudflare Tunnel · Edit</b> 和 <b>Zone · DNS · Edit</b> 两项就够；再加上 <b>Account · Account Settings · Read</b> 和 <b>Zone · Zone · Read</b>，面板才能自动列出账号和域名。</div>
       <div id="cfList"></div>

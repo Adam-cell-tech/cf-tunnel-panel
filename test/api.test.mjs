@@ -158,6 +158,14 @@ ok('本机 Caddy 延迟可测', bl.d.ok === true && bl.d.ttfbMs && typeof bl.d.t
   ok('CF: DNS 记录可读', dz.status === 200 && Array.isArray(dz.d.records), `${(dz.d.records || []).length} 条`);
   const dt = await j('/api/cf/tunnels');
   ok('CF: 云端隧道列表可读', dt.status === 200 && Array.isArray(dt.d.tunnels), `${(dt.d.tunnels || []).length} 条`);
+  // 一键新建出口：只测「演练」与校验，避免在真实账号里建东西
+  const qkDry = await j('/api/cf/tunnels/quick', { method: 'POST', body: { hostname: 'qa-quick.example.com', service: 'http://127.0.0.1:8080', dry: true } });
+  ok('一键出口: 演练不调 Cloudflare', qkDry.status === 200 && qkDry.d.dry === true && (qkDry.d.plan || []).length === 5, `${(qkDry.d.plan || []).length} 步`);
+  ok('一键出口: 演练含 ingress 与 CNAME', (qkDry.d.plan || []).some((x) => /configurations/.test(x.api)) && (qkDry.d.plan || []).some((x) => /dns_records/.test(x.api)), '');
+  const qkBadHost = await j('/api/cf/tunnels/quick', { method: 'POST', body: { hostname: 'nodot', dry: true } });
+  ok('一键出口: 主机名必须带点', qkBadHost.status === 400, String(qkBadHost.status));
+  const qkBadSvc = await j('/api/cf/tunnels/quick', { method: 'POST', body: { hostname: 'qa-quick.example.com', service: '127.0.0.1:8080', dry: true } });
+  ok('一键出口: 上游必须带协议', qkBadSvc.status === 400, String(qkBadSvc.status));
 }
 
 // 导出导入往返

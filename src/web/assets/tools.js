@@ -261,6 +261,54 @@ function bindHostnames() {
   bindHostnames();
   $('#btnCfDnsAdd').addEventListener('click', () => cfDns(true));
   $('#btnCfDnsList').addEventListener('click', () => cfDns(false));
+  $('#btnQuick').addEventListener('click', () => {
+    const box = $('#quickBox');
+    box.classList.toggle('hidden');
+    $('#btnQuick').setAttribute('aria-expanded', box.classList.contains('hidden') ? 'false' : 'true');
+    if (!box.classList.contains('hidden')) $('#qkHost').focus();
+  });
+  $('#btnQkClose').addEventListener('click', () => {
+    $('#quickBox').classList.add('hidden');
+    $('#btnQuick').setAttribute('aria-expanded', 'false');
+    $('#qkMsg').textContent = '';
+  });
+  $('#btnQkRun').addEventListener('click', async () => {
+    const hostname = ($('#qkHost').value || '').trim();
+    const service = ($('#qkSvc').value || '').trim();
+    const name = ($('#qkName').value || '').trim();
+    const addLocal = $('#qkLocal').checked;
+    const dry = $('#qkDry').checked;
+    const out = $('#qkOut');
+    const msg = $('#qkMsg');
+    if (!hostname) { msg.textContent = '先填公共主机名，例如 dsh2.example.com'; return; }
+    msg.textContent = dry ? '演练中…' : '创建中（最多等 20 秒做公网自测）…';
+    out.innerHTML = '';
+    $('#btnQkRun').disabled = true;
+    try {
+      const d = await api('/api/cf/tunnels/quick', { method: 'POST', body: { hostname, service, name, addLocal, dry } });
+      if (d.dry) {
+        out.innerHTML = '<div class="hint" style="margin-top:0">演练模式：下面是真正执行时会依次调用的接口</div>' +
+          '<table class="stackable"><thead><tr><th>#</th><th>接口</th><th>动作</th></tr></thead><tbody>' +
+          (d.plan || []).map((x) => `<tr><td class="mono">${x.step}</td><td class="mono">${esc(x.api)}</td><td>${esc(x.note)}</td></tr>`).join('') +
+          '</tbody></table>';
+        msg.textContent = '演练完成（没有动任何东西）';
+        return;
+      }
+      out.innerHTML = '<table class="stackable"><thead><tr><th>步骤</th><th>结果</th><th>说明</th></tr></thead><tbody>' +
+        (d.steps || []).map((x) => `<tr><td>${esc(x.name)}</td><td>${x.ok ? '<span class="tag ok">成功</span>' : '<span class="tag err">失败</span>'}</td><td class="mono">${esc(x.detail)}</td></tr>`).join('') +
+        '</tbody></table>' +
+        (d.url ? `<div class="hint">公网入口：<a href="${esc(d.url)}" target="_blank" rel="noopener">${esc(d.url)}</a>${d.publicStatus ? ' · 自测 ' + esc(String(d.publicStatus)) : ''}</div>` : '');
+      msg.textContent = d.ok ? '完成了' : '有步骤失败，看下面那张表';
+      toast(d.ok ? '出口已就绪' : '部分步骤失败', d.ok ? 'ok' : 'warn');
+      loadCf();
+      refresh(true);
+    } catch (e) {
+      msg.textContent = e.message;
+      toast('失败：' + e.message, 'err');
+    } finally {
+      $('#btnQkRun').disabled = false;
+    }
+  });
   $('#cfList').addEventListener('click', async (e) => {
     const z = e.target.closest('[data-cfzone]');
     if (z) { $('#cfZone').value = z.dataset.cfzone; toast('已填入 Zone ID，记得点「保存 API 配置」'); return; }
