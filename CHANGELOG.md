@@ -2,6 +2,15 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.21.0 附：本机监控栈（tools/monitoring）
+
+- 新增 `tools/monitoring/`：Prometheus(v2.55.1) + Grafana(11.3.0) 的 compose，host 网络、
+  `restart: unless-stopped`，Prometheus 抓 `127.0.0.1:8090/8095`，Grafana 自动预置
+  数据源（uid `prom-main`）与仪表盘（uid `cfp-main`），并开匿名只读 + `allow_embedding`。
+- `docs/grafana-dashboard.json` 补显式 panel id（1–12），`dashboards/` 下生成可直接预置的副本。
+- 踩坑记入 `tools/monitoring/README.md`：数据目录要归 uid 1000（用 `--entrypoint sh` 以容器 root 改属主，
+  不加 `--entrypoint` 会把 Grafana 当服务跑起来抢 3000 端口）。
+
 ## v0.21.0 — 把 Grafana 的图嵌进首页
 
 - **首页新增「监控面板」卡**：把 Grafana 单个 panel 用 `/d-solo/` 直接嵌进来（只给一张图，

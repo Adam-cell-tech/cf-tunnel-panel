@@ -40,7 +40,7 @@
       "version": ""
     }
   ],
-  "title": "cf-tunnel-panel（Cloudflare 隧道面板）",
+  "title": "cf-tunnel-panel（面板 / 隧道 / 代理）",
   "description": "面板/隧道/代理/审计的可观测视图。指标来自每个实例的 /metrics（免登录）。",
   "tags": [
     "cloudflare",
@@ -118,7 +118,8 @@
           "mappings": []
         },
         "overrides": []
-      }
+      },
+      "id": 1
     },
     {
       "type": "stat",
@@ -165,7 +166,8 @@
           "mappings": []
         },
         "overrides": []
-      }
+      },
+      "id": 2
     },
     {
       "type": "stat",
@@ -225,7 +227,8 @@
           }
         },
         "overrides": []
-      }
+      },
+      "id": 3
     },
     {
       "type": "stat",
@@ -285,7 +288,8 @@
           }
         },
         "overrides": []
-      }
+      },
+      "id": 4
     },
     {
       "type": "stat",
@@ -332,7 +336,8 @@
           "mappings": []
         },
         "overrides": []
-      }
+      },
+      "id": 5
     },
     {
       "type": "stat",
@@ -379,7 +384,8 @@
           "mappings": []
         },
         "overrides": []
-      }
+      },
+      "id": 6
     },
     {
       "type": "timeseries",
@@ -442,7 +448,8 @@
         "tooltip": {
           "mode": "multi"
         }
-      }
+      },
+      "id": 7
     },
     {
       "type": "timeseries",
@@ -492,7 +499,8 @@
         "tooltip": {
           "mode": "multi"
         }
-      }
+      },
+      "id": 8
     },
     {
       "type": "timeseries",
@@ -542,7 +550,8 @@
         "tooltip": {
           "mode": "multi"
         }
-      }
+      },
+      "id": 9
     },
     {
       "type": "timeseries",
@@ -592,7 +601,8 @@
         "tooltip": {
           "mode": "multi"
         }
-      }
+      },
+      "id": 10
     },
     {
       "type": "table",
@@ -637,7 +647,8 @@
           }
         },
         "overrides": []
-      }
+      },
+      "id": 11
     },
     {
       "type": "table",
@@ -682,7 +693,9 @@
           }
         },
         "overrides": []
-      }
+      },
+      "id": 12
     }
-  ]
+  ],
+  "uid": "cfp-main"
 }

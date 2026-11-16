@@ -29,6 +29,18 @@
 
 ---
 
+### 自带监控栈（可选）
+
+`tools/monitoring/` 里是一套 Prometheus + Grafana，已经按本面板接好：
+
+```bash
+cd tools/monitoring && docker compose up -d     # Grafana :3000，Prometheus 127.0.0.1:9090
+```
+
+Prometheus 已经同时抓 blue/green 两个槽位，Grafana 会自动导入 `docs/grafana-dashboard.json`，
+并开好匿名只读 + `allow_embedding`，所以首页「监控面板」的三个字段可以直接填（细节见
+`tools/monitoring/README.md`）。
+
 ### v0.21.0 更新
 
 - **首页「监控面板」卡**：设置 → 监控嵌入里填 Grafana 地址、仪表盘 `uid/slug`、最多 3 个 `panelId`

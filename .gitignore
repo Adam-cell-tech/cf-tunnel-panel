@@ -6,3 +6,5 @@ node_modules/
 *.key
 *.cer
 test/.env
+tools/monitoring/grafana-data/
+tools/monitoring/prometheus-data/

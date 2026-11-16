@@ -1,0 +1,12 @@
+# 仪表盘预置：把 dashboards/ 目录里的 json 全量导入（改完重启 Grafana 或等 10s 自动加载）
+apiVersion: 1
+providers:
+  - name: cfp
+    orgId: 1
+    folder: cf-tunnel-panel
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

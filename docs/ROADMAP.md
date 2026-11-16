@@ -5,6 +5,14 @@
 
 ---
 
+### v0.21.0 附带：tools/monitoring 监控栈
+
+| 项 | 做法 | 实测 |
+| --- | --- | --- |
+| 一键起栈 | `cd tools/monitoring && docker compose up -d`（Prometheus v2.55.1 + Grafana 11.3.0，host 网络） | `/api/health` 200、`/-/ready` 就绪、`cf_leader_info`/`cf_tunnel_up`/`cf_role` 均有数据 |
+| 预置 | 数据源 uid `prom-main`、仪表盘 uid `cfp-main`（slug `a650163`）、匿名只读、`allow_embedding` | 匿名 `/d-solo/cfp-main/a650163?panelId=7` 200 |
+| 面板侧 | `settings.grafana` 指向 `http://192.168.1.55:3000`，panelId 1/7/9 | 首页 CSP 含该源、`#grafanaCard` 出现 |
+
 ## ✅ v0.21.0 — Grafana 图嵌进首页
 
 | 项 | 做法 | 实测 |

@@ -15,6 +15,18 @@
 
 ---
 
+### Self-hosted monitoring stack (optional)
+
+`tools/monitoring/` ships a two-container Prometheus + Grafana stack, pre-wired for this panel:
+
+```bash
+cd tools/monitoring && docker compose up -d     # Grafana on :3000, Prometheus on 127.0.0.1:9090
+```
+
+Prometheus already scrapes both blue/green slots, and Grafana auto-imports the dashboard from
+`docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
+overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
+
 ## What's new in v0.21.0
 
 - **Grafana panels inside the overview page.** Point the panel at your Grafana (Settings → Grafana embed),

@@ -1,0 +1,15 @@
+# Prometheus 抓取配置：两台面板实例都抓（8090 blue / 8095 green，谁在跑谁有数据）
+# /metrics 免登录，所以不需要 basic_auth。
+global:
+  scrape_interval: 15s
+  evaluation_interval: 30s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: cf-tunnel-panel
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['127.0.0.1:8090', '127.0.0.1:8095']
+    # 停着的那一色会 down，用 instance 标签区分即可（PanelDown 告警里已说明）

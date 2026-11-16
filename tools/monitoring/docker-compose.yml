@@ -1,0 +1,49 @@
+# 监控栈：Prometheus + Grafana（只给面板首页嵌图用）
+#
+#   cd tools/monitoring && docker compose up -d
+#
+# - 两个容器都用 host 网络：Prometheus 要抓 127.0.0.1:8090/8095，Grafana 要能回连 Prometheus，
+#   用 host 网络最省事（端口 3000 / 9090）。
+# - Grafana 开了匿名只读（org_role=Viewer）+ allow_embedding，这样面板首页的 iframe 不用再登录。
+#   注意：匿名只读意味着同网段任何人都能看图（看不到配置、也改不了东西）。
+name: cfp-monitoring
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: cfp-prometheus
+    network_mode: host
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.listen-address=127.0.0.1:9090
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+      - ./prometheus-data:/prometheus
+    user: "${PUID:-1000}:${PGID:-1000}"
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: cfp-grafana
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      GF_SERVER_HTTP_ADDR: 0.0.0.0
+      GF_SERVER_HTTP_PORT: "3000"
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/cf-tunnel-panel.json
+    volumes:
+      - ./grafana-data:/var/lib/grafana
+      - ./provisioning:/etc/grafana/provisioning:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
+    user: "${PUID:-1000}:${PGID:-1000}"
