@@ -57,6 +57,7 @@ function ruleHtml(r, i) {
       <span class="tag ${scoped ? 'acc' : ''}">${scoped ? '专属' : '全局'}</span>
       <span class="tag mono">${esc(r.path || '/')}</span>
       <span class="mono muted" style="font-size:11.5px">→ ${esc(r.upstream || '未填上游')}${upDot(r.upstream)}</span>
+      <span class="tag mono hits hidden" data-hits="${esc(r.id || '')}" title="最近访问日志里命中这条规则的次数（含 p95 耗时）"></span>
       <div class="right row">
         <button class="sm ghost" data-act="up" title="上移">↑</button>
         <button class="sm ghost" data-act="down" title="下移">↓</button>
@@ -108,6 +109,24 @@ function ruleHtml(r, i) {
   </div>`;
 }
 
+// 最近 1 小时（实际上是「当前访问日志窗口」）每条规则命中次数 + p95
+async function loadHits() {
+  try {
+    const d = await api('/api/routes/stats?limit=2000');
+    const by = {};
+    (d.routes || []).forEach((r) => { if (r.id) by[r.id] = r; });
+    document.querySelectorAll('#ruleList [data-hits]').forEach((el) => {
+      const id = el.getAttribute('data-hits');
+      const v = by[id];
+      if (!v || !v.count) { el.classList.add('hidden'); el.textContent = ''; return; }
+      const bad = (v.s5 || 0) + (v.s4 || 0);
+      el.textContent = `命中 ${v.count}${bad ? ` · 错 ${bad}` : ''} · p95 ${v.p95 || 0}ms`;
+      el.className = `tag mono hits ${bad ? 'warn' : 'ok'}`;
+      el.classList.remove('hidden');
+    });
+  } catch (_) { /* 统计拿不到就不显示，不影响规则编辑 */ }
+}
+
 function matchFilter(r) {
   const q = filterText.trim().toLowerCase();
   if (!q) return true;
@@ -131,6 +150,7 @@ function render() {
   const exit = (ST.state.tunnels || []).find((t) => t.id === selectedExit);
   $('#scopeTag').textContent = selectedExit ? `只看「${exit ? exit.name : selectedExit}」的专属规则` : '全局规则：对所有出口生效';
   renderWarns();
+  loadHits();
 }
 
 // ?focus=<规则id>：从「按规则看流量」点过来时，切到该规则所在作用域、滚过去、闪一下

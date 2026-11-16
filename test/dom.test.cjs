@@ -73,6 +73,8 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
       const hit = rd.querySelector('.rule[data-focused]');
       chk('规则页: ?focus 能定位到规则', !!hit, String(!!hit));
       chk('规则页: focus 页面无脚本错误', rErrs.length === 0, rErrs.join(' | ').slice(0, 160));
+      chk('规则页: 每条规则有命中统计徽标', rd.querySelectorAll('#ruleList [data-hits]').length > 0,
+        String(rd.querySelectorAll('#ruleList [data-hits]').length));
     }
 
     chk('总览: 无脚本错误', errors.length === 0, errors.join(' | ').slice(0, 200));

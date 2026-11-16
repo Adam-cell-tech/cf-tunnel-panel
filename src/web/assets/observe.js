@@ -44,7 +44,9 @@ function renderAccess() {
   const body = slice.map((r) => `<tr>
       <td class="mono" data-label="时间">${esc((r.ts || '').slice(11, 19))}</td>
       <td class="mono" data-label="方法">${esc(r.method)}</td>
-      <td class="mono" data-label="路径" title="${esc((r.host || '') + (r.ua ? ' · ' + r.ua : ''))}">${esc((r.uri || '').slice(0, 80))}</td>
+      <td class="mono" data-label="路径" title="${esc((r.host || '') + (r.ua ? ' · ' + r.ua : ''))}">${r.rule
+        ? `<a class="jump" href="/rules?focus=${encodeURIComponent(r.rule.id)}" title="命中规则：${esc(r.rule.name || r.rule.id)}（点这里跳到规则）">${esc((r.uri || '').slice(0, 80))}</a>`
+        : esc((r.uri || '').slice(0, 80))}</td>
       <td class="mono ${r.status >= 500 ? 'err-hint' : r.status >= 400 ? '' : 'ok-hint'}" data-label="状态">${r.status}</td>
       <td class="mono" data-label="耗时">${r.durMs}ms</td>
       <td class="mono muted" data-label="来源 IP">${esc(r.ip)}</td>

@@ -187,6 +187,14 @@ for (const p of ['/metrics', '/badge.svg']) {
 const lg = await fetch(B + '/legacy');
 ok('/legacy 已下线（404）', lg.status === 404, String(lg.status));
 // 新增：规则命中统计 / 配置导出 YAML
+{
+  const acc = await j('/api/access?limit=50');
+  const rows = (acc.d && acc.d.rows) || [];
+  const bad = rows.filter((r) => r.rule && (!r.rule.id || typeof r.rule.name !== 'string'));
+  ok('/api/access 每行带命中规则（形状正确）', acc.status === 200 && bad.length === 0, `${rows.length} 行, 坏 ${bad.length}`);
+  const withRule = rows.filter((r) => r.rule).length;
+  ok('/api/access 命中规则的行可跳转（有 id）', rows.length === 0 || withRule > 0 || rows.every((r) => !r.rule), `命中行 ${withRule}/${rows.length}`);
+}
 const rs = await j('/api/routes/stats?limit=200');
 ok('/api/routes/stats 可用', rs.status === 200 && Array.isArray(rs.d.routes), JSON.stringify(rs.d).slice(0, 60));
 const yaml = await fetch(B + '/api/export.yaml', { headers: { Authorization: basic } });

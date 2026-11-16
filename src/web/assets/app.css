@@ -328,3 +328,8 @@ pre.log .l-system{color:#a0a8b4}
 }
 .tag.jump { text-decoration: none; cursor: pointer; }
 .tag.jump:hover { border-color: var(--acc); color: var(--fg); transform: translateY(-1px); }
+
+/* 可点的日志行 / 统计徽标（v0.13.6） */
+.mono a.jump { color: var(--acc); text-decoration: none; border-bottom: 1px dashed color-mix(in srgb, var(--acc) 55%, transparent); }
+.mono a.jump:hover { border-bottom-style: solid; }
+.rule-h .hits { font-size: 12px; }

@@ -12,6 +12,12 @@
 - `package.json` 增加 `engines.node >= 20`。
 - 测试：API 113、DOM 75。
 
+## v0.13.6 — 2026-11-16
+
+### 新增
+- **访问记录可点进规则**：`/api/access` 为每行附加 `rule: {id, name}`（`simulateMatch` 归属），观测页路径单元格渲染成 `/rules?focus=<id>` 链接，hover 提示命中的规则名。
+- **规则卡片显示命中量**：`rules.js` 在 `render()` 后拉 `/api/routes/stats?limit=2000`，把 `命中 N · 错 M · p95 Xms` 填进每条规则的徽标（有错误转黄色，没数据则隐藏）。
+
 ## v0.13.5 — 2026-11-16
 
 ### 新增

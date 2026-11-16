@@ -407,7 +407,15 @@ async function handler(req, res) {
 
   if (p === '/api/access' && req.method === 'GET') {
     const limit = Math.max(1, Math.min(500, Number(url.searchParams.get('limit') || 100)));
-    return sendJson(res, 200, readAccess(limit));
+    const d = readAccess(limit);
+    // 给每行标上它命中的规则，前端才能「点日志跳到规则」
+    const rows = ((d && d.rows) || []).map((r) => {
+      const m = simulateMatch(String(r.uri || '/').split('?')[0], r.host || '', r.method || 'GET');
+      const idx = m && m.matched ? (m.ofIndex != null ? m.ofIndex : m.index - 1) : -1;
+      const rule = idx >= 0 ? state.routes[idx] : null;
+      return rule ? Object.assign({}, r, { rule: { id: rule.id, name: rule.name } }) : r;
+    });
+    return sendJson(res, 200, Object.assign({}, d, { rows }));
   }
 
   if (p === '/api/routes' && req.method === 'POST') {
