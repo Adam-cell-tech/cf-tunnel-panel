@@ -30,6 +30,19 @@
 - 测试：**229 接口 + 113 页面 + 32 真 Caddy e2e**（e2e 新增「备份实例认得 leader 登录的会话」
   「备份实例看到 leader 刚改的配置」两条跨实例断言）。
 
+## v0.18.3 — 镜像重建，`drift` 归零
+
+前面几版都是用 `docker cp` 热替换容器里的代码（改一行、重启一次，十几秒见效果），
+代价是镜像里还是老代码 —— `/healthz` 的 `drift:true` 就是在说这件事。这版把两者对齐：
+
+- 用当前工作区重建镜像，并核对镜像内 `.code-hash` 与工作区 `node tools/codehash.js` 完全一致
+  （`902d6faf08cdbaa2`），再用 `MOUNT_SRC=0 tools/rolling-upgrade.sh --apply` 滚两轮，
+  两台实例都跑镜像里的代码，`/healthz` → `drift:false`、`code == imageCode`。
+- 修 `Dockerfile` 的默认 `CADDY_ADMIN`：原来写 `127.0.0.1:2019`，而 `caddy.bootstrap.json`
+  现在监听 `20190`。走 compose 时由 compose 覆盖所以看不出来，但**直接 `docker run` 这个镜像**
+  会推不动配置（v0.16.0 起 pusher 不再回退旧端口）。改成 `20190`。
+- 镜像同时打 `cf-tunnel-panel:local`（脚本默认引用）与 `cf-tunnel-panel:0.18.3`（便于回滚）。
+
 ## v0.18.2 — 备份实例不再「悄悄失败」
 
 横向扩展之后 Caddy 会把页面请求轮流分给两台实例，轮到备份实例时写操作会被 409 拦住，

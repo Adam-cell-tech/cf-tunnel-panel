@@ -7,7 +7,7 @@
 > changes, no open ports**. Multiple tunnels can run at the same time (quick + named, or several
 > accounts and domains).
 
-- Version: **v0.18.2**
+- Version: **v0.18.3**
 - Works with: NAS, self-hosted sites, Home Assistant, Jellyfin, Gitea, Immich, qBittorrent… any HTTP service
 - Stack: `node:http` backend (zero dependencies), hand-written frontend (no build step), `Caddy` for routing,
   `cloudflared` for the tunnel — one `docker compose up` and you are done

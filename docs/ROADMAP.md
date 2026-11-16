@@ -22,6 +22,17 @@
 
 测试：229 接口 + 113 页面 + 32 真 Caddy e2e。
 
+## ✅ v0.18.3 — 镜像与运行代码合一（drift 归零）
+
+| 项 | 说明 |
+| --- | --- |
+| 重建镜像 | `docker compose build panel --build-arg GIT_SHA=$(git rev-parse --short HEAD)` |
+| 指纹校验 | 镜像内 `.code-hash` == 工作区 `codehash.js`（`902d6faf08cdbaa2`） |
+| 滚动切两轮 | blue → green → blue，全程 `MOUNT_SRC=0`（纯镜像代码） |
+| 结果 | `/healthz` `drift:false`、`code == imageCode` |
+| 修 | `Dockerfile` 默认 `CADDY_ADMIN` 2019 → **20190**（与 `caddy.bootstrap.json` 一致） |
+| 镜像 tag | `cf-tunnel-panel:local` + `cf-tunnel-panel:0.18.3` |
+
 ## ✅ v0.18.2 — 备份实例不再「悄悄失败」
 
 | 项 | 说明 |

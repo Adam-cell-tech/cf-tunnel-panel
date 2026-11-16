@@ -42,7 +42,7 @@ RUN node tools/codehash.js > .code-hash
 ENV TZ=Asia/Shanghai \
     PORT=8090 \
     DATA_DIR=/data \
-    CADDY_ADMIN=http://127.0.0.1:2019 \
+    CADDY_ADMIN=http://127.0.0.1:20190 \
     CADDY_LISTEN=:8080 \
     CLOUDFLARED_BIN=/usr/local/bin/cloudflared
 
