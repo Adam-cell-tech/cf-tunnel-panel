@@ -609,5 +609,25 @@ try {
   if (left.length !== cur.length) await j('/api/routes', { method: 'POST', body: { routes: left } });
 } catch (e) { console.log('清理探针规则失败：' + e.message); }
 
+// ---------------------------------------------------------------- v0.14.0 新增
+{
+  const st6 = await j('/api/routes/stats?limit=200&hours=6');
+  ok('统计：带时间窗返回 hours', st6.d && st6.d.hours === 6, String(st6.d && st6.d.hours));
+  const stA = await j('/api/routes/stats?limit=200');
+  ok('统计：不带 hours 时为 0', stA.d && stA.d.hours === 0, String(stA.d && stA.d.hours));
+
+  const csv = await rawFetch(B + '/api/audit.csv?limit=20', { headers: { Authorization: basic } });
+  // 注意：fetch().text() 会按 UTF-8 解码并把 BOM 吃掉，所以 BOM 要查原始字节
+  const csvBytes = Buffer.from(await csv.clone().arrayBuffer());
+  const csvText = await csv.text();
+  ok('审计 CSV：Content-Type 是 text/csv', /text\/csv/.test(csv.headers.get('content-type') || ''), csv.headers.get('content-type'));
+  ok('审计 CSV：带 UTF-8 BOM + 表头', csvBytes[0] === 0xEF && csvBytes[1] === 0xBB && csvBytes[2] === 0xBF && /时间.*谁.*IP/.test(csvText), csvText.slice(0, 40));
+  ok('审计 CSV：附件下载', /attachment/.test(csv.headers.get('content-disposition') || ''), '');
+
+  const stt = await j('/api/state');
+  const ev = (stt.d.state.settings.notify || {}).events || {};
+  ok('通知事件：默认开启 tunnelUp', ev.tunnelUp !== false, String(ev.tunnelUp));
+}
+
 console.log(`\n${pass}/${pass + fail} 通过`);
 process.exit(fail ? 1 : 0);

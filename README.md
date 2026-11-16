@@ -581,6 +581,17 @@ The script snapshots the route table to `/tmp` before touching it and restores f
 | E2E coverage 8 → 23 | The real-Caddy suite now proves prefix stripping, prefix passthrough, basic auth (401/401/200), Host-based routing isolation, WebSocket 101 upgrade, maintenance 503 + `Retry-After`, IP blacklist 403, admin off 2019, access-log writer and `trusted_proxies` — and restores routes/settings in `finally`. |
 | Audit de-duplication | A request whose handler already logged a human-readable action no longer also emits the generic `POST /api/...` row. |
 
+### v0.14.0 highlights
+
+| Change | Detail |
+| --- | --- |
+| Hit counts with a window | Rule cards used to count "last 2000 log lines" — you could not tell over what period. `GET /api/routes/stats?hours=` now takes 1/6/24 h and the rules page has a selector (remembered in `localStorage`). |
+| Chart tooltips | Every bar (and every uptime sample) carries a `<title>`: hover shows `22:00 · 共 120 次 · 其中错误 8`. Works with no JS — native SVG tooltips. |
+| Exit recovered notification | New `tunnelUp` event: when an exit flips from stopped/error to running you get a message with its URL. Toggle lives next to "exit down". |
+| Audit CSV export | `GET /api/audit.csv` streams CSV with a UTF-8 BOM (so Excel opens it correctly); button on the Observe page. |
+| Click an IP to filter | Source-IP cells are links; clicking fills the new IP filter (also works via `/observe?ip=1.2.3.4`). |
+| Latent bug fixed | Access-log rows had no `at` field, so the monitor's "requests in the last 5 minutes" window was always empty — the 5xx-spike alert had never fired. Rows now carry `at` and `readAccess()` accepts `{since, maxBytes}`. |
+
 ### v0.13.9 highlights
 
 | Change | Detail |

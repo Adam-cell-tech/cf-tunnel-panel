@@ -80,6 +80,7 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('总览: 四张图都画出来了', doc.querySelectorAll('.chart').length >= 3, String(doc.querySelectorAll('.chart').length));
     chk('总览: 刻度是 HTML 行（不被 SVG 拉伸）', doc.querySelectorAll('.chart-x').length >= 3, String(doc.querySelectorAll('.chart-x').length));
     chk('总览: 刻度文字有内容', [...doc.querySelectorAll('.chart-x span')].some((x) => /\d+:00/.test(x.textContent)), '');
+    chk('总览: 图表带悬停提示', doc.querySelectorAll('.chart title').length >= 3, String(doc.querySelectorAll('.chart title').length));
     chk('总览: 无脚本错误', errors.length === 0, errors.join(' | ').slice(0, 200));
     // 主题切换
     const before = win.document.documentElement.dataset.theme;

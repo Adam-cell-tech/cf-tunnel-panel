@@ -5,6 +5,19 @@
 
 ---
 
+## ✅ v0.14.0 — 从看到数字到能追下去
+
+| 项 | 实现 |
+| --- | --- |
+| 统计时间窗 | `/api/routes/stats?hours=`（1..168）+ 规则页 `#hitHours`（持久化） |
+| 图表悬停 | `barsSvg` 每列包 `<g><title>`；`drawHist` 每个点加 `<circle><title>` |
+| 出口恢复 | `monitor.js` 的 `prevTunnelStatus` 状态机 → `notify('tunnelUp')` |
+| 审计导出 | `GET /api/audit.csv`（BOM + 附件头，`limit`/`q` 沿用） |
+| IP 筛选 | `#accIp` + `?ip=` + 表格内可点链接 |
+| 潜伏 bug | 访问日志补 `at` 字段（5xx 尖峰告警此前从未生效） |
+
+测试：API 186、DOM 95、e2e 23。
+
 ## ✅ v0.13.9 — 图表重做
 
 | 项 | 实现 |

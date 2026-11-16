@@ -171,6 +171,7 @@ function fill() {
   $('#evUrl').checked = !!(n.events && n.events.urlChange);
   $('#evCaddy').checked = !!(n.events && n.events.caddyFail);
   if ($('#evSessionIp')) $('#evSessionIp').checked = !!(n.events && n.events.sessionIp);
+  if ($('#evTunnelUp')) $('#evTunnelUp').checked = !(n.events && n.events.tunnelUp === false);
   if ($('#evErrorSpike')) $('#evErrorSpike').checked = !!(n.events && n.events.errorSpike);
   if ($('#evLoginFail')) $('#evLoginFail').checked = !!(n.events && n.events.loginFail);
   if ($('#evAuthScan')) $('#evAuthScan').checked = !!(n.events && n.events.authScan);
@@ -199,6 +200,7 @@ async function save() {
       format: $('#notifyFormat').value,
       secret: $('#notifySecret').value.trim(),
       events: { tunnelDown: $('#evDown').checked, urlChange: $('#evUrl').checked, caddyFail: $('#evCaddy').checked, sessionIp: $('#evSessionIp') ? $('#evSessionIp').checked : true,
+        tunnelUp: $('#evTunnelUp') ? $('#evTunnelUp').checked : true,
         errorSpike: $('#evErrorSpike') ? $('#evErrorSpike').checked : true,
         authScan: $('#evAuthScan') ? $('#evAuthScan').checked : true,
         loginFail: $('#evLoginFail') ? $('#evLoginFail').checked : true },

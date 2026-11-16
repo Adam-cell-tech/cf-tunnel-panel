@@ -104,7 +104,15 @@ function barsSvg(keys, series, max) {
   const innerW = 100 - CPAD * 2;
   const bw = innerW / n;
   let body = gridLines();
-  keys.forEach((_, i) => {
+  keys.forEach((k, i) => {
+    // 每根柱子包在 <g><title> 里：鼠标悬停就能看到「几点 · 多少次（其中错误多少）」
+    const hh = String(new Date(k).getHours()).padStart(2, '0');
+    const parts = series.map((s) => ({ name: s.name || '', v: Number(s.values[i]) || 0 }));
+    const tot = parts.reduce((a, p) => a + p.v, 0);
+    const tip = `${hh}:00 · 共 ${tot}${series.some((x) => x.unit) ? series.find((x) => x.unit).unit : ''}`
+      + parts.filter((p) => p.name).map((p) => ` · ${p.name} ${p.v}`).join('');
+    body += `<g><title>${tip}</title>`
+      + `<rect x="${(CPAD + i * bw).toFixed(2)}" y="0" width="${bw.toFixed(2)}" height="${CH}" fill="transparent"></rect>`;
     let y = CH;
     series.forEach((s) => {
       const v = Number(s.values[i]) || 0;
@@ -113,6 +121,7 @@ function barsSvg(keys, series, max) {
       y = Math.max(0, y - h);
       body += `<rect x="${(CPAD + i * bw + bw * 0.16).toFixed(2)}" y="${y.toFixed(2)}" width="${(bw * 0.68).toFixed(2)}" height="${h.toFixed(2)}" rx="0.6" fill="${s.color}" opacity="${s.opacity || 0.9}"></rect>`;
     });
+    body += '</g>';
   });
   return { svg: `<svg class="chart" viewBox="0 0 100 ${CH}" preserveAspectRatio="none" role="img" aria-label="统计图表">${body}</svg>`, labels: chartLabels(keys) };
 }
@@ -124,8 +133,8 @@ function drawTrend(buckets) {
   const max = Math.max(1, ...buckets.map((b) => b.total)) * 1.08;
   const keys = buckets.map((b) => b.t);
   const c = barsSvg(keys, [
-    { values: buckets.map((b) => b.total), color: 'var(--acc)', opacity: 0.85 },
-    { values: buckets.map((b) => b.err), color: 'var(--err)', opacity: 0.95 },
+    { values: buckets.map((b) => b.total), color: 'var(--acc)', opacity: 0.85, name: '合计', unit: ' 次' },
+    { values: buckets.map((b) => b.err), color: 'var(--err)', opacity: 0.95, name: '其中错误' },
   ], max);
   const total = buckets.reduce((a, b) => a + b.total, 0);
   const err = buckets.reduce((a, b) => a + b.err, 0);
@@ -168,6 +177,7 @@ function drawHist(points) {
       ${gridLines()}
       <polygon points="${area}" fill="var(--acc)" opacity="0.16"></polygon>
       <polyline points="${pts}" fill="none" stroke="var(--acc)" stroke-width="1.4" vector-effect="non-scaling-stroke" stroke-linejoin="round"></polyline>
+      ${points.map((p, i) => `<circle cx="${(i * step).toFixed(2)}" cy="${y(p.running).toFixed(2)}" r="1.1" fill="var(--acc)"><title>${new Date(p.t).getHours()}:00 · ${p.running}/${p.total} 在线</title></circle>`).join('')}
     </svg>${chartLabels(keys.filter((_, i) => i % Math.max(1, Math.ceil(points.length / 6)) === 0))}`;
 }
 
@@ -179,8 +189,8 @@ function drawAudit(buckets) {
   const max = Math.max(1, ...buckets.map((b) => b.total)) * 1.08;
   const keys = buckets.map((b) => b.t);
   const c = barsSvg(keys, [
-    { values: buckets.map((b) => b.total), color: 'var(--warn)', opacity: 0.85 },
-    { values: buckets.map((b) => b.err), color: 'var(--err)', opacity: 0.95 },
+    { values: buckets.map((b) => b.total), color: 'var(--warn)', opacity: 0.85, name: '合计', unit: ' 次改动' },
+    { values: buckets.map((b) => b.err), color: 'var(--err)', opacity: 0.95, name: '失败' },
   ], max);
   const total = buckets.reduce((a, b) => a + b.total, 0);
   const err = buckets.reduce((a, b) => a + b.err, 0);
@@ -215,6 +225,8 @@ function drawPaths(groups, hours, unmatched) {
     values: keys.map((_, i) => (g.buckets[i] || {}).total || 0),
     color: PATH_COLORS[gi % PATH_COLORS.length],
     opacity: 0.9,
+    name: g.name,
+    unit: ' 次请求',
   })), stackMax);
   const legend = groups.map((g, gi) => {
     const color = PATH_COLORS[gi % PATH_COLORS.length];

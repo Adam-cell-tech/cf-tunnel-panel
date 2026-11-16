@@ -143,11 +143,14 @@ function systemInfo() {
   };
 }
 
-function readAccess(limit = 100) {
+function readAccess(limit = 100, opts = {}) {
+  // opts.maxBytes：往回读多少字节（默认 512KB）；opts.since：只要这个毫秒时间戳之后的记录
+  const MB = 1024 * 1024;
+  const maxBytes = Math.min(Math.max(Number(opts.maxBytes) || 512 * 1024, 32 * 1024), 8 * MB);
+  const since = Number(opts.since) || 0;
   let raw = '';
   try {
     const st = fs.statSync(ACCESS_LOG_FILE);
-    const maxBytes = 512 * 1024;
     const start = Math.max(0, st.size - maxBytes);
     const fd = fs.openSync(ACCESS_LOG_FILE, 'r');
     const buf = Buffer.alloc(Math.min(maxBytes, st.size - start));
@@ -176,9 +179,13 @@ function readAccess(limit = 100) {
       size: Number(o.size) || 0,
       ip: req.remote_ip || '',
       ua: (req.headers && req.headers['User-Agent'] && req.headers['User-Agent'][0]) || '',
+      at: o.ts ? Math.round(o.ts * 1000) : 0,
     });
   }
-  const tail = rows.slice(-limit).reverse();
+  // 按时间窗过滤（opts.since），再取最后 limit 条；at 字段之前缺失，导致 monitor 的
+  // 「最近 5 分钟」判断永远为空（5xx 尖峰告警其实从来没触发过）
+  const pool = since ? rows.filter((r) => (r.at || 0) >= since) : rows;
+  const tail = pool.slice(-limit).reverse();
   const byStatus = {};
   const byPath = {};
   const byHost = {};

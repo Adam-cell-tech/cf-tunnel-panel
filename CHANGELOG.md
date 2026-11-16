@@ -12,6 +12,19 @@
 - `package.json` 增加 `engines.node >= 20`。
 - 测试：API 113、DOM 75。
 
+## v0.14.0 — 2026-11-16
+
+### 新增
+- `/api/routes/stats?hours=`：按 1/6/24 小时时间窗统计；规则卡显示「命中 N · 错 M · p95 Xms」并可切窗口。
+- 图表悬停提示：柱子与在线率采样点都带 `<title>`（原生 SVG tooltip），显示该小时的具体数字。
+- `tunnelUp` 通知事件：出口从非 running 恢复到 running 时发一条带地址的消息，设置页可开关。
+- `GET /api/audit.csv`：审计日志导出 CSV（UTF-8 BOM，Excel 友好），观测页有按钮。
+- 观测页 IP 筛选：来源 IP 可点，或直接 `/observe?ip=`。
+
+### 修复
+- **访问日志行缺 `at` 字段**，`monitor.js` 的「最近 5 分钟」过滤永远为空 → 5xx 尖峰告警自上线以来从未触发。现在 `readAccess()` 每行带 `at`，并支持 `{since, maxBytes}` 参数。
+- `readAccess()` 只读末 512KB，24 小时窗口会被截断；带 `hours` 时改读 4MB。
+
 ## v0.13.9 — 2026-11-16
 
 ### 修复

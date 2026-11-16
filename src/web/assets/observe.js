@@ -17,6 +17,7 @@ function rangeSec() { return Number(($('#accRange') || {}).value || 0) || 0; }
 function filteredRows() {
   const st = ($('#accStatus').value || '').trim();
   const q = ($('#accPath').value || '').trim().toLowerCase();
+  const ip = (($('#accIp') || {}).value || '').trim();
   const span = rangeSec();
   const since = span ? Date.now() - span * 1000 : 0;
   return rows.filter((r) => {
@@ -24,6 +25,7 @@ function filteredRows() {
       const t = Date.parse(r.ts.replace(' ', 'T'));
       if (Number.isFinite(t) && t < since) return false;
     }
+    if (ip && !String(r.ip || '').includes(ip)) return false;
     if (st === 'err' && !(r.status >= 400)) return false;
     if (/^[2-5]$/.test(st) && Math.floor(Number(r.status) / 100) !== Number(st)) return false;
     if (q && !String(r.uri || '').toLowerCase().includes(q)) return false;
@@ -49,7 +51,7 @@ function renderAccess() {
         : esc((r.uri || '').slice(0, 80))}</td>
       <td class="mono ${r.status >= 500 ? 'err-hint' : r.status >= 400 ? '' : 'ok-hint'}" data-label="状态">${r.status}</td>
       <td class="mono" data-label="耗时">${r.durMs}ms</td>
-      <td class="mono muted" data-label="来源 IP">${esc(r.ip)}</td>
+      <td class="mono muted" data-label="来源 IP">${r.ip ? `<a class="jump" href="#" data-ip="${esc(r.ip)}" title="只看这个 IP">${esc(r.ip)}</a>` : ''}</td>
     </tr>`).join('');
   box.innerHTML = `
     <div class="row" style="padding:10px 12px;gap:8px;border-bottom:1px solid var(--line);flex-wrap:wrap">
@@ -153,10 +155,22 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#accessAuto').addEventListener('change', (e) => {
     if (e.target.checked) loadAccess();
   });
+  const ipBox = $('#accIp');
+  if (ipBox) ipBox.addEventListener('input', () => { page = 1; renderAccess(); });
+  const fromUrl = new URLSearchParams(location.search).get('ip');
+  if (fromUrl && ipBox && !ipBox.value) ipBox.value = fromUrl;
   for (const id of ['#accStatus', '#accRange']) {
     $(id).addEventListener('change', () => { page = 1; renderAccess(); });
   }
   $('#accPath').addEventListener('input', () => { page = 1; renderAccess(); });
+  const bodyEl = document.querySelector('#accessBody');
+  if (bodyEl) bodyEl.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('a[data-ip]');
+    if (!a) return;
+    e.preventDefault();
+    const box = $('#accIp');
+    if (box) { box.value = a.getAttribute('data-ip'); page = 1; renderAccess(); }
+  });
   $('#logFilter').addEventListener('input', applyFilter);
   $('#logOnlyErr').addEventListener('change', applyFilter);
   $('#btnLogPause').addEventListener('click', (e) => {

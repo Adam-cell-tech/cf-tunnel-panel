@@ -110,9 +110,22 @@ function ruleHtml(r, i) {
 }
 
 // 最近 1 小时（实际上是「当前访问日志窗口」）每条规则命中次数 + p95
+(function initHitHours() {
+  document.addEventListener('DOMContentLoaded', () => {
+    const sel = $('#hitHours');
+    if (!sel) return;
+    const saved = localStorage.getItem('cfp-hit-hours');
+    if (saved) sel.value = saved;
+    sel.addEventListener('change', () => {
+      localStorage.setItem('cfp-hit-hours', sel.value);
+      loadHits();
+    });
+  });
+})();
+
 async function loadHits() {
   try {
-    const d = await api('/api/routes/stats?limit=2000');
+    const d = await api(`/api/routes/stats?limit=4000&hours=${hitHours()}`);
     const by = {};
     (d.routes || []).forEach((r) => { if (r.id) by[r.id] = r; });
     document.querySelectorAll('#ruleList [data-hits]').forEach((el) => {

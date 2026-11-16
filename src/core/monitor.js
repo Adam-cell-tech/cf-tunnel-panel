@@ -20,10 +20,24 @@ let seenCaddyOk = true;
 let histTick = 0;
 let lastSpike = 0;      // 上次 5xx 告警时间（防刷屏）
 let lastLoginAlert = 0;
-let lastScanAlert = 0; // 采样节拍：每 12 次（12×5s=60s）落一个点
+let lastScanAlert = 0;
+const prevTunnelStatus = new Map();   // 出口 id -> 上一次看到的状态（用来发现「恢复了」） // 采样节拍：每 12 次（12×5s=60s）落一个点
 function startMonitor() {
   setInterval(() => {
     histTick += 1;
+    // 出口恢复：上一次是 stopped/error/starting，这一次 running → 告诉用户一声
+    try {
+      for (const t of state.tunnels || []) {
+        const rt = tunnelRt(t.id) || {};
+        const now = rt.status || 'stopped';
+        const before = prevTunnelStatus.get(t.id);
+        if (before && before !== 'running' && now === 'running' && t.enabled) {
+          notify('tunnelUp', `出口「${t.name}」已恢复`,
+            `${t.name} 重新上线（此前状态：${before}）\n地址：${publicUrlOf(t) || '(等待分配)'}\n主机：${os.hostname()}`);
+        }
+        prevTunnelStatus.set(t.id, now);
+      }
+    } catch { /* 巡检不能因为一个出口报错就停摆 */ }
     // 每 5 分钟体检一次：5xx 尖峰 + 登录失败集中，命中就发通知（notify 自带冷却/静默）
     if (histTick % 60 === 0) {
       try {

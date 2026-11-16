@@ -382,7 +382,10 @@ async function handler(req, res) {
   if (p === '/api/routes/stats' && req.method === 'GET') {
     const url = new URL(req.url, 'http://x');
     const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 2000, 50), 8000);
-    const d = readAccess(limit);
+    // hours：只看最近 N 小时（0/缺省 = 不按时间过滤，取最后 limit 条）
+    const hours = Math.min(Math.max(Number(url.searchParams.get('hours')) || 0, 0), 168);
+    const since = hours ? Date.now() - hours * 3600 * 1000 : 0;
+    const d = readAccess(limit, { since, maxBytes: hours ? 4 * 1024 * 1024 : 512 * 1024 });
     const rows = (d && d.rows) || [];
     const acc = new Map(); // index -> {count, s2, s3, s4, s5, durs, bytes}
     const unmatched = { count: 0, s4: 0, s5: 0 };
@@ -422,8 +425,31 @@ async function handler(req, res) {
     }).sort((a, b) => b.count - a.count);
     return sendJson(res, 200, {
       ok: true, available: !!d.available, sampled: rows.length, totalRoutes: state.routes.length,
-      unmatched, routes: list, note: d.note || '',
+      hours, unmatched, routes: list, note: d.note || '',
     });
+  }
+
+  if (p === '/api/audit.csv' && req.method === 'GET') {
+    const url = new URL(req.url, 'http://x');
+    const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 2000, 1), 5000);
+    const items = auditList({ limit, q: url.searchParams.get('q') || '' }).items || [];
+    const esc = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+    const head = ['时间', '谁', 'IP', '方法', '路径', '状态', '耗时ms', '动作', '对象', '结果'];
+    const lines = [head.map(esc).join(',')];
+    for (const a of items) {
+      lines.push([a.at ? new Date(a.at).toLocaleString('sv-SE') : '', a.actor, a.ip, a.method, a.path,
+        a.status, a.ms, a.action, a.target, a.ok ? '成功' : '失败'].map(esc).join(','));
+    }
+    const body = '\uFEFF' + lines.join('\r\n') + '\r\n';   // BOM 让 Excel 认 UTF-8
+    res.writeHead(200, {
+      ...SEC_HEADERS,
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="audit-${new Date().toISOString().slice(0, 10)}.csv"`,
+      'Content-Length': Buffer.byteLength(body),
+      'Cache-Control': 'no-store',
+    });
+    res.end(body);
+    return true;
   }
 
   if (p === '/api/security/attempts' && req.method === 'GET') {
@@ -519,6 +545,7 @@ async function handler(req, res) {
           secret,
           events: n.events && typeof n.events === 'object'
             ? {
+              tunnelUp: n.events.tunnelUp !== false,
               tunnelDown: n.events.tunnelDown !== false,
               urlChange: n.events.urlChange !== false,
               caddyFail: n.events.caddyFail !== false,
@@ -527,7 +554,7 @@ async function handler(req, res) {
               loginFail: n.events.loginFail !== false,
               authScan: n.events.authScan !== false,
             }
-            : (prevN.events || { tunnelDown: true, urlChange: true, caddyFail: true, sessionIp: true }),
+            : (prevN.events || { tunnelUp: true, tunnelDown: true, urlChange: true, caddyFail: true, sessionIp: true }),
           cooldownSec: Math.max(0, Math.min(86400, Number(cool) || 0)),
           quietHours: quiet,
           template: {
@@ -1399,7 +1426,7 @@ const onReq = (req, res) => {
   res.on('finish', () => {
     try {
       const skip = path0 === '/metrics' || path0 === '/badge.svg' || path0.startsWith('/assets/') || path0 === '/boot.js' ||
-        path0.startsWith('/__bench/') || path0 === '/api/audit' || path0 === '/api/logs' || path0 === '/api/logs/stream';
+        path0.startsWith('/__bench/') || path0 === '/api/audit' || path0 === '/api/audit.csv' || path0 === '/api/logs' || path0 === '/api/logs/stream';
       if (skip) return;
       const mutating = req.method !== 'GET' && req.method !== 'HEAD';
       const failed = res.statusCode >= 400 && path0.startsWith('/api');

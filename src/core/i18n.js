@@ -259,6 +259,21 @@ const EN_V0139 = {
 };
 Object.assign(EN, EN_V0139);
 
+// v0.14.0 新增
+const EN_V0140 = {
+  '出口恢复': 'Exit recovered',
+  '最近 1 小时': 'Last 1 hour',
+  '最近 6 小时': 'Last 6 hours',
+  '最近 24 小时': 'Last 24 hours',
+  '命中统计时间窗': 'Hit-count window',
+  '规则卡上的命中/错误/p95 按这个时间窗统计': 'Hit / error / p95 on rule cards use this window',
+  '来源 IP…': 'Source IP…',
+  '按来源 IP 筛选': 'Filter by source IP',
+  '导出 CSV': 'Export CSV',
+  '只看这个 IP': 'Only this IP',
+};
+Object.assign(EN, EN_V0140);
+
 const EN_PAGES = {
   '加签密钥（可选）': 'Signing secret (optional)',
   '机器人安全设置里勾了「加签」才需要；只勾「自定义关键词」就留空': 'Only needed when the bot has signing enabled; leave empty if you use a keyword instead',
