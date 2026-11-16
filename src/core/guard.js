@@ -77,7 +77,10 @@ function panelExposed(routes, panelPort) {
  */
 function inspect(routes, opts = {}) {
   const issues = shadowIssues(routes).map((x) => ({ ...x, kind: 'shadow' }));
-  if (opts.panelPort && !panelExposed(routes, opts.panelPort)) {
+  // 「面板入口」只在「本来能进、改完就进不去」时拦 —— 否则像 CI 里那种
+  // 根本不把面板挂在 Caddy 上的场景会被误判（真机上也一样：首次搭还没配面板入口时不该拦）
+  const wasExposed = opts.prevRoutes ? panelExposed(opts.prevRoutes, opts.panelPort) : true;
+  if (opts.panelPort && wasExposed && !panelExposed(routes, opts.panelPort)) {
     issues.push({
       kind: 'panel',
       index: -1,

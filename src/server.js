@@ -477,7 +477,7 @@ async function handler(req, res) {
     try {
       const body = await readBody(req);
       const nextRoutes = validateRoutes(body.routes, state.routes);
-      const g = guard.inspect(nextRoutes, { panelPort: PORT });
+      const g = guard.inspect(nextRoutes, { panelPort: PORT, prevRoutes: state.routes });
       if (g.blocked && !body.force) {
         return sendJson(res, 409, { ok: false, code: 'GUARD', issues: g.issues, error: g.issues[0].reason, hint: '确认无误就带 force:true 再提交' });
       }
@@ -872,7 +872,7 @@ async function handler(req, res) {
       };
       const d = configcode.diffView(prevCfg, nextCfg);
       const touchesTunnels = d.added.concat(d.removed, d.changed).some((x) => x.kind === 'tunnels');
-      const g = guard.inspect(nextRoutes, { panelPort: PORT });
+      const g = guard.inspect(nextRoutes, { panelPort: PORT, prevRoutes: state.routes });
       if (dry) return sendJson(res, 200, { ok: true, dry: true, diff: d, touchesTunnels, routes: nextRoutes.length, tunnels: nextTunnels.length, warnings: g.issues });
       if (g.blocked && !body.force) {
         return sendJson(res, 409, { ok: false, code: 'GUARD', issues: g.issues, error: g.issues[0].reason, hint: '确认无误就带 force:true 再提交' });

@@ -28,6 +28,7 @@
 - 前端：`api()` 抛错时带 `err.status` / `err.payload`；规则页与「配置即代码」卡的保存失败走确认框，逐条列原因后带 force 重试
 - `validateRoutes` 加严上游：必须是 `host:port` 或 `http://host:port`（此前 `parseUpstream('not-a-url')` 不报错）
 - `tools/git-snapshot.sh` 重写：提交 `data/config/*.json`（脱敏声明式快照）而非只提交 state.json，保留 120 份、幂等；`STATE=1` 才连 `state.json` 一起提交
+- 修正：`guard` 的「面板入口」只在**本来能进、改完就进不去**时才拦（比较新旧规则集），否则首次搭 Caddy 或 CI 里不挂面板的场景会被误判
 - 测试：API **214**（+4：顺序护栏 409 / 演练 warnings / 面板入口护栏 / 被拦时线上不变）、DOM 110、e2e 23
 
 ## v0.15.0 — 2026-11-16
