@@ -215,6 +215,13 @@ const EN_V0134 = {
 };
 Object.assign(EN, EN_V0134);
 
+// v0.13.5 新增（按规则流量可点击）
+const EN_V0135 = {
+  '跳到规则页定位这条规则': 'Jump to this rule on the rules page',
+  '这条规则已经不在了（可能刚被删掉）': 'That rule is gone (it may have just been deleted)',
+};
+Object.assign(EN, EN_V0135);
+
 const EN_PAGES = {
   '加签密钥（可选）': 'Signing secret (optional)',
   '机器人安全设置里勾了「加签」才需要；只勾「自定义关键词」就留空': 'Only needed when the bot has signing enabled; leave empty if you use a keyword instead',

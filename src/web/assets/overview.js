@@ -190,7 +190,14 @@ function drawPaths(groups, hours, unmatched) {
     if (n > 8 && i % 2) return '';
     return `<text x="${i * bw + bw / 2}" y="${H + 6.5}" font-size="3.6" text-anchor="middle" fill="var(--dim)">${new Date(t).getHours()}:00</text>`;
   }).join('');
-  const legend = groups.map((g, gi) => `<span class="tag" style="border-left:3px solid ${PATH_COLORS[gi % PATH_COLORS.length]}">${esc(g.name)} · ${g.total}${g.err ? ` · 5xx ${g.err}` : ''}</span>`).join('');
+  const legend = groups.map((g, gi) => {
+    const color = PATH_COLORS[gi % PATH_COLORS.length];
+    const label = `${esc(g.name)} · ${g.total}${g.err ? ` · 5xx ${g.err}` : ''}`;
+    const tip = `跳到规则页定位这条规则${g.path ? `（路径 ${esc(g.path)}）` : ''}`;
+    return g.id
+      ? `<a class="tag jump" href="/rules?focus=${encodeURIComponent(g.id)}" title="${tip}" style="border-left:3px solid ${color}">${label} →</a>`
+      : `<span class="tag" style="border-left:3px solid ${color}">${label}</span>`;
+  }).join('');
   box.innerHTML = `<div class="row" style="gap:6px;margin-bottom:6px;flex-wrap:wrap">${legend}</div>
     <svg class="chart" viewBox="0 0 ${W} ${H + 10}" preserveAspectRatio="none" role="img" aria-label="按规则的每小时请求数">${bars}${labels}</svg>
     <div class="sub" style="margin-top:4px">最近 ${hours} 小时；另有 ${(unmatched && unmatched.total) || 0} 次没命中任何规则（健康检查、未知路径）${(unmatched && unmatched.err) ? `，其中 5xx ${unmatched.err} 次` : ''}</div>`;

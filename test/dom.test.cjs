@@ -63,6 +63,18 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('总览: 健康指示已填充', (doc.querySelector('#healthText') || {}).textContent !== '检测中…', (doc.querySelector('#healthText') || {}).textContent);
     chk('总览: 有按规则流量卡', !!doc.querySelector('#pathBox'), '');
     chk('总览: 有预热提醒位', !!doc.querySelector('#warmBar'), '');
+
+    // v0.13.5：点图例跳到规则页要能定位并高亮
+    {
+      const hz = await (await fetch(BASE + '/healthz')).json();
+      const rid = (await (await fetch(BASE + '/api/state')).json()).state.routes[0].id;
+      const { doc: rd, errors: rErrs } = await open('/rules?focus=' + encodeURIComponent(rid));
+      await new Promise((r) => setTimeout(r, 1200));
+      const hit = rd.querySelector('.rule[data-focused]');
+      chk('规则页: ?focus 能定位到规则', !!hit, String(!!hit));
+      chk('规则页: focus 页面无脚本错误', rErrs.length === 0, rErrs.join(' | ').slice(0, 160));
+    }
+
     chk('总览: 无脚本错误', errors.length === 0, errors.join(' | ').slice(0, 200));
     // 主题切换
     const before = win.document.documentElement.dataset.theme;

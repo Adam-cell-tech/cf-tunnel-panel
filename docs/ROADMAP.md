@@ -5,6 +5,16 @@
 
 ---
 
+## ✅ v0.13.5 — 从「看到」到「跳过去」
+
+| 项 | 实现 |
+| --- | --- |
+| 分组带 id | `trafficByPath` 的每组补 `id / path / tunnelId`（来自 `simulateMatch` 命中的规则） |
+| 图例即链接 | `.tag.jump` → `/rules?focus=<id>`，hover 有下划线提示 |
+| 定位高亮 | `rules.js` 读 `focus` → 切作用域 → `scrollIntoView` → `data-focused` + `.flash` 动画；规则不在了给 toast |
+
+测试：API 169、DOM 83、e2e 23。
+
 ## ✅ v0.13.4 — 看得见「谁在吃流量」
 
 | 项 | 实现 | 实测 |

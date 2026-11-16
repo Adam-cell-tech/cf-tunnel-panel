@@ -500,6 +500,7 @@ ok('退出全部设备：返回踢掉数量并清 cookie', all.status === 200 &&
   ok('按规则流量不与「未匹配」混在一起', !(tp.d.groups || []).some((g) => g.name === '(未匹配规则)'), JSON.stringify((tp.d.groups || []).map((g) => g.name)));
   ok('按规则流量给出未匹配计数', tp.d.unmatched && typeof tp.d.unmatched.total === 'number', JSON.stringify(tp.d.unmatched || {}));
   const g0 = (tp.d.groups || [])[0];
+  ok('按规则流量带规则 id（可点击跳转）', (tp.d.groups || []).every((g) => typeof g.id === 'string'), JSON.stringify((tp.d.groups || []).map((g) => g.id)));
   ok('按规则流量带每小时分桶', !g0 || (Array.isArray(g0.buckets) && g0.buckets.length === (tp.d.hours || 0)), String(g0 ? g0.buckets.length : 0));
 
   // v0.13.3：缓存预热接口（无命名隧道时给人话 400，不能 500）

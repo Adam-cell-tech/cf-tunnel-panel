@@ -581,6 +581,12 @@ The script snapshots the route table to `/tmp` before touching it and restores f
 | E2E coverage 8 → 23 | The real-Caddy suite now proves prefix stripping, prefix passthrough, basic auth (401/401/200), Host-based routing isolation, WebSocket 101 upgrade, maintenance 503 + `Retry-After`, IP blacklist 403, admin off 2019, access-log writer and `trusted_proxies` — and restores routes/settings in `finally`. |
 | Audit de-duplication | A request whose handler already logged a human-readable action no longer also emits the generic `POST /api/...` row. |
 
+### v0.13.5 highlights
+
+| Change | Detail |
+| --- | --- |
+| Clickable traffic legend | Each legend chip in *Traffic by rule* links to `/rules?focus=<rule id>`; the rules page switches to that rule's scope, scrolls to the card and flashes it. |
+
 ### v0.13.4 highlights
 
 | Change | Detail |

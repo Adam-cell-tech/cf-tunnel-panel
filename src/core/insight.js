@@ -57,11 +57,18 @@ function trafficByPath(hours = 12, top = 4) {
     const host = o.host || req.host || '';
     const method = o.method || req.method || 'GET';
     let name = '(未匹配规则)';
+    let rid = '', rpath = '', rtun = '';
     try {
       const m = simulateMatch(uri, host, method);
-      if (m && m.rule && m.rule.name) name = m.rule.name;
+      if (m && m.rule && m.rule.name) {
+        name = m.rule.name;
+        rid = m.rule.id || '';
+        rpath = m.rule.path || '';
+        rtun = m.rule.tunnelId || '';
+      }
     } catch { /* 匹配失败就当未匹配 */ }
     const g = get(name);
+    if (rid) { g.id = rid; g.path = rpath; g.tunnelId = rtun; }
     const isErr = code >= 500;
     g.total += 1;
     if (isErr) g.err += 1; else g.ok += 1;
@@ -75,7 +82,7 @@ function trafficByPath(hours = 12, top = 4) {
     .filter((g) => g.name !== '(未匹配规则)')
     .sort((a, b) => b.total - a.total)
     .slice(0, n)
-    .map((g) => ({ name: g.name, total: g.total, ok: g.ok, err: g.err, buckets: keys.map((k) => g.buckets.get(k)) }));
+    .map((g) => ({ id: g.id || '', name: g.name, path: g.path || '', tunnelId: g.tunnelId || '', total: g.total, ok: g.ok, err: g.err, buckets: keys.map((k) => g.buckets.get(k)) }));
   return { available: true, hours: h, groups: list, keys, unmatched: { total: unmatched.total, err: unmatched.err } };
 }
 

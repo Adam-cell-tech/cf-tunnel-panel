@@ -133,6 +133,29 @@ function render() {
   renderWarns();
 }
 
+// ?focus=<规则id>：从「按规则看流量」点过来时，切到该规则所在作用域、滚过去、闪一下
+let focusId = '';
+function focusRule() {
+  if (!focusId) return;
+  const idx = rules.findIndex((r) => r.id === focusId);
+  if (idx < 0) { toast('这条规则已经不在了（可能刚被删掉）', 'warn'); focusId = ''; return; }
+  const want = rules[idx].tunnelId || '';
+  if (want !== selectedExit) {
+    selectedExit = want;
+    const sel = $('#scopeSel');
+    if (sel) sel.value = want;
+    render();
+  }
+  const el = document.querySelector(`#ruleList .rule[data-i="${idx}"]`);
+  if (el) {
+    if (el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.setAttribute('data-focused', '1');
+    el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 1600);
+  }
+  focusId = '';
+}
+
 function renderWarns() {
   const scoped = scopeList();
   const out = [];
@@ -394,7 +417,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  refresh();
+  // 从「按规则看流量」点过来时带着 ?focus=<规则id>，首屏渲染完就定位过去
+  try { focusId = new URLSearchParams(location.search).get('focus') || ''; } catch { focusId = ''; }
+  if (focusId) {
+    refresh().then(() => focusRule()).catch(() => {});
+    // 兜底：规则可能还在渲染，200ms 内再试一次
+    setTimeout(() => focusRule(), 400);
+  } else {
+    refresh();
+  }
   setInterval(() => refresh(false), 5000);
 });
 

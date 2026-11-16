@@ -319,3 +319,12 @@ pre.log .l-system{color:#a0a8b4}
 .subnav a:hover{color:var(--fg);border-color:var(--line)}
 .subnav a:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
 @media (max-width:720px){.subnav{overflow-x:auto;flex-wrap:nowrap;padding:6px 8px}.subnav a{white-space:nowrap}}
+
+/* v0.13.5：从「按规则看流量」跳过来时定位到的那条规则 */
+.rule.flash { animation: ruleFlash 1.6s ease-out; }
+@keyframes ruleFlash {
+  0%   { box-shadow: 0 0 0 3px var(--acc) inset; }
+  100% { box-shadow: 0 0 0 0 transparent inset; }
+}
+.tag.jump { text-decoration: none; cursor: pointer; }
+.tag.jump:hover { border-color: var(--acc); color: var(--fg); transform: translateY(-1px); }
