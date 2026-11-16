@@ -18,6 +18,31 @@ globalThis.fetch = (u, o = {}) => {
 };
 
 let pass = 0, fail = 0;
+
+// 这些用例会改真实配置（规则/设置/维护模式/黑名单…）。开跑前把当前规则存一份，
+// 无论中途抛错还是提前退出，退出时都写回去 —— 之前正是因为这个缺失，
+// 一次失败用例把线上的 5 条规则换成了 1 条（面板与所有域名直接 404）。
+let _snapRoutes = null;
+async function snapRoutes() {
+  try {
+    const r = await fetch(`${B}/api/state`, { headers: { Authorization: basic } });
+    const d = await r.json();
+    _snapRoutes = (d.state && d.state.routes) || null;
+  } catch { /* ignore */ }
+}
+async function restoreRoutes() {
+  if (!_snapRoutes || process.env.PANEL_TESTS_NO_RESTORE === '1') return;
+  try {
+    const r = await fetch(`${B}/api/routes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: basic },
+      body: JSON.stringify({ routes: _snapRoutes }),
+    });
+    console.log(r.ok ? '\n已还原测试前的规则' : `\n还原规则失败: HTTP ${r.status}`);
+  } catch (e) { console.log('\n还原规则失败: ' + e.message); }
+}
+process.on('exit', () => { /* 同步无法 await，改用 beforeExit 已处理 */ });
+process.on('SIGINT', () => { restoreRoutes().finally(() => process.exit(130)); });
 const ok = (n, c, x = '') => { c ? pass++ : fail++; console.log(`${c ? 'PASS' : 'FAIL'}  ${n}${x ? '  [' + x + ']' : ''}`); };
 const j = async (p, o = {}) => {
   const r = await fetch(B + p, { headers: o.body ? { 'Content-Type': 'application/json' } : {}, ...o, body: o.body ? JSON.stringify(o.body) : undefined });
@@ -26,6 +51,8 @@ const j = async (p, o = {}) => {
   return { status: r.status, d, headers: r.headers };
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+await snapRoutes();
 
 const h = await j('/healthz');
 ok('healthz 200 且带 version', h.status === 200 && !!h.d.version, h.d.version);
@@ -718,6 +745,8 @@ try {
   const dictKeys = (bootText.match(/"[^"]{2,}"\s*:/g) || []).length;
   ok('i18n：词典规模 ≥ 480 条', dictKeys >= 480, String(dictKeys));
 }
+
+await restoreRoutes();
 
 console.log(`\n${pass}/${pass + fail} 通过`);
 process.exit(fail ? 1 : 0);

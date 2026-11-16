@@ -260,7 +260,11 @@ function validateRoutes(list, prevRoutes = []) {
 
     const prev = prevRoutes.find((x) => x.id === r.id) || {};
     const prevAuth = prev.basicAuth || { user: '', hash: '' };
-    let auth = { user: String((r.basicAuth && r.basicAuth.user) || '').trim(), hash: prevAuth.hash || '' };
+    // 允许调用方直接给 bcrypt 哈希（声明式配置还原 / 备份导入都是这样回来的：
+    // 导出时刻意不带哈希，回来时若同一 id 还在就沿用旧哈希，不在就要求显式提供哈希）
+    const incHash = r.basicAuth && typeof r.basicAuth.hash === 'string' ? r.basicAuth.hash : '';
+    const keepHash = /^\$2[aby]\$/.test(incHash) ? incHash : prevAuth.hash || '';
+    let auth = { user: String((r.basicAuth && r.basicAuth.user) || '').trim(), hash: keepHash };
     const newPass = r.basicAuth && typeof r.basicAuth.password === 'string' ? r.basicAuth.password : '';
     if (auth.user && newPass) auth.hash = bcrypt.hashSync(newPass, 10);
     if (auth.user && !auth.hash) throw new Error(`第 ${idx + 1} 条：开启了基础认证但没有设置密码`);

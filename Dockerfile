@@ -42,6 +42,7 @@ ENV TZ=Asia/Shanghai \
 
 VOLUME ["/data"]
 EXPOSE 8090
+# 端口跟着 $PORT 走：滚动升级时面板会在 8090/8091 两个槽位之间来回搬
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-  CMD curl -fsS http://127.0.0.1:8090/healthz || exit 1
+  CMD curl -fsS "http://127.0.0.1:${PORT:-8090}/healthz" || exit 1
 CMD ["node", "src/server.js"]
