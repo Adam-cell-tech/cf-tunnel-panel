@@ -70,6 +70,16 @@
   </div>
 
   <div class="card flush">
+    <div class="hd"><h2>按规则看流量</h2><div class="sub">哪条规则（哪个服务）在吃流量，最多显示 4 条</div>
+      <div class="right"><select id="pathHours" style="width:auto" aria-label="按规则流量的时间范围">
+        <option value="6">最近 6 小时</option><option value="12" selected>最近 12 小时</option><option value="24">最近 24 小时</option>
+      </select></div></div>
+    <div class="bd" id="pathBox"><div class="empty">读取中…</div></div>
+  </div>
+
+  <div class="hint warn hidden" id="warmBar"></div>
+
+  <div class="card flush">
     <div class="hd"><h2>最近日志</h2><div class="sub">实时推送，最多保留 1500 行</div><div class="right"><a class="sm" href="/observe">全部 →</a></div></div>
     <pre class="log" id="logBox"></pre>
   </div>

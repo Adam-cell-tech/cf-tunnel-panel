@@ -5,6 +5,17 @@
 
 ---
 
+## ✅ v0.13.4 — 看得见「谁在吃流量」
+
+| 项 | 实现 | 实测 |
+| --- | --- | --- |
+| 按规则聚合 | `insight.trafficByPath(hours, top)`：2MB 日志尾部 → `simulateMatch` 归属 → 每小时分桶 | 12 小时：面板 92、ttyd 24、Adminer 3、whoami 1 |
+| 未匹配单列 | `unmatched:{total,err}` 不计入图例 | 318 次（健康检查/`/qa` 探针），其中 5xx 29 |
+| 图 | 概览「按规则看流量」堆叠柱 + 图例（规则名 · 总量 · 5xx） | 4 组配色取自 `--acc/--warn/--err/--dim` |
+| 部署提醒 | 预热写 `state.warm{code,at,host}`，概览比对 `/healthz.code` | 不一致时出黄条并链到工具箱 |
+
+测试：API 168、DOM 81、e2e 23。
+
 ## ✅ v0.13.3 — 缓存生命周期闭环
 
 | 项 | 实现 | 实测 |

@@ -494,9 +494,21 @@ ok('退出全部设备：返回踢掉数量并清 cookie', all.status === 200 &&
   const tplClear = await j('/api/settings', { method: 'POST', body: { notify: { template: { title: '', text: '' } } } });
   ok('通知模板可清空', tplClear.status === 200, String(tplClear.status));
 
+  // v0.13.4：按规则聚合的流量趋势
+  const tp = await j('/api/traffic/paths?hours=6&top=3');
+  ok('按规则流量接口可用', tp.status === 200 && Array.isArray(tp.d.groups), `${tp.status} groups=${(tp.d.groups || []).length}`);
+  ok('按规则流量不与「未匹配」混在一起', !(tp.d.groups || []).some((g) => g.name === '(未匹配规则)'), JSON.stringify((tp.d.groups || []).map((g) => g.name)));
+  ok('按规则流量给出未匹配计数', tp.d.unmatched && typeof tp.d.unmatched.total === 'number', JSON.stringify(tp.d.unmatched || {}));
+  const g0 = (tp.d.groups || [])[0];
+  ok('按规则流量带每小时分桶', !g0 || (Array.isArray(g0.buckets) && g0.buckets.length === (tp.d.hours || 0)), String(g0 ? g0.buckets.length : 0));
+
   // v0.13.3：缓存预热接口（无命名隧道时给人话 400，不能 500）
   const warm = await j('/api/cf/cache/warm', { method: 'POST', body: {} });
   ok('预热接口可用', warm.status === 200 || warm.status === 400, `${warm.status} ${JSON.stringify(warm.d).slice(0, 80)}`);
+  if (warm.status === 200) {
+    const st2 = await j('/api/state');
+    ok('预热后记录代码指纹（用于部署提醒）', !!(st2.d.state.warm && st2.d.state.warm.code), JSON.stringify(st2.d.state.warm || null).slice(0, 80));
+  }
 
   // 页面绝不能被 CDN 缓存（里面有版本号、登录态）
   const page = await fetch(B + '/settings');

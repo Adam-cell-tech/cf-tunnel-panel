@@ -13,6 +13,72 @@ const _state = require('./state');
 const state = _state.stateProxy;
 const { tunnelById, tunnelRt } = require('./registry');
 const { caddy, tunnelHostOf } = require('./caddy');
+/**
+ * 按「归属规则」聚合的流量趋势：回答「哪个服务在吃流量」。
+ * 复用 access log 与 simulateMatch，所以看不到 unmatched 的具体去向时至少能看到未匹配量。
+ * 返回 { available, hours, groups: [{name, total, ok, err, buckets:[{t,total,err}] }] }（按总量降序，最多 top 组）
+ */
+function trafficByPath(hours = 12, top = 4) {
+  const h = Math.max(1, Math.min(72, Number(hours) || 12));
+  const n = Math.max(1, Math.min(8, Number(top) || 4));
+  const now = Date.now();
+  const start = now - h * 3600 * 1000;
+  const keys = [];
+  for (let i = 0; i < h; i += 1) keys.push(new Date(start + i * 3600 * 1000).setMinutes(0, 0, 0));
+  const groups = new Map();
+  const get = (name) => {
+    if (!groups.has(name)) {
+      const buckets = new Map(keys.map((k) => [k, { t: k, total: 0, err: 0 }]));
+      groups.set(name, { name, total: 0, ok: 0, err: 0, buckets });
+    }
+    return groups.get(name);
+  };
+  let text = '';
+  try {
+    const st = fs.statSync(ACCESS_LOG_FILE);
+    const from = Math.max(0, st.size - 2 * 1024 * 1024);
+    const fd = fs.openSync(ACCESS_LOG_FILE, 'r');
+    const buf = Buffer.alloc(st.size - from);
+    fs.readSync(fd, buf, 0, buf.length, from);
+    fs.closeSync(fd);
+    text = buf.toString('utf8');
+  } catch { return { available: false, hours: h, groups: [] }; }
+  for (const line of text.split('\n')) {
+    if (!line.trim() || !line.includes('http.log.access')) continue;
+    let o;
+    try { o = JSON.parse(line); } catch { continue; }
+    const ts = typeof o.ts === 'number' ? o.ts * 1000 : Date.parse(String(o.ts || ''));
+    if (!Number.isFinite(ts) || ts < start) continue;
+    const key = new Date(ts).setMinutes(0, 0, 0);
+    const code = Number(o.status || 0);
+    // 原始 Caddy 行里，host/uri/method 在 request 子对象里（readAccess 才把它们拍平）
+    const req = o.request || {};
+    const uri = o.uri || req.uri || '/';
+    const host = o.host || req.host || '';
+    const method = o.method || req.method || 'GET';
+    let name = '(未匹配规则)';
+    try {
+      const m = simulateMatch(uri, host, method);
+      if (m && m.rule && m.rule.name) name = m.rule.name;
+    } catch { /* 匹配失败就当未匹配 */ }
+    const g = get(name);
+    const isErr = code >= 500;
+    g.total += 1;
+    if (isErr) g.err += 1; else g.ok += 1;
+    const b = g.buckets.get(key);
+    if (b) { b.total += 1; if (isErr) b.err += 1; }
+  }
+  // 「未匹配」通常来自健康检查、未知路径，量还经常最大；单独统计，不占图例名额
+  const all = [...groups.values()];
+  const unmatched = all.find((g) => g.name === '(未匹配规则)') || { total: 0, err: 0 };
+  const list = all
+    .filter((g) => g.name !== '(未匹配规则)')
+    .sort((a, b) => b.total - a.total)
+    .slice(0, n)
+    .map((g) => ({ name: g.name, total: g.total, ok: g.ok, err: g.err, buckets: keys.map((k) => g.buckets.get(k)) }));
+  return { available: true, hours: h, groups: list, keys, unmatched: { total: unmatched.total, err: unmatched.err } };
+}
+
 function trafficByHour(hours = 12) {
   const now = Date.now();
   const start = now - hours * 3600 * 1000;
@@ -339,4 +405,4 @@ function diffRoutes(backupRoutes, currentRoutes) {
 
 const upstreamHealth = new Map(); // upstream url -> { ok, ms, error, at }
 
-module.exports = { upstreamHealth, HISTORY_MAX, badgeSvg, diffRoutes, healthOf, histTick, metricsText, readAccess, refreshUpstreamHealth, requestsLastMinute, rtHistory, sampleHistory, shadowReport, simulateMatch, systemInfo, tcpProbeOnce, trafficByHour, upstreamTarget };
+module.exports = { upstreamHealth, HISTORY_MAX, badgeSvg, diffRoutes, healthOf, histTick, metricsText, readAccess, refreshUpstreamHealth, requestsLastMinute, rtHistory, sampleHistory, shadowReport, simulateMatch, systemInfo, tcpProbeOnce, trafficByHour, trafficByPath, upstreamTarget };

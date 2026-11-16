@@ -61,6 +61,8 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('总览: 日志无 Invalid Date', !/Invalid Date/.test(doc.body.textContent), '');
     chk('总览: 当前页高亮', !!doc.querySelector('.side .nav a.active'), '');
     chk('总览: 健康指示已填充', (doc.querySelector('#healthText') || {}).textContent !== '检测中…', (doc.querySelector('#healthText') || {}).textContent);
+    chk('总览: 有按规则流量卡', !!doc.querySelector('#pathBox'), '');
+    chk('总览: 有预热提醒位', !!doc.querySelector('#warmBar'), '');
     chk('总览: 无脚本错误', errors.length === 0, errors.join(' | ').slice(0, 200));
     // 主题切换
     const before = win.document.documentElement.dataset.theme;

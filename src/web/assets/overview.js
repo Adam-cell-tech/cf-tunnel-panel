@@ -156,6 +156,67 @@ function drawAudit(buckets) {
     <svg class="chart" viewBox="0 0 ${W} ${H + 10}" preserveAspectRatio="none" role="img" aria-label="每小时变更次数">${bars}${labels}</svg>`;
 }
 
+// 按规则堆叠柱状图：一眼看出哪个服务在吃流量
+const PATH_COLORS = ['var(--acc)', 'var(--warn)', 'var(--err)', 'var(--dim)'];
+
+function drawPaths(groups, hours, unmatched) {
+  const box = $('#pathBox');
+  if (!box) return;
+  if (!groups || !groups.length) {
+    const extra = (unmatched && unmatched.total) ? `（另有 ${unmatched.total} 次没命中任何规则）` : '';
+    box.innerHTML = `<div class="empty">这段时间还没有命中任何规则的访问${extra}</div>`;
+    return;
+  }
+  const keys = groups[0].buckets.map((b) => b.t);
+  const n = keys.length;
+  const W = 100, H = 42, bw = W / Math.max(1, n);
+  let stackMax = 1;
+  keys.forEach((_, i) => {
+    const sum = groups.reduce((a, g) => a + ((g.buckets[i] || {}).total || 0), 0);
+    if (sum > stackMax) stackMax = sum;
+  });
+  let bars = '';
+  keys.forEach((_, i) => {
+    let y = H;
+    groups.forEach((g, gi) => {
+      const v = (g.buckets[i] || {}).total || 0;
+      if (!v) return;
+      const h = (v / stackMax) * H;
+      y -= h;
+      bars += `<rect x="${i * bw + bw * 0.12}" y="${y}" width="${bw * 0.76}" height="${h}" rx="0.8" fill="${PATH_COLORS[gi % PATH_COLORS.length]}" opacity="0.9"></rect>`;
+    });
+  });
+  const labels = keys.map((t, i) => {
+    if (n > 8 && i % 2) return '';
+    return `<text x="${i * bw + bw / 2}" y="${H + 6.5}" font-size="3.6" text-anchor="middle" fill="var(--dim)">${new Date(t).getHours()}:00</text>`;
+  }).join('');
+  const legend = groups.map((g, gi) => `<span class="tag" style="border-left:3px solid ${PATH_COLORS[gi % PATH_COLORS.length]}">${esc(g.name)} · ${g.total}${g.err ? ` · 5xx ${g.err}` : ''}</span>`).join('');
+  box.innerHTML = `<div class="row" style="gap:6px;margin-bottom:6px;flex-wrap:wrap">${legend}</div>
+    <svg class="chart" viewBox="0 0 ${W} ${H + 10}" preserveAspectRatio="none" role="img" aria-label="按规则的每小时请求数">${bars}${labels}</svg>
+    <div class="sub" style="margin-top:4px">最近 ${hours} 小时；另有 ${(unmatched && unmatched.total) || 0} 次没命中任何规则（健康检查、未知路径）${(unmatched && unmatched.err) ? `，其中 5xx ${unmatched.err} 次` : ''}</div>`;
+}
+
+// 部署提醒：容器里跑的代码指纹变了、但还没预过热 → 提示去点一下
+async function paintWarmHint(d) {
+  const bar = $('#warmBar');
+  if (!bar) return;
+  let code = '';
+  try { code = ((await api('/healthz')) || {}).code || ''; } catch { return; }
+  const w = (d && d.state && d.state.warm) || null;
+  if (!w) {
+    bar.className = 'hint warn';
+    bar.innerHTML = `还没有预过热：点 <a href="/tools">工具箱 → 预热缓存</a>，把关键资源在边缘拉一遍，首个访客就不用等冷启动。`;
+    return;
+  }
+  if (w.code && code && w.code !== code) {
+    bar.className = 'hint warn';
+    bar.innerHTML = `代码已更新（指纹 ${esc(String(w.code))} → ${esc(code)}），上次预热是 ${fmtTime(w.at)}。资源 URL 变了，建议 <a href="/tools">重新预热</a>。`;
+    return;
+  }
+  bar.className = 'hint warn hidden';
+  bar.textContent = '';
+}
+
 async function paintCharts() {
   const hours = Number($('#trendHours').value || 12);
   try {
@@ -175,6 +236,13 @@ async function paintCharts() {
     drawAudit(a.buckets || []);
   } catch (e) {
     if ($('#auditBox')) $('#auditBox').innerHTML = `<div class="hint warn">${esc(e.message)}</div>`;
+  }
+  try {
+    const ph = Number(($('#pathHours') || {}).value || 12);
+    const pr = await api('/api/traffic/paths?hours=' + ph + '&top=4');
+    drawPaths(pr.groups || [], pr.hours || ph, pr.unmatched || null);
+  } catch (e) {
+    if ($('#pathBox')) $('#pathBox').innerHTML = `<div class="hint warn">${esc(e.message)}</div>`;
   }
 }
 
@@ -197,6 +265,7 @@ async function refresh() {
     paintRules(d);
     await paintStats(d);
     await paintCharts();
+    await paintWarmHint(d);
     $('#updAt').textContent = '更新于 ' + fmtClock();
   } catch (e) {
     toast('读取状态失败：' + e.message, 'err');
@@ -209,6 +278,8 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#trendHours').addEventListener('change', paintCharts);
   const ah = $('#auditHours');
   if (ah) ah.addEventListener('change', paintCharts);
+  const ph = $('#pathHours');
+  if (ph) ph.addEventListener('change', paintCharts);
   refresh();
   setInterval(refresh, 5000);
   openLogStream(appendLog);

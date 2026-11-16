@@ -12,6 +12,15 @@
 - `package.json` 增加 `engines.node >= 20`。
 - 测试：API 113、DOM 75。
 
+## v0.13.4 — 2026-11-16
+
+### 新增
+- **按规则看流量** `GET /api/traffic/paths?hours=&top=`：读 access log 后用 `simulateMatch` 把每条请求归属到规则，按小时分桶输出；未命中的请求单独用 `unmatched` 计数（健康检查、未知路径常占大头，混进图例会挤掉真服务）。概览页新增「按规则看流量」堆叠柱状图 + 图例（规则名 · 总量 · 5xx）。
+- **部署提醒**：预热成功时把代码指纹写进 `state.warm`，概览页发现「运行代码 ≠ 上次预热指纹」就提示重新预热。
+
+### 修复
+- 按规则归属一开始全落到「未匹配」：原始 Caddy 日志里 `host/uri/method` 在 `request` 子对象内（`readAccess` 才拍平），直接读 `o.host` 拿到的是 `undefined`。改为 `o.request.host` 兜底。
+
 ## v0.13.3 — 2026-11-16
 
 ### 新增

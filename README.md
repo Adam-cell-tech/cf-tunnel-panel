@@ -581,6 +581,13 @@ The script snapshots the route table to `/tmp` before touching it and restores f
 | E2E coverage 8 → 23 | The real-Caddy suite now proves prefix stripping, prefix passthrough, basic auth (401/401/200), Host-based routing isolation, WebSocket 101 upgrade, maintenance 503 + `Retry-After`, IP blacklist 403, admin off 2019, access-log writer and `trusted_proxies` — and restores routes/settings in `finally`. |
 | Audit de-duplication | A request whose handler already logged a human-readable action no longer also emits the generic `POST /api/...` row. |
 
+### v0.13.4 highlights
+
+| Change | Detail |
+| --- | --- |
+| Traffic by rule | `GET /api/traffic/paths?hours=&top=` groups the access log by the rule each request *would* match, so you can see which service is consuming traffic. Requests that match nothing get their own counter instead of drowning the chart. |
+| Deploy hint | Warming records the code fingerprint (`state.warm`); the overview shows a banner when the running code no longer matches the last warm-up, with a link to re-warm. |
+
 ### v0.13.3 highlights
 
 | Change | Detail |

@@ -204,6 +204,17 @@ const EN_V0133 = {
 };
 Object.assign(EN, EN_V0133);
 
+// v0.13.4 新增（按规则流量 / 预热提醒）
+const EN_V0134 = {
+  '按规则看流量': 'Traffic by rule',
+  '哪条规则（哪个服务）在吃流量，最多显示 4 条': 'Which rule (which service) is consuming traffic — top 4',
+  '按规则流量的时间范围': 'Traffic-by-rule range',
+  '还没有可归属的访问记录（access log 为空，或规则都没命中）': 'No attributable requests yet (access log empty or no rule matched)',
+  '还没有预过热：点': 'Not warmed yet: open',
+  '把关键资源在边缘拉一遍，首个访客就不用等冷启动。': 'to pull key assets to the edge so the first visitor skips the cold start.',
+};
+Object.assign(EN, EN_V0134);
+
 const EN_PAGES = {
   '加签密钥（可选）': 'Signing secret (optional)',
   '机器人安全设置里勾了「加签」才需要；只勾「自定义关键词」就留空': 'Only needed when the bot has signing enabled; leave empty if you use a keyword instead',

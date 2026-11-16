@@ -62,7 +62,7 @@ const _tunnels = require('./core/tunnels');
 const { QUICK_RE, applyTunnelFields, normalizeTunnelToken, publicTunnels, runtimeOf, startAll, startTunnel, stopAll, stopTunnel, syncTunnels, tokenTunnelOf, tunnelArgs } = _tunnels;
 
 const _insight = require('./core/insight');
-const { upstreamHealth, HISTORY_MAX, badgeSvg, diffRoutes, healthOf, histTick, metricsText, readAccess, refreshUpstreamHealth, requestsLastMinute, rtHistory, sampleHistory, shadowReport, simulateMatch, systemInfo, tcpProbeOnce, trafficByHour, upstreamTarget } = _insight;
+const { upstreamHealth, HISTORY_MAX, badgeSvg, diffRoutes, healthOf, histTick, metricsText, readAccess, refreshUpstreamHealth, requestsLastMinute, rtHistory, sampleHistory, shadowReport, simulateMatch, systemInfo, tcpProbeOnce, trafficByHour, trafficByPath, upstreamTarget } = _insight;
 
 const _bench = require('./core/bench');
 const { BENCH_MAX_MB, benchLocalOnce, coloOf, sendBenchBlob } = _bench;
@@ -309,6 +309,7 @@ async function handler(req, res) {
         tunnels: publicTunnels(),
         routes: state.routes.map(publicRoute),
         panel: { authEnabled: !!state.panel.user, user: state.panel.user || '' },
+        warm: state.warm || null,
       },
       runtime: {
         tunnels: state.tunnels.map((t) => {
@@ -1086,6 +1087,12 @@ async function handler(req, res) {
     const hours = Math.min(72, Math.max(1, Number(url.searchParams.get('hours')) || 12));
     return sendJson(res, 200, { ok: true, ...trafficByHour(hours) });
   }
+  // 按归属规则的流量趋势：哪个服务在吃流量
+  if (p === '/api/traffic/paths') {
+    const hours = Math.min(72, Math.max(1, Number(url.searchParams.get('hours')) || 12));
+    const top = Math.min(8, Math.max(1, Number(url.searchParams.get('top')) || 4));
+    return sendJson(res, 200, { ok: true, ...trafficByPath(hours, top) });
+  }
   if (p === '/api/history') return sendJson(res, 200, { ok: true, points: rtHistory, max: HISTORY_MAX });
   if (p === '/api/notify/history') return sendJson(res, 200, { ok: true, items: notifyHistory.slice().reverse() });
   if (p === '/api/notify/resend' && req.method === 'POST') {
@@ -1193,6 +1200,8 @@ async function handler(req, res) {
         }
       }
       const hit = out.filter((x) => x.cache === 'HIT').length;
+      state.warm = { code: v, at: Date.now(), host: base, paths: out.length, hit };
+      saveState('cache-warm');
       auditRecord({ actor: auth.who, ip: clientIpOf(req), method: 'POST', path: p, status: 200, action: '预热边缘缓存', target: `${host} · ${out.length} 个路径` });
       log(`缓存预热：${host} → ${out.length} 个路径，HIT ${hit} 个`, 'panel');
       return sendJson(res, 200, { ok: true, host: base, version: v, hit, total: out.length, results: out });
