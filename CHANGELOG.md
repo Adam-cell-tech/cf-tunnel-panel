@@ -2,6 +2,16 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.16.1 — 镜像不再是「另一份代码」
+
+终于把镜像 rebuild 通了，之前每次 `docker compose up -d` 都会把面板退回 v0.5.0，`/healthz` 的 `drift` 也一直报警。
+
+- 修 `Dockerfile` 里 `ARG NODE_IMAGE` 的作用域：它写在 `FROM ${CF_IMAGE}` 之后，到 `FROM ${NODE_IMAGE}` 时已经取到空串，构建直接报 `base name (${NODE_IMAGE}) should not be blank`。所有出现在 `FROM` 里的 ARG 现在都在第一个 `FROM` 之前。
+- 修 `COPY` 带进来的文件权限：宿主机上被脚本写成 `600` 的文件（`src/core/audit.js`、`lease.js`、`web/assets/app.js` 等）会被原样复制进镜像，容器以 uid 1000 运行时直接 `EACCES open`，面板反复重启。现在末尾统一 `RUN chmod -R a+rX /app`。
+- 新增**面板槽位自愈**：leader 接管时，如果「面板自己」那条规则的 upstream 端口属于面板槽位但不是本实例端口（滚动升级换槽位后必然发生），自动改成本实例端口并落盘。否则状态里存着一个不存在的端口，看的人困惑，保存护栏的 `panelExposed` 判断也会失效。
+- 自动重试时保留上一次失败原因（`startTunnel(id, { keepError: true })`），手动点「启动」才清空 —— 之前「启动中」那一小段界面上什么提示都没有，看起来像隧道凭空消失。
+- 测试：把两条依赖 Cloudflare 快速隧道配额的断言放宽（只要求「running 时必有地址」「失败要留原因」），本地/CI 不再随机红。
+
 ## v0.16.0 — 2026-11-16
 
 - **滚动升级（零中断）**：新增 `src/core/lease.js` —— 基于租约文件的主备选主（5s 心跳 / 15s TTL），

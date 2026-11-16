@@ -5,11 +5,14 @@
 #   docker build --build-arg NODE_IMAGE=node:22-bookworm-slim \
 #                --build-arg CF_IMAGE=cloudflare/cloudflared:latest \
 #                --build-arg NPM_REGISTRY=https://registry.npmjs.org .
+# 注意：所有会出现在 FROM 里的 ARG 必须声明在第一个 FROM **之前**（全局作用域）。
+# 之前 NODE_IMAGE 写在 cf 阶段里，导致 `FROM ${NODE_IMAGE}` 取到空串 → "base name should not be blank"。
 ARG GIT_SHA=dev
 ARG CF_IMAGE=cloudflare/cloudflared:2026.10.7
+ARG NODE_IMAGE=node:22.23.5-bookworm-slim
+
 FROM ${CF_IMAGE} AS cf
 
-ARG NODE_IMAGE=node:22.23.5-bookworm-slim
 FROM ${NODE_IMAGE}
 
 ARG NPM_REGISTRY=https://registry.npmmirror.com
@@ -30,6 +33,9 @@ RUN npm config set registry ${NPM_REGISTRY} \
 
 COPY src ./src
 COPY tools ./tools
+# 宿主机上被编辑器/脚本写成 600 的文件会被 COPY 原样带进来，容器里以 uid 1000 运行就读不了
+# （症状：EACCES open /app/src/core/xxx.js → 容器反复重启）。统一放开读权限。
+RUN chmod -R a+rX /app
 # 把「镜像里这份代码」的指纹写死进镜像；运行时再算一次，不一致就在 /healthz 里报 drift
 RUN node tools/codehash.js > .code-hash
 

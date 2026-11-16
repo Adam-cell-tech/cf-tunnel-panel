@@ -56,7 +56,7 @@ const totp = require('./core/totp');
 const perm = require('./core/perm');
 
 const _caddy = require('./core/caddy');
-const { buildCaddyConfig, buildMatch, buildRouteHandlers, caddy, cloudflareRanges, lastSkipped, maintPage, tunnelHostOf } = _caddy;
+const { buildCaddyConfig, buildMatch, buildRouteHandlers, caddy, cloudflareRanges, lastSkipped, maintPage, tunnelHostOf, PANEL_SLOT_RE, panelSlots } = _caddy;
 
 const _pusher = require('./core/pusher');
 const { pushCaddy, pushTimer, schedulePush } = _pusher;
@@ -1564,6 +1564,31 @@ const _restored = session.init(require('path').join(DATA_DIR, 'sessions.json'));
 // 其余实例是**只读备份**（滚动升级时先起备份、切换、再退老实例）。
 // 只有一件事仍然禁止：两个实例同时以「领导」身份写同一份 state。
 let leaderMode = false;
+// 面板自己那条规则的 upstream 会随槽位切换而"漂移"：上一轮写在 8091，这一轮实例只监听 8095。
+// Caddy 的双槽位展开会让流量仍然通（两个槽位都试），但：
+//   · 状态里存着一个已经不存在的端口，看的人会困惑；
+//   · 保存护栏（panelExposed）按 upstream 端口判断"面板会不会被自己锁死"，端口对不上就失效。
+// 所以 leader 接管时把自己的端口写回去（只在两端口都属于面板槽位时才改，避免误伤普通上游）。
+function alignPanelRoute() {
+  const me = String(PORT || 8090);
+  const slots = panelSlots().map(String);
+  let changed = 0;
+  for (const r of state.routes || []) {
+    const m = String(r.upstream || '').match(PANEL_SLOT_RE);
+    if (!m) continue;
+    const port = m[1];
+    if (port === me) continue;
+    if (!slots.includes(port) && port !== me) continue;
+    const next = String(r.upstream).replace(PANEL_SLOT_RE, (all, _p, ...rest) => all.replace(':' + port, ':' + me));
+    if (next !== r.upstream) { r.upstream = next; changed += 1; }
+  }
+  if (changed) {
+    saveState('panel-slot');
+    log(`把 ${changed} 条面板规则的 upstream 端口对齐到本实例（:${me}）`, 'panel');
+  }
+  return changed;
+}
+
 function startLeaderWork() {
   if (leaderMode) return;
   leaderMode = true;
@@ -1574,6 +1599,7 @@ function startLeaderWork() {
     log('[skip] 当前是从空白状态启动（没有 state.json），已跳过首次 Caddy 下发，'
       + '避免用默认规则覆盖已有配置。确认这是全新部署就设 PANEL_ALLOW_FRESH_PUSH=1。', 'panel');
   } else {
+    try { alignPanelRoute(); } catch (e) { log('对齐面板规则端口失败：' + e.message, 'panel'); }
     pushCaddy().catch(() => {});
   }
   startAll();

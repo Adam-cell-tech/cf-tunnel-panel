@@ -38,7 +38,7 @@ function stopTunnel(id, silent = false) {
   if (!silent) log(`${tag}已请求停止隧道`, 'cloudflared');
 }
 
-function startTunnel(id) {
+function startTunnel(id, opts = {}) {
   const t = tunnelById(id);
   if (!t) return;
   const rt = tunnelRt(id);
@@ -78,7 +78,9 @@ function startTunnel(id) {
   rt.status = 'starting';
   rt.pid = proc.pid;
   rt.startedAt = Date.now();
-  rt.lastError = null;
+  // 自动重试时保留上一次的失败原因：否则「启动中」这一小段里界面上什么提示都没有，
+  // 看起来像隧道凭空消失了。手动点「启动」才清空（用户点了就是想要个干净的开始）。
+  if (!opts.keepError) rt.lastError = null;
   rt.url = null;
   rt.desired = true;
 
@@ -147,7 +149,7 @@ function startTunnel(id) {
     rt.throttled = false;
     schedulePush();
     const cur = tunnelById(id);
-    if (desired && cur && cur.enabled) setTimeout(() => { const c2 = tunnelById(id); if (c2 && c2.enabled) startTunnel(id); }, delay);
+    if (desired && cur && cur.enabled) setTimeout(() => { const c2 = tunnelById(id); if (c2 && c2.enabled) startTunnel(id, { keepError: true }); }, delay);
   });
   setTimeout(() => { if (rt.proc && rt.status === 'starting') rt.status = 'running'; }, 8000);
 }

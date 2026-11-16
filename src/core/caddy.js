@@ -300,4 +300,4 @@ function cloudflareRanges() {
 
 const { CADDY_ADMIN, accessLogPathForCaddy } = require('./paths');
 
-module.exports = { buildCaddyConfig, buildMatch, buildRouteHandlers, caddy, cloudflareRanges, lastSkipped, maintPage, tunnelHostOf };
+module.exports = { buildCaddyConfig, buildMatch, buildRouteHandlers, caddy, cloudflareRanges, lastSkipped, maintPage, tunnelHostOf, PANEL_SLOT_RE, panelSlots };

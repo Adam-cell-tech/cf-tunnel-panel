@@ -5,6 +5,16 @@
 
 ---
 
+## ✅ v0.16.1 — 镜像与运行代码合一
+
+| 项 | 说明 |
+| --- | --- |
+| Dockerfile ARG 作用域 | `NODE_IMAGE` 提前到第一个 `FROM` 之前，构建恢复 |
+| COPY 权限 | 末尾 `chmod -R a+rX /app`，600 文件不再让容器崩在 require |
+| 槽位自愈 | leader 接管时把面板规则 upstream 对齐到本实例端口 |
+| 失败原因可见 | 自动重试不再清空 `lastError` |
+| 部署 | `docker compose up -d panel` 现在部署的就是当前代码（`drift:false`） |
+
 ## ✅ v0.16.0 — 两个实例同时活着，切换不丢请求
 
 | 项 | 做法 | 实测 |
