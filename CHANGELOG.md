@@ -2,6 +2,24 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.17.0 — 升级改成 blue/green 固定命名，不再和 compose 抢名字
+
+以前脚本收尾会把新实例改名成 `cf-tunnel-panel`，于是「容器名」既是 compose 的服务名、
+又是当前 leader 的名字 —— 下次 `docker compose up -d` 必然报 name conflict，
+而且「cf-tunnel-panel 到底指哪一代实例」也没法从名字看出来。
+
+- 容器名固定成一对：`cf-tunnel-panel-blue`（:8090）/ `cf-tunnel-panel-green`（:8095）。
+  每次升级只是「在另一色上起新实例 → 停当前色」，**从不改名**，跑多少遍名字都稳定。
+- 新增 `--bootstrap`：机器上还没有任何实例时用它创建蓝色槽位（不写 `--bootstrap` 就报错，
+  避免手滑把正式环境起成空白状态）。
+- `docker-compose.yml` 的 panel 服务移到 `profiles: ["bootstrap"]`：裸跑
+  `docker compose up -d` 只管 Caddy 与演示服务，不再与脚本争容器名/端口。
+  首次部署用 `docker compose --profile bootstrap up -d panel` 或脚本的 `--bootstrap`。
+- `--prune` 现在删除的是「停下来的那一色」（如果那是旧式单容器则保留并提示手工删）。
+- 修 `set -euo pipefail` 下的 bootstrap 崩溃：`CUR_NAME` 为空时 `docker inspect ""` 失败，
+  经 `pipefail` 让整条管道非 0，脚本直接退出。
+- 脚本起容器时补上 compose 项目标签，`docker compose ps` / 面板的宿主机信息都能看懂它是谁。
+
 ## v0.16.2 — 把「两个进程同时活」也纳入端到端
 
 - e2e 新增双实例段（5 条）：用同一个 `data/` 起第二实例，断言它拿到 `standby` 身份、能读

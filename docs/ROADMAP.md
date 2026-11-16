@@ -5,6 +5,16 @@
 
 ---
 
+## ✅ v0.17.0 — blue/green 固定命名
+
+| 项 | 说明 |
+| --- | --- |
+| 命名 | `cf-tunnel-panel-blue`(:8090) / `cf-tunnel-panel-green`(:8095)，升级从不改名 |
+| compose 边界 | panel 服务进 `profiles: ["bootstrap"]`，裸 `up -d` 不再碰面板 |
+| `--bootstrap` | 全新机器创建蓝色槽位；缺这个参数时明确报错 |
+| `--prune` | 删「停下来的那一色」；旧式单容器保留为回滚点 |
+| 实测 | 生产来回切三次（blue→green→blue→green），公网始终 200 |
+
 ## ✅ v0.16.2 — 主备切换进入 CI 保护
 
 | 项 | 说明 |

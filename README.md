@@ -604,13 +604,25 @@ tools/rolling-upgrade.sh                  # dry run: preflight + plan, touches n
 tools/rolling-upgrade.sh --apply          # do it
 tools/rolling-upgrade.sh --apply --prune  # ...and delete the old container afterwards
 
-# next time just alternate the slot
-NEXT=8090 tools/rolling-upgrade.sh --apply
+# brand-new host (nothing running yet) — creates the blue slot
+tools/rolling-upgrade.sh --bootstrap --apply
 ```
 
-The script walks through: start new instance on the free slot → wait for `standby` → stop the old
-one → wait for it to become `leader` → rename containers → verify → optional prune. If the new
-instance fails to promote it restarts the old one and exits non-zero.
+Container names are a **fixed pair**, so nothing competes with compose over a name:
+
+| slot | container | port |
+| --- | --- | --- |
+| blue | `cf-tunnel-panel-blue` | 8090 |
+| green | `cf-tunnel-panel-green` | 8095 |
+
+Each run figures out which colour is live and starts the *other* one — it never renames anything,
+so running it any number of times leaves both names stable and `docker compose` out of the way.
+(The panel service in `docker-compose.yml` sits behind `profiles: ["bootstrap"]`, so a plain
+`docker compose up -d` only manages Caddy and the demo service.)
+
+The script walks through: start the other colour → wait for `standby` → stop the live one → wait
+for `leader` → verify → optional `--prune` of the stopped colour. If promotion fails it restarts
+the old container and exits non-zero.
 
 **Gotchas**
 

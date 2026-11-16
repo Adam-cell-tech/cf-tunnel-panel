@@ -1396,14 +1396,25 @@ environment:
 ```bash
 tools/rolling-upgrade.sh                  # 干跑：preflight + 打印计划，不动任何东西
 tools/rolling-upgrade.sh --apply          # 真做
-tools/rolling-upgrade.sh --apply --prune  # 顺手删掉老容器
+tools/rolling-upgrade.sh --apply --prune  # 顺手删掉停下来的那一色
 
-# 下次反着来
-NEXT=8090 tools/rolling-upgrade.sh --apply
+# 全新部署（还没有任何实例在跑）——创建蓝色槽位
+tools/rolling-upgrade.sh --bootstrap --apply
 ```
 
-脚本流程：在空闲槽位起新实例 → 等它进入 `standby` → 停掉老实例 → 等新实例变 `leader` →
-容器改名 → 验证 → 可选清理。新实例接管失败会自动把老实例拉回来并以非 0 退出。
+容器名是**固定的一对**，因此永远不会和 compose 抢名字：
+
+| 槽位 | 容器名 | 端口 |
+| --- | --- | --- |
+| blue | `cf-tunnel-panel-blue` | 8090 |
+| green | `cf-tunnel-panel-green` | 8095 |
+
+每次执行它会自己判断当前是哪个颜色，然后在**另一色**上起新实例 —— 全程不改名，
+跑多少遍两个名字都稳定，compose 也插不进来。（`docker-compose.yml` 里的 panel 服务放在
+`profiles: ["bootstrap"]` 下，裸跑 `docker compose up -d` 只会管 Caddy 和演示服务。）
+
+脚本流程：起另一色 → 等它 `standby` → 停掉当前色 → 等它 `leader` → 验证 → 可选 `--prune`
+删掉停下来的那一色。接管失败会自动把老实例拉回来并以非 0 退出。
 
 **坑**
 

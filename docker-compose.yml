@@ -3,10 +3,19 @@ name: cf-tunnel-panel
 # 全部使用 host 网络：这样面板/caddy/cloudflared 都能直接访问 127.0.0.1:端口 的内网服务，
 # 也不用为每个服务搞 extra_hosts（与 cloudflared 官方建议一致）。
 services:
+  # 注意：panel 放在 profile 里，默认 `docker compose up -d` 不会去动它。
+  # 面板的生命周期交给 tools/rolling-upgrade.sh（blue ↔ green 两个容器名交替），
+  # 否则 compose 和脚本会抢同一个容器名 / 同一个端口（实测报 name conflict）。
+  # 全新部署（第一次）才需要显式把蓝色起起来：
+  #   docker compose --profile bootstrap up -d panel
+  #   # 或者： tools/rolling-upgrade.sh --bootstrap --apply
   panel:
+    profiles: ["bootstrap"]
     build: .
     image: cf-tunnel-panel:local
-    container_name: cf-tunnel-panel
+    # 名字跟滚动升级的蓝色槽位一致：compose 负责「从零把蓝色起起来」，
+    # 之后升级交给 tools/rolling-upgrade.sh（blue ↔ green 交替），两边不再抢同一个容器名。
+    container_name: ${PANEL_CONTAINER:-cf-tunnel-panel-blue}
     network_mode: host
     # 以宿主机用户身份运行，避免 data/state.json 变成 root 属主（宿主机读不了、备份脚本写不了）
     # 首次启用前先把数据目录交给同一个 uid：docker exec -u 0 cf-tunnel-panel chown -R 1000:1000 /data
