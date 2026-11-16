@@ -142,6 +142,36 @@ const NOTIFY_FMT = {
   },
 };
 
+function fillGrafana() {
+  const g = (ST && ST.state && ST.state.settings && ST.state.settings.grafana) || {};
+  const set = (id, v) => { const el = $(id); if (el) el.value = v == null ? '' : String(v); };
+  const chk = (id, v) => { const el = $(id); if (el) el.checked = !!v; };
+  chk('#grafEnabled', g.enabled);
+  set('#grafUrl', g.url || '');
+  set('#grafDash', g.dashboard || '');
+  const th = $('#grafTheme');
+  if (th) th.value = g.theme || '';
+  const panels = g.panels || [];
+  for (const i of [1, 2, 3]) {
+    const p = panels[i - 1] || {};
+    set('#grafPid' + i, p.panelId || '');
+    set('#grafTitle' + i, p.title || '');
+    set('#grafH' + i, p.h || '');
+  }
+  syncGrafanaOpen();
+}
+
+/** 把「在 Grafana 打开」的链接跟着输入实时拼出来（省得用户自己算 uid/slug） */
+function syncGrafanaOpen() {
+  const a = $('#btnGrafTest');
+  if (!a) return;
+  const url = (($('#grafUrl') || {}).value || '').trim().replace(/\/+$/, '');
+  const dash = ((($('#grafDash') || {}).value || '').trim().replace(/^\/+|\/+$/g, '')).split('/');
+  if (!url || !dash[0]) { a.removeAttribute('href'); a.style.opacity = 0.5; return; }
+  a.style.opacity = 1;
+  a.href = `${url}/d/${encodeURIComponent(dash[0])}/${encodeURIComponent(dash[1] || dash[0])}`;
+}
+
 function applyNotifyFmt() {
   const f = NOTIFY_FMT[$('#notifyFormat').value] || NOTIFY_FMT.generic;
   $('#notifyUrlLabel').textContent = f.label;
@@ -188,6 +218,7 @@ function fill() {
   $('#panelUser').value = (ST.state.panel && ST.state.panel.user) || '';
   $('#verTag').textContent = '版本 ' + (ST.version || '—');
   applyNotifyFmt();
+  fillGrafana();
 }
 
 async function save() {
@@ -216,6 +247,23 @@ async function save() {
         text: ($('#notifyTplText') && $('#notifyTplText').value.trim()) || '',
       },
     },
+  };
+  const gpanels = [];
+  for (const i of [1, 2, 3]) {
+    const pid = Number(($('#grafPid' + i) || {}).value || 0);
+    if (!pid) continue;
+    gpanels.push({
+      panelId: Math.round(pid),
+      title: (($('#grafTitle' + i) || {}).value || '').trim(),
+      h: Number(($('#grafH' + i) || {}).value || 220) || 220,
+    });
+  }
+  body.grafana = {
+    enabled: $('#grafEnabled') ? $('#grafEnabled').checked : false,
+    url: (($('#grafUrl') || {}).value || '').trim(),
+    dashboard: (($('#grafDash') || {}).value || '').trim(),
+    theme: (($('#grafTheme') || {}).value || ''),
+    panels: gpanels,
   };
   try {
     const r = await api('/api/settings', { method: 'POST', body });
@@ -290,6 +338,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
   $('#btnSave').addEventListener('click', save);
+  for (const id of ['#grafUrl', '#grafDash']) {
+    const el = $(id);
+    if (el) el.addEventListener('input', () => { syncGrafanaOpen(); if (window.__cfpSetUnsaved) window.__cfpSetUnsaved('settings', true); });
+  }
   $('#btnBackupRefresh').addEventListener('click', loadBackups);
   $('#backupList').addEventListener('click', async (e) => {
     const dbtn = e.target.closest('[data-diff]');

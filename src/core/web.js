@@ -116,7 +116,16 @@ function serveText(req, res, body, type, cache = 'no-cache', extra = {}) {
   const etag = 'W/"' + buf.length.toString(16) + '-' + crypto.createHash('sha1').update(buf).digest('hex').slice(0, 12) + (canGz ? '-gz' : '-id') + '"';
   const headers = Object.assign({ 'Content-Type': type, 'Cache-Control': cache, ETag: etag, Vary: 'Accept-Encoding' }, SEC_HEADERS, extra);
   if (/^text\/html/.test(type)) {
-    headers['Content-Security-Policy'] = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'";
+    // frame-src 只放行「设置里填的那个 Grafana 源」：不写死 *，也不允许任意站点被嵌进来
+    let frameSrc = "'self'";
+    try {
+      const g = (state.settings || {}).grafana || {};
+      if (g.enabled && g.url) {
+        const u = new URL(g.url);
+        frameSrc += ` ${u.protocol}//${u.host}`;
+      }
+    } catch { /* 配置坏了就退化成只允许 self */ }
+    headers['Content-Security-Policy'] = `default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-src ${frameSrc}; base-uri 'none'; form-action 'self'`;
   }
   if (req.headers['if-none-match'] === etag) {
     res.writeHead(304, headers);

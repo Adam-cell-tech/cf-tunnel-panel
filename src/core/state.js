@@ -40,6 +40,15 @@ function defaultState() {
       },
       // Cloudflare API（可选）：在面板里建隧道、建 CNAME、删隧道
       cf: { token: '', accountId: '', zoneId: '' },
+      // Grafana 嵌入（可选）：把 Grafana 的单个 panel 直接嵌进首页
+      // 需要 Grafana 侧 conf/grafana.ini 里 allow_embedding = true，并开启匿名只读（或允许第三方 cookie）
+      grafana: {
+        enabled: false,
+        url: '',                 // 例如 http://192.168.1.55:3000
+        dashboard: '',           // <uid>/<slug>，例如 cfp-main/cf-tunnel-panel
+        theme: '',               // '' 跟随面板 / dark / light
+        panels: [],              // [{panelId, title, h}]，最多 3 个
+      },
     },
     // 多个隧道出口：每个 = 一条独立的 cloudflared 进程
     // 可以同时跑「快速隧道 + 命名隧道」或「多个命名隧道（不同账号/域名）」
@@ -342,6 +351,13 @@ function publicRoute(r) {
 function publicSettings() {
   const s = JSON.parse(JSON.stringify(state.settings));
   s.cf = { accountId: s.cf.accountId, zoneId: s.cf.zoneId, hasToken: !!s.cf.token };
+  s.grafana = {
+    enabled: !!(s.grafana && s.grafana.enabled),
+    url: (s.grafana && s.grafana.url) || '',
+    dashboard: (s.grafana && s.grafana.dashboard) || '',
+    theme: (s.grafana && s.grafana.theme) || '',
+    panels: ((s.grafana && s.grafana.panels) || []).slice(0, 3),
+  };
   s.viewer = { user: (state.viewer && state.viewer.user) || '', hasPass: !!(state.viewer && state.viewer.pass) };
   s.operator = { user: (state.operator && state.operator.user) || '', hasPass: !!(state.operator && state.operator.pass) };
   s.totp = { enabled: !!(state.totp && state.totp.enabled), recoveryLeft: ((state.totp && state.totp.recovery) || []).length };

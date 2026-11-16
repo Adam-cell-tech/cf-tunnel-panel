@@ -11,7 +11,7 @@
   <nav class="subnav" aria-label="设置分区">
     <a href="#sec-site">站点</a><a href="#sec-maint">维护</a><a href="#sec-security">安全</a><a href="#sec-notify">通知</a>
     <a href="#sec-login">登录</a><a href="#sec-sessions">会话</a><a href="#sec-viewer">只读</a><a href="#sec-totp">双因子</a>
-    <a href="#sec-operator">运维</a><a href="#sec-nhist">通知记录</a><a href="#sec-backup">备份</a><a href="#sec-io">导入导出</a><a href="#sec-code">配置即代码</a><a href="#sec-about">关于</a>
+    <a href="#sec-operator">运维</a><a href="#sec-nhist">通知记录</a><a href="#sec-backup">备份</a><a href="#sec-grafana">监控嵌入</a><a href="#sec-io">导入导出</a><a href="#sec-code">配置即代码</a><a href="#sec-about">关于</a>
   </nav>
   <div id="sec-site" class="card">
     <div class="hd"><h2>站点</h2><div class="sub">只影响面板与 Caddy 的对外行为</div></div>
@@ -206,6 +206,42 @@
         <button class="sm ghost" id="btnExportFull">导出（含 token）</button>
         <button class="sm ghost" id="btnImport">导入 JSON</button>
         <input type="file" id="fileImport" class="hidden" accept="application/json,.json" />
+      </div>
+    </div>
+  </div>
+
+  <div id="sec-grafana" class="card">
+    <div class="hd"><h2>监控嵌入（Grafana）</h2><div class="sub">把 Grafana 的单个图直接贴到首页</div></div>
+    <div class="bd">
+      <div class="hint">
+        Grafana 侧要开两件事：<code>conf/grafana.ini</code> 里 <code>allow_embedding = true</code>，
+        以及让面板能匿名只读（<code>auth.anonymous</code> 打开、org_role = Viewer）—— 否则 iframe 里会是登录页。
+      </div>
+      <div class="form-grid" style="margin-top:10px">
+        <label class="field"><span>开启嵌入</span>
+          <label class="chk"><input type="checkbox" id="grafEnabled" /> 在首页显示监控图</label></label>
+        <label class="field"><span>Grafana 地址</span>
+          <input id="grafUrl" placeholder="http://192.168.1.55:3000" /></label>
+        <label class="field"><span>仪表盘 uid/slug</span>
+          <input id="grafDash" placeholder="cfp-main/cf-tunnel-panel" /></label>
+        <label class="field"><span>主题</span>
+          <select id="grafTheme"><option value="">跟随面板</option><option value="dark">深色</option><option value="light">浅色</option></select></label>
+      </div>
+      <div class="sub" style="margin:12px 0 6px">要显示的图（panelId 在 Grafana 里「查看 → Inspect → Panel JSON」的 id 字段；最多 3 个）</div>
+      <div class="form-grid">
+        <label class="field"><span>#1 panelId</span><input id="grafPid1" placeholder="1" /></label>
+        <label class="field"><span>#1 标题（可选）</span><input id="grafTitle1" placeholder="集群角色" /></label>
+        <label class="field"><span>#1 高度</span><input id="grafH1" placeholder="220" /></label>
+        <label class="field"><span>#2 panelId</span><input id="grafPid2" placeholder="" /></label>
+        <label class="field"><span>#2 标题（可选）</span><input id="grafTitle2" placeholder="" /></label>
+        <label class="field"><span>#2 高度</span><input id="grafH2" placeholder="220" /></label>
+        <label class="field"><span>#3 panelId</span><input id="grafPid3" placeholder="" /></label>
+        <label class="field"><span>#3 标题（可选）</span><input id="grafTitle3" placeholder="" /></label>
+        <label class="field"><span>#3 高度</span><input id="grafH3" placeholder="220" /></label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <a class="sm ghost" id="btnGrafTest" target="_blank" rel="noopener noreferrer">在 Grafana 打开仪表盘 ↗</a>
+        <span class="muted" style="font-size:12px">保存后在首页出现；改了地址/图号要重新保存。</span>
       </div>
     </div>
   </div>

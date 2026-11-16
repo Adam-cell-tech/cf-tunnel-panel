@@ -6,7 +6,7 @@
 > 发布成 `https://你的域名/某个路径`，**不用公网 IP、不用改路由器、不用开端口**。
 > 支持**多条隧道同时在线**（快速 + 命名、或多账号多域名）。
 
-- 版本：**v0.20.0**（审计按天留档 + 告警模板 + Grafana 集群面板）
+- 版本：**v0.21.0**（Grafana 图嵌进首页）
 - 适用：NAS、自建网站、Home Assistant、Jellyfin、Gitea、Immich、qBittorrent……任何 HTTP 服务
 - 平台：Linux / arm64 / amd64 均可（本仓库在 Ubuntu 20.04 + Tegra arm64 上实测）
 
@@ -28,6 +28,15 @@
 12. [技术路线图](./docs/ROADMAP.md)
 
 ---
+
+### v0.21.0 更新
+
+- **首页「监控面板」卡**：设置 → 监控嵌入里填 Grafana 地址、仪表盘 `uid/slug`、最多 3 个 `panelId`
+  （可加标题与高度），首页用 `/d-solo/` 把单张图直接嵌进来 —— 只有图，没有 Grafana 的时间选择器和侧栏。
+- **CSP 跟着配置收紧**：`frame-src` 只在开启时放行你填的那个源，关掉就退回 `'self'`，不用 `*`。
+- 服务端校验：地址必须 http(s)（拒绝 `javascript:`）、仪表盘必须 `<uid>/<slug>`、高度夹到 140–600、
+  最多 3 个；开启但缺项直接 400 并说明缺什么。
+- Grafana 侧要 `allow_embedding = true` 且允许匿名只读（org_role=Viewer），否则 iframe 里是它的登录页。
 
 ### v0.20.0 更新
 

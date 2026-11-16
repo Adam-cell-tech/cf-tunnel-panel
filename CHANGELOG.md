@@ -2,6 +2,20 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.21.0 — 把 Grafana 的图嵌进首页
+
+- **首页新增「监控面板」卡**：把 Grafana 单个 panel 用 `/d-solo/` 直接嵌进来（只给一张图，
+  不带 Grafana 自己的时间选择器和侧栏，尺寸可控）。设置页「监控嵌入」里填 Grafana 地址、
+  仪表盘 `uid/slug`、最多 3 个 `panelId`（可加标题与高度），保存后首页出现。
+- **CSP 跟着配置走**：页面的 `frame-src` 只在开启嵌入时放行「你填的那个源」，
+  关掉或没填就退回 `'self'` —— 不用 `*`，也不允许任意站点被嵌进来。
+- 校验都在服务端：地址必须 http(s)（拒绝 `javascript:`）、仪表盘要 `<uid>/<slug>`、
+  高度夹到 140–600、最多 3 个；开启但少任何一项直接 400 并说明缺什么。
+- Grafana 侧需要 `allow_embedding = true` + 面板可匿名只读（org_role=Viewer），
+  否则 iframe 里会是 Grafana 自己的登录页。
+
+测试：API 262 项、DOM 118 项。
+
 ## v0.20.0 — 审计留档按天、告警模板、Grafana 集群面板
 
 三件都是「出了事能查、平时能看」的东西。

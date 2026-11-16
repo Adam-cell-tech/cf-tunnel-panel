@@ -7,13 +7,21 @@
 > changes, no open ports**. Multiple tunnels can run at the same time (quick + named, or several
 > accounts and domains).
 
-- Version: **v0.20.0**
+- Version: **v0.21.0**
 - Works with: NAS, self-hosted sites, Home Assistant, Jellyfin, Gitea, Immich, qBittorrent… any HTTP service
 - Stack: `node:http` backend (zero dependencies), hand-written frontend (no build step), `Caddy` for routing,
   `cloudflared` for the tunnel — one `docker compose up` and you are done
 - License: [MIT](LICENSE)
 
 ---
+
+## What's new in v0.21.0
+
+- **Grafana panels inside the overview page.** Point the panel at your Grafana (Settings → Grafana embed),
+  give it a dashboard `uid/slug` and up to three `panelId`s, and the overview page shows them via
+  `/d-solo/` — one chart per slot, no Grafana chrome. The page CSP only allows the origin you configured
+  (`frame-src` falls back to `'self'` when the feature is off). Grafana needs `allow_embedding = true`
+  and anonymous viewer access, otherwise the iframe just shows Grafana's own login page.
 
 ## What's new in v0.20.0
 

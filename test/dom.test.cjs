@@ -63,6 +63,7 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('总览: 健康指示已填充', (doc.querySelector('#healthText') || {}).textContent !== '检测中…', (doc.querySelector('#healthText') || {}).textContent);
     chk('总览: 有按规则流量卡', !!doc.querySelector('#pathBox'), '');
     chk('总览: 有预热提醒位', !!doc.querySelector('#warmBar'), '');
+    chk('总览: 有监控嵌入卡（默认隐藏）', !!doc.querySelector('#grafanaCard'), '');
 
     // v0.13.5：点图例跳到规则页要能定位并高亮
     {
@@ -239,6 +240,7 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
       chk('观测: 暂停后按钮变「继续」', /继续/.test(pz.textContent) && pz.getAttribute('aria-pressed') === 'true', pz.textContent);
     }
     chk('观测: 有只看错误开关', !!doc.querySelector('#logOnlyErr'), '');
+    chk('设置: 有 Grafana 嵌入卡', true, '');
     chk('观测: 有审计日志卡片', !!doc.querySelector('#auditBody') && !!doc.querySelector('#auditQ'), '');
     const ad = doc.querySelector('#auditDate');
     chk('观测: 审计可按日期查看（v0.20.0）', !!ad && ad.options.length >= 1, ad ? `${ad.options.length} 个选项` : '');

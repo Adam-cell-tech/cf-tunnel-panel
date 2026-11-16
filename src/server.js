@@ -608,6 +608,44 @@ async function handler(req, res) {
           zoneId: String(body.cf.zoneId === undefined ? (state.settings.cf || {}).zoneId : body.cf.zoneId).slice(0, 64).trim(),
         };
       }
+      if (body.grafana && typeof body.grafana === 'object') {
+        const g = body.grafana;
+        const prev = state.settings.grafana || {};
+        // URL 只接受 http(s)，并去掉结尾斜杠（iframe src 里自己拼 /d-solo/...）
+        let url = String(g.url === undefined ? prev.url || '' : g.url).trim().replace(/\/+$/, '');
+        if (url && !/^https?:\/\/[^\s"'<>]+$/i.test(url)) {
+          return sendJson(res, 400, { ok: false, error: 'Grafana 地址要写成 http://host:port（不要带路径、不要引号）' });
+        }
+        // dashboard 形如 <uid>/<slug>：两种情况都兼容，只有 uid 时也能用
+        const dash = String(g.dashboard === undefined ? prev.dashboard || '' : g.dashboard).trim().replace(/^\/+|\/+$/g, '');
+        if (dash && !/^[\w.\-]{1,80}(\/[\w.\-]{1,80})?$/.test(dash)) {
+          return sendJson(res, 400, { ok: false, error: '仪表盘要写成 <uid>/<slug>（在 Grafana 地址栏里 /d/ 后面那一段）' });
+        }
+        const theme = String(g.theme === undefined ? prev.theme || '' : g.theme);
+        if (!['', 'dark', 'light'].includes(theme)) {
+          return sendJson(res, 400, { ok: false, error: '主题只能是 dark / light / 跟随面板' });
+        }
+        const rawPanels = Array.isArray(g.panels) ? g.panels : (prev.panels || []);
+        const panels = [];
+        for (const item of rawPanels.slice(0, 3)) {
+          const id = Number((item && item.panelId) || 0);
+          if (!Number.isFinite(id) || id < 0 || id > 99999) {
+            return sendJson(res, 400, { ok: false, error: 'panelId 要是 Grafana 里那个数字（view panel → Inspect → Panel JSON 里的 id）' });
+          }
+          if (!id) continue;
+          const h = Number((item && item.h) || 220);
+          panels.push({
+            panelId: Math.round(id),
+            title: String((item && item.title) || '').slice(0, 40),
+            h: Math.min(Math.max(Math.round(h), 140), 600),
+          });
+        }
+        const enabled = !!(g.enabled === undefined ? prev.enabled : g.enabled);
+        if (enabled && (!url || !dash || !panels.length)) {
+          return sendJson(res, 400, { ok: false, error: '要开启嵌入，至少需要：Grafana 地址 + 仪表盘 uid + 一个 panelId' });
+        }
+        state.settings.grafana = { enabled, url, dashboard: dash, theme, panels };
+      }
       saveState('settings');
       await pushCaddy();
       // 有些选项在当前镜像里根本执行不了（例如标准 caddy 没有 rate_limit 模块）。

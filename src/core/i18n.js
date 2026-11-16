@@ -585,6 +585,26 @@ const EN_V0200 = {
 };
 Object.assign(EN, EN_V0200);
 
+const EN_V0210 = {
+  '监控面板': 'Monitoring',
+  '从 Grafana 直接嵌进来的实时图': 'Live charts embedded straight from Grafana',
+  '在 Grafana 打开 ↗': 'Open in Grafana ↗',
+  '监控嵌入（Grafana）': 'Grafana embed',
+  '把 Grafana 的单个图直接贴到首页': 'Paste individual Grafana panels onto the overview page',
+  '开启嵌入': 'Enable embed',
+  '在首页显示监控图': 'Show monitoring charts on the overview page',
+  '仪表盘 uid/slug': 'Dashboard uid/slug',
+  '主题': 'Theme',
+  '跟随面板': 'Follow panel',
+  '深色': 'Dark',
+  '浅色': 'Light',
+  '在 Grafana 打开仪表盘 ↗': 'Open dashboard in Grafana ↗',
+  '要显示的图': 'Panels to show',
+  '标题（可选）': 'Title (optional)',
+  '高度': 'Height',
+};
+Object.assign(EN, EN_V0210);
+
 const EN_PAGES = {
   '加签密钥（可选）': 'Signing secret (optional)',
   '机器人安全设置里勾了「加签」才需要；只勾「自定义关键词」就留空': 'Only needed when the bot has signing enabled; leave empty if you use a keyword instead',

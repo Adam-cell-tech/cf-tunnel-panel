@@ -84,3 +84,11 @@ groups:
   「Caddy 下发失败」「面板被扫」等）。
 - 现成仪表盘：[`grafana-dashboard.json`](grafana-dashboard.json)（12 个 panel，导入时选 Prometheus 数据源）。
 - 两台实例都可以抓；`cf_role` 能看出被抓的是 leader 还是 standby，`cf_leader_info` 给出当前主实例 id。
+
+## 把图嵌回面板首页（v0.21.0）
+
+1. Grafana 侧：`conf/grafana.ini` 里 `[security] allow_embedding = true`；开匿名只读
+   （`[auth.anonymous] enabled = true`、`org_role = Viewer`），否则 iframe 里是 Grafana 登录页。
+2. 面板侧：设置 → 监控嵌入，填 `http://<grafana>:3000`、仪表盘 `uid/slug`（地址栏 `/d/` 后面那段）、
+   要显示的 `panelId`（Grafana 里 View panel → Inspect → Panel JSON 的 `id`）。
+3. 页面 CSP 的 `frame-src` 会自动只放行这一个源；关掉嵌入即回收。

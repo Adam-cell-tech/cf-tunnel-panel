@@ -302,6 +302,50 @@ function appendLog(rec) {
   logEl.scrollTop = logEl.scrollHeight;
 }
 
+/**
+ * Grafana 嵌入：只读 settings.grafana，拼 /d-solo/ 单 panel 地址。
+ * 为什么用 d-solo：整块 dashboard 嵌进首页会带自己的时间选择器和侧栏，太小太挤；
+ * d-solo 只给一张图，尺寸可控（height 由设置里每条决定）。
+ * 注意 Grafana 侧必须 allow_embedding = true，否则它自己会回 X-Frame-Options: deny。
+ */
+function grafanaUrl(g, panel) {
+  const dash = String(g.dashboard || '').replace(/^\/+|\/+$/g, '');
+  const parts = dash.split('/');
+  const uid = parts[0] || '';
+  const slug = parts[1] || uid;
+  const theme = g.theme || (document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
+  const qs = new URLSearchParams({ orgId: '1', panelId: String(panel.panelId), kiosk: '', theme });
+  return `${g.url.replace(/\/+$/, '')}/d-solo/${encodeURIComponent(uid)}/${encodeURIComponent(slug)}?${qs.toString()}`;
+}
+
+function paintGrafana(d) {
+  const card = $('#grafanaCard');
+  const box = $('#grafanaBox');
+  if (!card || !box) return;
+  const g = (d && d.state && d.state.settings && d.state.settings.grafana) || {};
+  if (!g.enabled || !g.url || !g.dashboard || !(g.panels || []).length) {
+    card.classList.add('hidden');
+    return;
+  }
+  card.classList.remove('hidden');
+  const open = $('#btnGrafanaOpen');
+  if (open) {
+    const dash = String(g.dashboard).replace(/^\/+|\/+$/g, '').split('/');
+    open.href = `${g.url.replace(/\/+$/, '')}/d/${encodeURIComponent(dash[0])}/${encodeURIComponent(dash[1] || dash[0])}`;
+  }
+  // 已渲染过同样的配置就不重建（iframe 重建会闪、也会重新拉一次 Grafana）
+  const key = JSON.stringify({ url: g.url, dash: g.dashboard, theme: g.theme, panels: g.panels });
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.innerHTML = (g.panels || []).map((p) => `
+    <div style="margin:0 0 10px">
+      ${p.title ? `<div class="sub" style="margin:0 0 4px">${esc(p.title)}</div>` : ''}
+      <iframe src="${esc(grafanaUrl(g, p))}" title="${esc(p.title || ('Grafana panel ' + p.panelId))}"
+              style="width:100%;height:${Number(p.h) || 220}px;border:1px solid var(--line);border-radius:8px;background:transparent"
+              loading="lazy" referrerpolicy="no-referrer"></iframe>
+    </div>`).join('');
+}
+
 async function refresh() {
   try {
     const d = await loadState(true);
@@ -310,6 +354,7 @@ async function refresh() {
     paintRules(d);
     await paintStats(d);
     await paintCharts();
+    paintGrafana(d);
     await paintWarmHint(d);
     $('#updAt').textContent = '更新于 ' + fmtClock();
   } catch (e) {

@@ -5,6 +5,14 @@
 
 ---
 
+## ✅ v0.21.0 — Grafana 图嵌进首页
+
+| 项 | 做法 | 实测 |
+| --- | --- | --- |
+| 单图嵌入 | `settings.grafana{enabled,url,dashboard,theme,panels[≤3]}` + 首页 `/d-solo/<uid>/<slug>?panelId=…&kiosk` | 保存后首页出现 iframe，尺寸按每条 h（夹 140–600） |
+| CSP 收紧 | `frame-src` 动态拼「配置的源」，关闭/未配置退回 `'self'` | 开启时响应头含 `frame-src 'self' http://192.168.1.55:3000`，关闭后只剩 `'self'` |
+| 服务端校验 | 地址 http(s)、dashboard `<uid>/<slug>`、panelId 数字、最多 3 个、开启需三项齐全 | 四类非法输入均 400 并带人话原因 |
+
 ## ✅ v0.20.0 — 审计留档按天、告警模板、Grafana 集群面板
 
 | 项 | 做法 | 实测 |

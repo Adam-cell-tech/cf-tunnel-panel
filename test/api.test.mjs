@@ -859,6 +859,39 @@ try {
   ok('审计 CSV 支持按日期导出', csv2.status === 200 && /text\/csv/.test(csv2.headers.get('content-type') || ''), String(csv2.status));
 }
 
+// ---- v0.21.0：Grafana 嵌入 ----
+{
+  const JPOST = { headers: { Authorization: basic, 'Content-Type': 'application/json' } };
+  const bad = await rawFetch(B + '/api/settings', { method: 'POST', ...JPOST, body: JSON.stringify({ grafana: { url: 'javascript:alert(1)' } }) });
+  ok('Grafana：非 http 地址被拒', bad.status === 400, String(bad.status));
+
+  const noPanel = await rawFetch(B + '/api/settings', { method: 'POST', ...JPOST, body: JSON.stringify({ grafana: { enabled: true, url: 'http://192.168.1.55:3000', dashboard: 'cfp-main/cf-tunnel-panel', panels: [] } }) });
+  ok('Grafana：开启但没 panel 被拒', noPanel.status === 400, String(noPanel.status));
+
+  const badDash = await rawFetch(B + '/api/settings', { method: 'POST', ...JPOST, body: JSON.stringify({ grafana: { dashboard: '有 空格/斜杠' } }) });
+  ok('Grafana：仪表盘 uid 非法被拒', badDash.status === 400, String(badDash.status));
+
+  const good = await j('/api/settings', { method: 'POST', body: { grafana: { enabled: true, url: 'http://192.168.1.55:3000/', dashboard: '/cfp-main/cf-tunnel-panel/', theme: 'dark', panels: [{ panelId: 1, title: '集群角色', h: 200 }, { panelId: 5, h: 999 }] } } });
+  const g = (good.d.settings || {}).grafana || {};
+  ok('Grafana：保存后回读生效', g.enabled === true && g.url === 'http://192.168.1.55:3000' && g.dashboard === 'cfp-main/cf-tunnel-panel', JSON.stringify(g).slice(0, 120));
+  ok('Grafana：尾部斜杠被去掉', g.url === 'http://192.168.1.55:3000', g.url);
+  ok('Grafana：高度被夹到 140–600', (g.panels || []).every((p) => p.h >= 140 && p.h <= 600), JSON.stringify(g.panels));
+  ok('Grafana：panel 顺序保留', (g.panels || [])[1] && g.panels[1].panelId === 5, JSON.stringify(g.panels));
+
+  const page = await rawFetch(B + '/', { headers: { Authorization: basic } });
+  const csp = page.headers.get('content-security-policy') || '';
+  ok('Grafana：开启后 CSP 放行该源', /frame-src[^;]*http:\/\/192\.168\.1\.55:3000/.test(csp), csp.slice(0, 140));
+  const html = await page.text();
+  ok('Grafana：首页有嵌入卡', /id="grafanaCard"/.test(html), '');
+
+  await j('/api/settings', { method: 'POST', body: { grafana: { enabled: false } } });
+  const page2 = await rawFetch(B + '/', { headers: { Authorization: basic } });
+  const csp2 = page2.headers.get('content-security-policy') || '';
+  ok('Grafana：关掉后 CSP 回到 self', /frame-src 'self';/.test(csp2) && !/192\.168\.1\.55:3000/.test(csp2), csp2.slice(0, 120));
+  const s2 = await j('/api/state');
+  ok('Grafana：关闭后配置仍保留（方便下次打开）', ((s2.d.state.settings.grafana || {}).dashboard) === 'cfp-main/cf-tunnel-panel', '');
+}
+
 await restoreRoutes();
 
 console.log(`\n${pass}/${pass + fail} 通过`);
