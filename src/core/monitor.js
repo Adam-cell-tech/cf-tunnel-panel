@@ -30,6 +30,11 @@ function alertOnlyLeader(event, title, text, opts) {
   if (!leader) return;
   return notify(event, title, text, opts);
 }
+
+/** 容错的 isLeader（lease 未初始化时按 true 处理，便于本地/测试跑单实例） */
+function safeLeader() {
+  try { return lease.isLeader(); } catch { return true; }
+}
 let seenCaddyOk = true;
 let histTick = 0;
 let lastSpike = 0;      // 上次 5xx 告警时间（防刷屏）
@@ -82,7 +87,9 @@ function startMonitor() {
         }
       } catch {}
     }
-    if (histTick % 12 === 0) sampleHistory();
+    // 采样只由 leader 写：曲线是「集群视角」，两台都写会互相覆盖/重复；
+    // 写进同一个文件后两边读到的就是同一份历史（v0.19.0）。
+    if (histTick % 12 === 0 && safeLeader()) sampleHistory();
     for (const t of state.tunnels) {
       const rt = tunnelRt(t.id);
       const cur = { status: rt.status, url: rt.url };

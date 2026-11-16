@@ -46,6 +46,7 @@ const _auth = require('./core/auth');
 const { clearBasicCache, AUTH_BLOCK_MS, AUTH_FAIL_LIMIT, AUTH_FAIL_WINDOW, authBlockedFor, authFails, authOk, checkAuth, clearAuthFail, clientIpOf, noteAuthFail, login , completeTotp } = _auth;
 
 const _session = require('./core/session');
+const history = require('./core/history');
 const session = _session;
 
 const secret = require('./core/secret');
@@ -1350,13 +1351,14 @@ async function handler(req, res) {
     const top = Math.min(8, Math.max(1, Number(url.searchParams.get('top')) || 4));
     return sendJson(res, 200, { ok: true, ...trafficByPath(hours, top) });
   }
-  if (p === '/api/history') return sendJson(res, 200, { ok: true, points: rtHistory, max: HISTORY_MAX });
-  if (p === '/api/notify/history') return sendJson(res, 200, { ok: true, items: notifyHistory.slice().reverse() });
+  if (p === '/api/history') return sendJson(res, 200, { ok: true, points: history.sampleList(), max: HISTORY_MAX, shared: true });
+  if (p === '/api/notify/history') return sendJson(res, 200, { ok: true, items: history.notifyList().slice().reverse(), shared: true });
   if (p === '/api/notify/resend' && req.method === 'POST') {
     let body = {};
     try { body = await readBody(req); } catch { body = {}; }
     const seqN = Number(body.seq || 0);
-    const entry = notifyHistory.find((x) => x.seq === seqN) || notifyHistory[notifyHistory.length - 1];
+    const all = history.notifyList();
+    const entry = history.notifyBySeq(seqN) || all[all.length - 1];
     if (!entry) return sendJson(res, 400, { ok: false, error: '还没有任何通知记录可以重发' });
     const n = state.settings.notify || {};
     if (!n.url) return sendJson(res, 400, { ok: false, error: '还没配置通知地址（设置 → 掉线通知）' });
@@ -1583,6 +1585,7 @@ loadState();
 
 // 会话持久化：落盘的只是 cookie 值的哈希，「记住我」30 天，普通登录 7 天
 const _restored = session.init(require('path').join(DATA_DIR, 'sessions.json'));
+history.init(DATA_DIR);   // 历史曲线/通知记录落盘，两台实例共享（v0.19.0）
 
 // 领导权租约：谁拿着租约谁负责写 state / 推 Caddy / 跑 cloudflared，
 // 其余实例是**只读备份**（滚动升级时先起备份、切换、再退老实例）。

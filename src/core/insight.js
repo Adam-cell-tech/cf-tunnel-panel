@@ -13,6 +13,8 @@ const _state = require('./state');
 const state = _state.stateProxy;
 const { tunnelById, tunnelRt } = require('./registry');
 const { caddy, tunnelHostOf } = require('./caddy');
+const history = require('./history');
+const lease = require('./lease');
 /**
  * 按「归属规则」聚合的流量趋势：回答「哪个服务在吃流量」。
  * 复用 access log 与 simulateMatch，所以看不到 unmatched 的具体去向时至少能看到未匹配量。
@@ -128,6 +130,7 @@ function systemInfo() {
   let backups = 0;
   try { backups = fs.readdirSync(BACKUP_DIR).filter((f) => f.endsWith('.json')).length; } catch {}
   return {
+    history: history.stats(),
     version: VERSION,
     node: process.version,
     uptimeSec: Math.round(process.uptime()),
@@ -339,8 +342,12 @@ function requestsLastMinute() {
 
 function sampleHistory() {
   const running = state.tunnels.filter((t) => (tunnelRt(t.id) || {}).status === 'running').length;
-  rtHistory.push({ t: Date.now(), running, total: state.tunnels.length, caddyOk: caddy.ok ? 1 : 0, req: requestsLastMinute() });
-  if (rtHistory.length > HISTORY_MAX) rtHistory.splice(0, rtHistory.length - HISTORY_MAX);
+  // v0.19.0：采样落盘（DATA_DIR/history/samples.jsonl），两台实例共享同一份历史，
+  // 谁在当 leader 谁写；同分钟内重复写入会被 history 模块去重。
+  return history.appendSample({
+    t: Date.now(), running, total: state.tunnels.length,
+    caddyOk: caddy.ok ? 1 : 0, req: requestsLastMinute(), inst: (() => { try { return lease.instanceId(); } catch { return null; } })(),
+  });
 }
 
 const HISTORY_MAX = 240;       // 每分钟一个点，240 点 = 4 小时

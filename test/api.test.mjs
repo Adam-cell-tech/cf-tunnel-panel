@@ -817,6 +817,15 @@ try {
   ok('healthz 带集群主实例 id', typeof h.d.leader === 'string' && h.d.leader.length > 0, h.d.leader || '(空)');
   const ms = await j('/api/state');
   ok('/api/state 带 mode', ['leader', 'standby'].includes(ms.d.mode), ms.d.mode);
+
+  // 历史数据落盘：两边读的是同一份文件（shared 标记 + 目录在 DATA_DIR 下）
+  const hist = await j('/api/history');
+  ok('历史曲线标记为共享', hist.d.shared === true && Array.isArray(hist.d.points), String(hist.d.shared));
+  const nh = await j('/api/notify/history');
+  ok('通知记录标记为共享', nh.d.shared === true && Array.isArray(nh.d.items), String(nh.d.shared));
+  const sys = await j('/api/system');
+  ok('系统信息里能看到历史文件', !!(sys.d.history && sys.d.history.inited), JSON.stringify(sys.d.history || {}));
+  ok('历史文件落在 DATA_DIR/history', !!(sys.d.history && /\/history$/.test(sys.d.history.dir || '')), (sys.d.history || {}).dir || '');
 }
 
 await restoreRoutes();

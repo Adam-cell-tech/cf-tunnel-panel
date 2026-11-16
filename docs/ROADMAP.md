@@ -22,6 +22,17 @@
 
 测试：229 接口 + 113 页面 + 32 真 Caddy e2e。
 
+## ✅ v0.19.0 — 历史数据落盘共享
+
+| 项 | 说明 |
+| --- | --- |
+| 采样落盘 | `DATA_DIR/history/samples.jsonl`，每分钟一条、只由 leader 写、按分钟去重 |
+| 通知落盘 | `DATA_DIR/history/notify.jsonl`，seq = 毫秒时间戳；重启后仍可「重发」 |
+| 容量控制 | 追加写 + 超 512KB 重写成最后 2000 行；读取只读末尾 256KB |
+| 跨实例刷新 | 节流 2 秒，两台读同一份文件 |
+| 可观测 | `/api/history`、`/api/notify/history` 加 `shared:true`；`/api/system` 加 `history` 段 |
+| 防假低谷 | `sampleHistory()` 只在 leader 上执行（`safeLeader()`） |
+
 ## ✅ v0.18.3 — 镜像与运行代码合一（drift 归零）
 
 | 项 | 说明 |

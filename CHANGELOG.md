@@ -30,6 +30,24 @@
 - 测试：**229 接口 + 113 页面 + 32 真 Caddy e2e**（e2e 新增「备份实例认得 leader 登录的会话」
   「备份实例看到 leader 刚改的配置」两条跨实例断言）。
 
+## v0.19.0 — 历史数据落盘共享（两台实例看到同一份曲线）
+
+横向扩展之后还剩一处「两台不一样」：出口在线曲线（`/api/history`）和通知发送记录
+（`/api/notify/history`）都攒在各自进程内存里 —— 刷新页面落在哪台就看哪份，
+重启还会清零。这版把它们搬到 `DATA_DIR/history/`：
+
+- `samples.jsonl`：每分钟一条 `{t,running,total,caddyOk,req,inst}`，**只由 leader 写**
+  （standby 也写就会两家互相覆盖），读取时按分钟去重，leader 切换不会出现重复点。
+- `notify.jsonl`：通知结果 `{seq,event,title,status,extra,text,inst}`，seq 用毫秒时间戳，
+  跨实例不撞车；「重发」按 seq 找记录，重启后仍能重发。
+- 两个文件都是追加写 + 超 512KB 自动重写成最后 2000 行（临时文件 + rename），
+  读的时候只读末尾 256KB；跨实例刷新节流 2 秒，不会每个请求都读盘。
+- `/api/history`、`/api/notify/history` 响应加 `shared:true`；`/api/system` 多一段
+  `history {dir,inited,samples,notifies,*Bytes}`，排障时能直接看到文件长到多大。
+
+顺带：`sampleHistory()` 现在由 `monitor.js` 在 `safeLeader()` 为真时才调，
+避免 standby 写出「自己这边 0 个出口在线」的假低谷。
+
 ## v0.18.3 — 镜像重建，`drift` 归零
 
 前面几版都是用 `docker cp` 热替换容器里的代码（改一行、重启一次，十几秒见效果），

@@ -9,6 +9,7 @@
  const os=require('os');
 
 const { log } = require('./util');
+const history = require('./history');
 const _state = require('./state');
 const state = _state.stateProxy;
 /**
@@ -42,8 +43,8 @@ function inQuietHours(spec, now = new Date()) {
 
 let notifySeq = 0;
 function recordNotify(event, title, status, extra = '', text = '') {
-  notifyHistory.push({ seq: ++notifySeq, t: Date.now(), event, title, status, extra: String(extra || ''), text: String(text || '') });
-  if (notifyHistory.length > 50) notifyHistory.splice(0, notifyHistory.length - 50);
+  // v0.19.0：通知记录落盘（DATA_DIR/history/notify.jsonl），两台实例共享，重启也不丢
+  history.appendNotify({ seq: Date.now(), t: Date.now(), event, title, status, extra, text });
 }
 
 /** 钉钉 / 飞书的「加签」：base64(hmac_sha256(secret, `${ts}\n${secret}`)) */
