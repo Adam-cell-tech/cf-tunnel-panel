@@ -579,6 +579,15 @@ The script snapshots the route table to `/tmp` before touching it and restores f
 | E2E coverage 8 → 23 | The real-Caddy suite now proves prefix stripping, prefix passthrough, basic auth (401/401/200), Host-based routing isolation, WebSocket 101 upgrade, maintenance 503 + `Retry-After`, IP blacklist 403, admin off 2019, access-log writer and `trusted_proxies` — and restores routes/settings in `finally`. |
 | Audit de-duplication | A request whose handler already logged a human-readable action no longer also emits the generic `POST /api/...` row. |
 
+### v0.14.2 highlights
+
+| Change | Detail |
+| --- | --- |
+| Full English coverage | The dictionary now holds ~500 entries harvested from the rendered pages. Residual Chinese in English mode dropped from 7–32 % to **0–3 %** per page; what is left is *your own data* (rule names, exit names), which is left verbatim on purpose. |
+| Dynamic text too | `toast()`, `confirm()`, `alert()`, `prompt()` and anything rendered later (charts, tables, the SSE log) are translated: a `MutationObserver` re-runs the dictionary pass on new DOM nodes, with a 2.5 s fallback sweep. |
+| Numeric phrases | ~30 regex rules handle generated strings, e.g. `07:00 · 共 175 次 · 合计 122 · 其中错误 53` → `07:00 · 175 requests · total 122 · errors 53`, plus `第 2 / 4 页` → `page 2/4`, `2/3 出口在线` → `2/3 exits online`, `采样 208 条` → `sampled 208 rows`. |
+| Switch | The 🌐 button in the top bar flips the `cfp_lang` cookie; the server renders `<html lang>` and serves the dictionary from `/boot.js` (gzip, `no-store`, before auth). |
+
 ### v0.14.1 highlights
 
 | Change | Detail |

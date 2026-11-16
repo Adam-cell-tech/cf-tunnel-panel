@@ -320,6 +320,18 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('登录页: 无脚本错误', errors.length === 0, errors.join(' | ').slice(0, 160));
   }
 
+  {
+    const { dom, doc, win } = await open('/settings', 1400);
+    chk('i18n: 暴露了翻译函数', typeof win.__cfpT === 'function', typeof win.__cfpT);
+    const dict = win.__CFP_DICT || {};
+    const keys = Object.keys(dict);
+    chk('i18n: 词典 ≥ 480 条', keys.length >= 480, String(keys.length));
+    chk('i18n: 含新增页面文案', dict['出口设置'] === 'Exit settings', String(dict['出口设置']));
+    chk('i18n: 语言切换按钮存在', !!doc.querySelector('#btnLang'), '');
+    chk('i18n: 中文模式下 t() 原样返回', win.__cfpT('出口设置') === '出口设置', win.__cfpT('出口设置'));
+    dom.window.close();
+  }
+
   let bad = 0;
   for (const [ok, name, extra] of results) {
     if (!ok) bad++;

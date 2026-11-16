@@ -2,6 +2,14 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.14.2 — 2026-11-16
+
+- **英文界面收口**：词典 229 → 502 条（从 jsdom 渲染出的 6 个页面采文案）；英文模式残留中文从 7%~32% 降到 0~3%，剩余为用户数据（规则名/出口名）。
+- **动态文案翻译**：`toast/confirm/alert/prompt` 全部包一层 `t()`；新增 `MutationObserver` 对新挂载节点补扫（原来只在加载后 700ms 扫一次），另加 2.5 秒兜底扫描。
+- **带数字的句子**：`app.js` 新增约 30 条正则（`NUMPAT`）+ 单位词兜底（`WORDS`），覆盖图表 tooltip、分页、在线数、采样数等拼接文案。
+- 允许单字文本节点翻译（`测`/`删` 这类按钮此前被 `key.length > 1` 挡掉）。
+- 测试：API 196、DOM 102、e2e 23。
+
 ## v0.11.2
 
 - **口令只存 bcrypt 哈希**：`state.json` 里 `panel.pass` / `viewer.pass` 改为 `$2b$10$…`；启动时自动把历史明文迁移成哈希（`migrate-secrets`）。

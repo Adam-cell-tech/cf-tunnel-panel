@@ -46,7 +46,7 @@ function toast(msg, kind = '') {
   }
   const el = document.createElement('div');
   el.className = 't ' + kind;
-  el.textContent = msg;
+  el.textContent = t(msg);
   box.appendChild(el);
   setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .2s'; }, 2600);
   setTimeout(() => el.remove(), 2900);
@@ -140,7 +140,78 @@ const LANG = window.__CFP_LANG === 'en' ? 'en' : 'zh';
 const DICT = window.__CFP_DICT || {};
 const LANG_COOKIE = 'cfp_lang';
 
-function t(zh) { return LANG === 'en' ? (DICT[zh] || zh) : zh; }
+// 带数字/时间的动态文案：先整串模式匹配，再退回「词组替换」
+const NUMPAT = [
+  [/^(\d{1,2}:\d{2}) · 共 (\d+) 次改动 · 合计 ([\d.]+) · 失败 (\d+)$/, '$1 · $2 changes · total $3 · failed $4'],
+  [/^(\d{1,2}:\d{2}) · 共 (\d+) 次 · 合计 ([\d.]+) · 其中错误 (\d+)$/, '$1 · $2 requests · total $3 · errors $4'],
+  [/^(\d{1,2}:\d{2}) · 共 (\d+) 次请求 · (.+)$/, '$1 · $2 requests · $3'],
+  [/^(\d{1,2}:\d{2}) · 共 (\d+) 次$/, '$1 · $2 requests'],
+  [/^(\d{1,2}:\d{2}) · (\d+)\/(\d+) 在线$/, '$1 · $2/$3 online'],
+  [/^(\d{1,2}:\d{2}) · 面板(.*?) (\d+) · (.+?) (\d+)$/, '$1 · panel$2 $3 · $4 $5'],
+  [/^(\d+)\/(\d+) 出口在线$/, '$1/$2 exits online'],
+  [/^(\d+)\/(\d+) 在线$/, '$1/$2 online'],
+  [/^共 (\d+) 条 · 第 (\d+) ?\/ ?(\d+) 页$/, '$1 rows · page $2/$3'],
+  [/^共 (\d+) 次$/, '$1 requests'],
+  [/^合计 (\d+) 次$/, 'sum $1'],
+  [/^失败 (\d+) 次$/, '$1 failures'],
+  [/^峰值 (\d+)\/小时$/, 'peak $1/h'],
+  [/^(\d+) 个采样点$/, '$1 samples'],
+  [/^(\d+) 份（上限 (\d+)）$/, '$1 backups (max $2)'],
+  [/^(\d+) 分钟$/, '$1 min'],
+  [/^(\d+) 秒$/, '$1 s'],
+  [/^命中 (\d+) · 错 (\d+) · p95 (\d+)ms$/, '$1 hits · $2 errors · p95 $3ms'],
+  [/^另有 (\d+) 个请求没有命中任何规则（其中 (\d+) 个 4xx、(\d+) 个 5xx）.*$/, '$1 requests matched no rule ($2 4xx, $3 5xx).'],
+  [/^(.+?)（失败）$/, '$1 (failed)'],
+  [/^配置里 (\d+) 条，?(\d+) 条专属$/, 'config: $1 rules, $2 scoped'],
+  [/^监听 ([:\d.]+)$/, 'listening on $1'],
+  [/^错误 (\d+) 次（(\d+)%）$/, '$1 errors ($2%)'],
+  [/^TCP 通 · (\d+)ms$/, 'TCP OK · $1ms'],
+  [/^TCP 不通 · (.+)$/, 'TCP failed · $1'],
+  [/^最近 (\d+) 条$/, 'latest $1'],
+  [/^(\d+) 个来源 IP$/, '$1 source IP'],
+  [/^窗口内共 (\d+) 次被拒，最后一次 (.+)$/, '$1 rejected in window, last at $2'],
+  [/^采样 (\d+) 条$/, 'sampled $1 rows'],
+  [/^已运行 (\d+) 秒$/, 'uptime $1s'],
+  [/^已运行 (.+)$/, 'uptime $1'],
+  [/^更新于 ([:\d]+)$/, 'updated $1'],
+  [/^最近 (\d+) 小时；另有 (\d+) 次没命中任何规则（(.+?)），其中 5xx (\d+) 次$/, 'last $1h; $2 more matched no rule ($3), $4 of them 5xx'],
+  [/^(\d+) 条专属规则$/, '$1 scoped rules'],
+  [/^出口：(.+?)（(\d+)）$/, 'exit: $1 ($2)'],
+  [/^出口：(.+)$/, 'exit: $1'],
+  [/^粘贴一条规则的 JSON，例如 (.+)$/, 'Paste a rule as JSON, e.g. $1'],
+  [/^版本 (.+)$/, 'version $1'],
+  [/^(.+?)（Caddy 侧 (\d+)MB × (\d+) 份自动轮转）$/, '$1 (Caddy side rotates ${2}MB × ${3})'],
+  [/^(.+?) · (\d+) →$/, '$1 · $2 →'],
+  [/^代码已更新（指纹 (.+?) → (.+?)），上次预热是 (.+?)。资源 URL 变了，建议$/, 'Code updated ($1 → $2); last warm-up $3. Asset URLs changed, recommended:'],
+];
+
+// 词组级兜底：只替换单位词，尽量不破坏语法
+const WORDS = [
+  ['次改动', ' changes'], ['次请求', ' requests'], ['其中错误', 'errors '], ['合计', 'sum '],
+  ['个采样点', ' samples'], ['出口在线', ' exits online'], ['在线', ' online'],
+  ['峰值', 'peak '], ['每秒', '/s'], ['小时', 'h'], ['分钟', 'min'], ['毫秒', 'ms'],
+];
+
+function tNum(s) {
+  if (LANG !== 'en') return null;
+  for (const [re, rep] of NUMPAT) {
+    if (re.test(s)) return s.replace(re, rep);
+  }
+  if (/[\u4e00-\u9fff]/.test(s) && /\d/.test(s)) {
+    let out = s;
+    for (const [a, b] of WORDS) out = out.split(a).join(b);
+    if (!/[\u4e00-\u9fff]/.test(out)) return out;
+  }
+  return null;
+}
+
+function t(zh) {
+  if (LANG !== 'en') return zh;
+  const hit = DICT[zh];
+  if (hit) return hit;
+  const num = tNum(String(zh || '').trim());
+  return num || zh;
+}
 
 function dictLookup(raw) {
   const s = String(raw || '').trim();
@@ -149,8 +220,23 @@ function dictLookup(raw) {
   // 「🔄 刷新」「＋ 添加规则」这类带前缀符号的，剥掉符号再查
   const stripped = s.replace(/^[^\p{L}\p{N}]+/u, '').trim();
   if (stripped && DICT[stripped]) return (s.slice(0, s.length - stripped.length) + DICT[stripped]);
+  const num = tNum(s);
+  if (num) return num;
+  if (stripped) {
+    const n2 = tNum(stripped);
+    if (n2) return s.slice(0, s.length - stripped.length) + n2;
+  }
   return null;
 }
+
+// 原生弹窗也走词典（toast/confirm/alert/prompt 的文案都是中文原文做键）
+const _confirm = window.confirm.bind(window);
+const _alert = window.alert.bind(window);
+const _prompt = window.prompt.bind(window);
+window.confirm = (m) => _confirm(t(String(m == null ? '' : m)));
+window.alert = (m) => _alert(t(String(m == null ? '' : m)));
+window.prompt = (m, d) => _prompt(t(String(m == null ? '' : m)), d);
+window.__cfpT = t;
 
 const LANG_SKIP = /^(SCRIPT|STYLE|PRE|CODE|TEXTAREA)$/;
 const translated = new WeakSet();
@@ -167,7 +253,7 @@ function translateText(root) {
       if (p && !LANG_SKIP.test(p.tagName)) {
         const raw = n.nodeValue || '';
         const key = raw.replace(/\s+/g, ' ').trim();
-        const en = key.length > 1 ? DICT[key] : null;
+        const en = key.length > 0 ? dictLookup(raw) : null;
         if (en && en !== key) jobs.push([n, raw, en]);
         else translated.add(n);
       }
@@ -210,8 +296,17 @@ function initLang() {
   const b = $('#btnLang');
   if (b) b.addEventListener('click', () => setLang(LANG === 'en' ? 'zh' : 'en'));
   translateTree(document);
-  // 各页会不停重画局部区域，简单起见按固定节奏补扫一遍（只做文本比对，开销很小）
-  setInterval(() => translateTree(document), 700);
+  // 各页会不停重画局部区域：优先用 MutationObserver，另加低频兜底扫描
+  if (window.MutationObserver && document.body) {
+    let queued = false;
+    const mo = new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      setTimeout(() => { queued = false; translateTree(document); }, 40);
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
+  }
+  setInterval(() => translateTree(document), 2500);
 }
 
 function initTheme() {

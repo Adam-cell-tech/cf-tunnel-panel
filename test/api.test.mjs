@@ -647,6 +647,13 @@ try {
   const sw = await rawFetch(B + '/assets/sw.js');
   const swText = await sw.text();
   ok('Service Worker：带离线兜底', /offline\.html/.test(swText) && /navigate/.test(swText), '');
+
+  const boot = await rawFetch(B + '/boot.js');
+  const bootText = await boot.text();
+  ok('i18n：/boot.js 可匿名访问', boot.status === 200, String(boot.status));
+  ok('i18n：页面静态文案已进词典', /Exit settings/.test(bootText) && /This rule is not last/.test(bootText), '');
+  const dictKeys = (bootText.match(/"[^"]{2,}"\s*:/g) || []).length;
+  ok('i18n：词典规模 ≥ 480 条', dictKeys >= 480, String(dictKeys));
 }
 
 console.log(`\n${pass}/${pass + fail} 通过`);
