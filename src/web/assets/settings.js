@@ -411,7 +411,99 @@ document.addEventListener('DOMContentLoaded', () => {
   loadSystem();
   bindSessions();
   loadSessions();
+  bindCfg();
+  loadCfgSnaps();
 });
+
+// ---------- 配置即代码 ----------
+let cfgSnaps = [];
+
+function renderCfgDiff(d) {
+  const box = $('#cfgDiff');
+  if (!d) { box.innerHTML = ''; return; }
+  const part = (label, list) => list.length
+    ? `<div class="hint" style="margin:2px 0">${label}：${list.map((x) => `<code class="mono">${esc(x.kind)}/${esc(x.name || x.id)}</code>`).join('、')}</div>`
+    : '';
+  const changed = (d.changed || []).map((x) => `<tr><td class="mono">${esc(x.kind)}</td><td>${esc(x.name || x.id)}</td><td class="mono">${esc((x.fields || []).join(', '))}</td></tr>`).join('');
+  box.innerHTML =
+    `<div class="row" style="margin-top:6px"><span class="tag">+${(d.added || []).length}</span><span class="tag">-${(d.removed || []).length}</span><span class="tag">~${(d.changed || []).length}</span>${d.settingsChanged ? '<span class="tag warn">设置也变了</span>' : ''}</div>` +
+    part('新增', d.added || []) + part('删除', d.removed || []) +
+    (changed ? `<div class="tbl-wrap"><table class="stackable"><thead><tr><th>类型</th><th>名字</th><th>变了的字段</th></tr></thead><tbody>${changed}</tbody></table></div>` : '');
+}
+
+async function loadCfgSnaps() {
+  try {
+    const d = await api('/api/config/snapshots');
+    cfgSnaps = d.items || [];
+    $('#cfgSnapCount').textContent = String(cfgSnaps.length);
+    $('#cfgSnaps').innerHTML = cfgSnaps.length
+      ? `<table class="stackable"><thead><tr><th>时间</th><th>文件</th><th>大小</th><th>操作</th></tr></thead><tbody>${cfgSnaps.map((x) => `<tr><td class="mono">${esc(fmtTime(x.at))}</td><td class="mono">${esc(x.file)}</td><td class="mono">${kb(x.bytes)}</td><td><button class="mini" data-cfgsnap="${esc(x.file)}">填回编辑器</button></td></tr>`).join('')}</tbody></table>`
+      : '<div class="empty">还没有快照（点「存一份快照」或应用一次配置）</div>';
+  } catch (e) {
+    $('#cfgSnaps').innerHTML = `<div class="hint">${esc(e.message)}</div>`;
+  }
+}
+
+function bindCfg() {
+  const msg = $('#cfgMsg');
+  $('#btnCfgLoad').addEventListener('click', async () => {
+    try {
+      const d = await api('/api/config');
+      $('#cfgText').value = JSON.stringify(d.config, null, 2);
+      msg.textContent = '已载入当前声明';
+    } catch (e) { msg.textContent = e.message; }
+  });
+  const readCfg = () => {
+    try { return JSON.parse($('#cfgText').value || '{}'); } catch (e) { throw new Error('JSON 解析失败：' + e.message); }
+  };
+  $('#btnCfgDry').addEventListener('click', async () => {
+    try {
+      const cfg = readCfg();
+      const d = await api('/api/config/apply', { method: 'POST', body: { config: cfg, dry: true } });
+      renderCfgDiff(d.diff);
+      msg.textContent = `预览：${d.routes} 条规则 / ${d.tunnels} 个出口${d.touchesTunnels ? '（会重启出口）' : ''}`;
+    } catch (e) { msg.textContent = e.message; toast(e.message, 'err'); }
+  });
+  $('#btnCfgApply').addEventListener('click', async () => {
+    let cfg;
+    try { cfg = readCfg(); } catch (e) { msg.textContent = e.message; return; }
+    if (!confirm('用这份配置整份替换？routes 会全量替换，apply 前会自动存一份快照。')) return;
+    try {
+      msg.textContent = '应用中…';
+      const d = await api('/api/config/apply', { method: 'POST', body: { config: cfg } });
+      renderCfgDiff(d.diff);
+      msg.textContent = `已应用：${d.routes} 条规则 / ${d.tunnels} 个出口（快照 ${d.file}）`;
+      toast('配置已应用', 'ok');
+      loadCfgSnaps();
+      if (typeof refresh === 'function') refresh();
+    } catch (e) { msg.textContent = e.message; toast('应用失败：' + e.message, 'err'); }
+  });
+  $('#btnCfgSnap').addEventListener('click', async () => {
+    try { const d = await api('/api/config/snapshot', { method: 'POST', body: {} }); msg.textContent = '已存快照 ' + d.file; loadCfgSnaps(); }
+    catch (e) { msg.textContent = e.message; }
+  });
+  $('#btnCfgDrift').addEventListener('click', async () => {
+    try {
+      const d = await api('/api/config/drift');
+      if (!d.hasBaseline) { msg.textContent = '还没有「应用过」的基线（应用一次配置后才有）'; renderCfgDiff(null); return; }
+      renderCfgDiff(d.drift);
+      const n = (d.drift.added || []).length + (d.drift.removed || []).length + (d.drift.changed || []).length;
+      msg.textContent = n ? `相对上次应用有 ${n} 处差异（可能有人手改过面板）` : '与上次应用的声明一致';
+    } catch (e) { msg.textContent = e.message; }
+  });
+  $('#cfgSnaps').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-cfgsnap]');
+    if (!b) return;
+    try {
+      const d = await api('/api/config/snapshots');
+      const row = (d.items || []).find((x) => x.file === b.dataset.cfgsnap);
+      if (!row) throw new Error('这份快照不在了');
+      const r = await api('/api/config/snapshot?file=' + encodeURIComponent(row.file));
+      $('#cfgText').value = JSON.stringify(r.config, null, 2);
+      msg.textContent = '已填入 ' + row.file + '（改完点「预览差异」再应用）';
+    } catch (x) { toast(x.message, 'err'); }
+  });
+}
 
 })();
 

@@ -11,7 +11,7 @@
   <nav class="subnav" aria-label="设置分区">
     <a href="#sec-site">站点</a><a href="#sec-maint">维护</a><a href="#sec-security">安全</a><a href="#sec-notify">通知</a>
     <a href="#sec-login">登录</a><a href="#sec-sessions">会话</a><a href="#sec-viewer">只读</a><a href="#sec-totp">双因子</a>
-    <a href="#sec-operator">运维</a><a href="#sec-nhist">通知记录</a><a href="#sec-backup">备份</a><a href="#sec-io">导入导出</a><a href="#sec-about">关于</a>
+    <a href="#sec-operator">运维</a><a href="#sec-nhist">通知记录</a><a href="#sec-backup">备份</a><a href="#sec-io">导入导出</a><a href="#sec-code">配置即代码</a><a href="#sec-about">关于</a>
   </nav>
   <div id="sec-site" class="card">
     <div class="hd"><h2>站点</h2><div class="sub">只影响面板与 Caddy 的对外行为</div></div>
@@ -207,6 +207,25 @@
         <button class="sm ghost" id="btnImport">导入 JSON</button>
         <input type="file" id="fileImport" class="hidden" accept="application/json,.json" />
       </div>
+    </div>
+  </div>
+
+  <div id="sec-code" class="card">
+    <div class="hd"><h2>配置即代码</h2><div class="sub">状态 <span class="mono">state.json</span> 投影成一份声明式 JSON：导出、改、预览差异、整份应用</div></div>
+    <div class="bd stack">
+      <div class="row">
+        <button class="sm" id="btnCfgLoad">载入当前声明</button>
+        <button class="sm ghost" id="btnCfgDry">预览差异</button>
+        <button class="sm primary" id="btnCfgApply">应用这份配置</button>
+        <button class="sm ghost" id="btnCfgSnap">存一份快照</button>
+        <button class="sm ghost" id="btnCfgDrift">看与上次应用的差异</button>
+        <span class="muted" id="cfgMsg"></span>
+      </div>
+      <textarea id="cfgText" class="mono" rows="14" spellcheck="false" style="width:100%;font-size:12px;line-height:1.5;border-radius:10px;border:1px solid var(--line);background:var(--bg2);color:var(--fg);padding:10px" placeholder='点「载入当前声明」把现在的配置取出来，改完再点「预览差异」'></textarea>
+      <div class="hint">应用时以这份 JSON 为准：<b>routes 全量替换</b>、tunnels 按 id 合并（token 不导出，同 id 沿用旧值）。apply 前会自动落一份 <span class="mono">before-apply</span> 快照，出错可用下面的快照或「备份与回滚」退回。</div>
+      <div id="cfgDiff"></div>
+      <div class="sub">快照（<span id="cfgSnapCount">0</span> 份，点一行填回上面）</div>
+      <div class="tbl-wrap" id="cfgSnaps"><div class="empty">读取中…</div></div>
     </div>
   </div>
 

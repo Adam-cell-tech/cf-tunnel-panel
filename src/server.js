@@ -49,6 +49,7 @@ const session = _session;
 
 const secret = require('./core/secret');
 const ident = require('./core/ident');
+const configcode = require('./core/configcode');
 const totp = require('./core/totp');
 const perm = require('./core/perm');
 
@@ -817,6 +818,68 @@ async function handler(req, res) {
     return res.end(JSON.stringify(copy, null, 2));
   }
 
+  // ---- 配置即代码：快照 / 差异 / 按声明应用 ----
+  if (p === '/api/config' && req.method === 'GET') {
+    return sendJson(res, 200, { ok: true, config: configcode.snapshot(state) });
+  }
+  if (p === '/api/config/drift' && req.method === 'GET') {
+    const applied = configcode.lastApplied(DATA_DIR);
+    const cur = configcode.snapshot(state);
+    if (!applied) return sendJson(res, 200, { ok: true, hasBaseline: false, drift: null, config: cur });
+    return sendJson(res, 200, { ok: true, hasBaseline: true, drift: configcode.diffView(applied, cur) });
+  }
+  if (p === '/api/config/snapshots' && req.method === 'GET') {
+    return sendJson(res, 200, { ok: true, items: configcode.listSnapshots(DATA_DIR, 30) });
+  }
+  if (p === '/api/config/snapshot' && req.method === 'GET') {
+    try {
+      const file = String(url.searchParams.get('file') || '');
+      return sendJson(res, 200, { ok: true, file, config: configcode.readSnapshot(DATA_DIR, file) });
+    } catch (e) { return sendJson(res, 400, { ok: false, error: e.message }); }
+  }
+  if (p === '/api/config/snapshot' && req.method === 'POST') {
+    const file = configcode.writeSnapshot(DATA_DIR, configcode.snapshot(state), 'manual');
+    auditRecord({ actor: auth.who, ip: clientIpOf(req), method: 'POST', path: p, status: 200, action: '保存配置快照', target: file });
+    return sendJson(res, 200, { ok: true, file });
+  }
+  if (p === '/api/config/apply' && req.method === 'POST') {
+    let body = {};
+    try { body = await readBody(req); } catch (e) { return sendJson(res, 400, { ok: false, error: '解析失败：' + e.message }); }
+    const incoming = body.config && typeof body.config === 'object' ? body.config : body;
+    const dry = !!body.dry;
+    try {
+      if (!incoming || typeof incoming !== 'object') throw new Error('配置必须是 JSON 对象');
+      if (!Array.isArray(incoming.routes)) throw new Error('配置里要有 routes 数组');
+      const nextRoutes = validateRoutes(incoming.routes, state.routes);
+      const prevTunnels = new Map((state.tunnels || []).map((t) => [t.id, t]));
+      const nextTunnels = (incoming.tunnels || []).map((t) => {
+        const base = prevTunnels.get(t.id) ? JSON.parse(JSON.stringify(prevTunnels.get(t.id))) : newTunnel();
+        const merged = { ...base, ...t };
+        merged.id = String(t.id || base.id);
+        return merged;
+      });
+      const prevCfg = configcode.snapshot(state);
+      const nextCfg = {
+        apiVersion: 'cf-tunnel-panel/v1', kind: 'Config',
+        settings: prevCfg.settings, tunnels: nextTunnels.map(configcode.tunnelView), routes: nextRoutes.map(configcode.routeView),
+        shares: prevCfg.shares,
+      };
+      const d = configcode.diffView(prevCfg, nextCfg);
+      const touchesTunnels = d.added.concat(d.removed, d.changed).some((x) => x.kind === 'tunnels');
+      if (dry) return sendJson(res, 200, { ok: true, dry: true, diff: d, touchesTunnels, routes: nextRoutes.length, tunnels: nextTunnels.length });
+      const file = configcode.writeSnapshot(DATA_DIR, prevCfg, 'before-apply');
+      state.routes = nextRoutes;
+      state.tunnels = nextTunnels;
+      saveState('config-apply');
+      pushCaddy().catch(() => {});
+      if (touchesTunnels) syncTunnels([...prevTunnels.values()]);
+      configcode.writeSnapshot(DATA_DIR, configcode.snapshot(state), 'apply');
+      auditRecord({ actor: auth.who, ip: clientIpOf(req), method: 'POST', path: p, status: 200, action: '按声明应用配置', target: `+${d.added.length} -${d.removed.length} ~${d.changed.length}` });
+      return sendJson(res, 200, { ok: true, file, diff: d, routes: nextRoutes.length, tunnels: nextTunnels.length, touchesTunnels });
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: e.message });
+    }
+  }
   if (p === '/api/import' && req.method === 'POST') {
     try {
       const body = await readBody(req);

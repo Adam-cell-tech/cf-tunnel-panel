@@ -57,9 +57,15 @@ ok('新出口进入 running（或 Cloudflare 限流时退避中）', rt1 && (rt1
 ok('新出口有公网地址（限流时跳过）', !!(rt1 && rt1.url) || throttled, rt1 && (rt1.url || '限流中'));
 const stop = await j(`/api/tunnels/${nid}/stop`, { method: 'POST' });
 ok('停止出口 200', stop.status === 200, String(stop.status));
-await sleep(5000);
-const tl2 = await j('/api/tunnels');
-ok('停止后状态=stopped', tl2.d.tunnels.find((t) => t.id === nid).status === 'stopped', (tl2.d.tunnels.find((t) => t.id === nid) || {}).status);
+// 停止是异步的（SIGTERM → 5s 后 SIGKILL），轮询等到 stopped，最多 20 秒
+let stStatus = '';
+for (let i = 0; i < 20; i += 1) {
+  await sleep(1000);
+  const t = (await j('/api/tunnels')).d.tunnels.find((x) => x.id === nid) || {};
+  stStatus = t.status || '';
+  if (stStatus === 'stopped') break;
+}
+ok('停止后状态=stopped', stStatus === 'stopped', stStatus);
 const del = await j(`/api/tunnels/${nid}/delete`, { method: 'POST' });
 ok('删除出口 200', del.status === 200, String(del.status));
 const tl3 = await j('/api/tunnels');
@@ -166,6 +172,31 @@ ok('本机 Caddy 延迟可测', bl.d.ok === true && bl.d.ttfbMs && typeof bl.d.t
   ok('一键出口: 主机名必须带点', qkBadHost.status === 400, String(qkBadHost.status));
   const qkBadSvc = await j('/api/cf/tunnels/quick', { method: 'POST', body: { hostname: 'qa-quick.example.com', service: '127.0.0.1:8080', dry: true } });
   ok('一键出口: 上游必须带协议', qkBadSvc.status === 400, String(qkBadSvc.status));
+}
+
+// 配置即代码
+{
+  const c = await j('/api/config');
+  const cfg = c.d.config || {};
+  ok('配置即代码: 能导出声明', c.status === 200 && Array.isArray(cfg.routes) && Array.isArray(cfg.tunnels), `${(cfg.routes || []).length} 规则 / ${(cfg.tunnels || []).length} 出口`);
+  const raw = JSON.stringify(cfg);
+  ok('配置即代码: 不含 token/哈希/口令', !/eyJ|\$2[aby]\$|cfat_|"pass"/.test(raw), '');
+  const dry = await j('/api/config/apply', { method: 'POST', body: { dry: true, config: { routes: (cfg.routes || []).slice(0, 1) } } });
+  ok('配置即代码: 演练给出差异', dry.status === 200 && dry.d.dry === true && (dry.d.diff.removed || []).length >= 1, `removed=${(dry.d.diff.removed || []).length}`);
+  const bad = await j('/api/config/apply', { method: 'POST', body: { dry: true, config: { routes: [{ id: 'bad1', path: '/x', upstream: 'not-a-url' }] } } });
+  ok('配置即代码: 坏上游被拒', bad.status === 400, String(bad.status));
+  const noRoutes = await j('/api/config/apply', { method: 'POST', body: { dry: true, config: {} } });
+  ok('配置即代码: 缺 routes 被拒', noRoutes.status === 400, String(noRoutes.status));
+  const snap = await j('/api/config/snapshot', { method: 'POST', body: {} });
+  ok('配置即代码: 能存快照', snap.status === 200 && /\.json$/.test(snap.d.file || ''), snap.d.file);
+  const list = await j('/api/config/snapshots');
+  ok('配置即代码: 快照列表可读', list.status === 200 && (list.d.items || []).length >= 1, `${(list.d.items || []).length} 份`);
+  const rd = await j('/api/config/snapshot?file=' + encodeURIComponent((list.d.items || [])[0].file));
+  ok('配置即代码: 能读回某份快照', rd.status === 200 && Array.isArray(rd.d.config.routes), '');
+  const trav = await j('/api/config/snapshot?file=' + encodeURIComponent('../state.json'));
+  ok('配置即代码: 拒绝路径穿越', trav.status === 400, String(trav.status));
+  const drift = await j('/api/config/drift');
+  ok('配置即代码: drift 有基线字段', drift.status === 200 && typeof drift.d.hasBaseline === 'boolean', String(drift.d.hasBaseline));
 }
 
 // 导出导入往返

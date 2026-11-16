@@ -19,6 +19,17 @@
 - 工具箱新增「一键新建出口」卡（`#btnQuick/#qkHost/#qkSvc/#qkName/#qkLocal/#qkDry/#btnQkRun/#qkOut`），结果以表格展示。
 - 测试：API 200、DOM 106、e2e 23。
 
+## v0.15.0 — 2026-11-16
+
+- **配置即代码**：新增 `src/core/configcode.js` + 五个接口
+  - `GET /api/config`：state → 声明式 JSON（settings 公开字段 / tunnels 带 hasToken / routes 无哈希 / shares）
+  - `POST /api/config/apply`：routes 全量替换、tunnels 按 id 合并（导出不含 token 也不会抹掉），写 `before-apply` 快照；`dry:true` 只算差异
+  - `GET /api/config/drift`：与 `last-applied.json` 比对，用于发现手改
+  - `POST /api/config/snapshot` / `GET /api/config/snapshots` / `GET /api/config/snapshot?file=`：快照存取（保留 80 份，文件名白名单防穿越）
+- 设置页新增「配置即代码」卡（载入/预览/应用/存快照/看漂移 + 快照表一键填回编辑器），并加入分区导航。
+- 实测：把 `/api/config` 原样 apply 回去 → `{added:0,removed:0,changed:0}`、Caddy 仍 5 条路由、两条隧道不重启；drift 立刻一致。
+- 测试：API 210、DOM 110、e2e 23。
+
 ## v0.11.2
 
 - **口令只存 bcrypt 哈希**：`state.json` 里 `panel.pass` / `viewer.pass` 改为 `$2b$10$…`；启动时自动把历史明文迁移成哈希（`migrate-secrets`）。

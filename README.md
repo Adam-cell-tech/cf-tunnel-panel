@@ -579,6 +579,17 @@ The script snapshots the route table to `/tmp` before touching it and restores f
 | E2E coverage 8 → 23 | The real-Caddy suite now proves prefix stripping, prefix passthrough, basic auth (401/401/200), Host-based routing isolation, WebSocket 101 upgrade, maintenance 503 + `Retry-After`, IP blacklist 403, admin off 2019, access-log writer and `trusted_proxies` — and restores routes/settings in `finally`. |
 | Audit de-duplication | A request whose handler already logged a human-readable action no longer also emits the generic `POST /api/...` row. |
 
+### v0.15.0 highlights — config as code
+
+| Change | Detail |
+| --- | --- |
+| Declarative view | `GET /api/config` projects the live state into one reviewable JSON: settings (public fields), tunnels (with `hasToken`), routes (without bcrypt hashes) and active shares. Nothing secret leaks — asserted by a test. |
+| Apply a declaration | `POST /api/config/apply` takes that JSON back. `routes` are replaced wholesale, `tunnels` are merged **by id** so an exported file (which never contains tokens) cannot wipe your tunnel tokens. A `before-apply` snapshot is written first. |
+| Dry run + diff | `{dry:true}` validates and returns `{added, removed, changed}` per route/tunnel plus `touchesTunnels`, so you can see the blast radius before committing. |
+| Drift detection | Every apply records `last-applied.json`; `GET /api/config/drift` diffs it against the running state — that is how you notice somebody edited the panel by hand. |
+| Snapshots | `data/config/<ts>-<label>.json`, 80 kept. `POST /api/config/snapshot` for manual ones, `GET /api/config/snapshot?file=` to read one back (path traversal rejected). |
+| UI | Settings → **Configuration as code**: load current, edit, preview diff, apply, save snapshot, view drift; snapshot table fills the editor with one click. |
+
 ### v0.14.3 highlights
 
 | Change | Detail |

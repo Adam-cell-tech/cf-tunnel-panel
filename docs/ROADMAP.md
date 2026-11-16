@@ -5,6 +5,18 @@
 
 ---
 
+## ✅ v0.15.0 — 配置即代码
+
+| 项 | 实现 |
+| --- | --- |
+| 投影 | `configcode.snapshot(state)`：settings 走公开字段、tunnels 带 `hasToken`、routes 去掉 bcrypt 哈希 |
+| 应用 | routes 全量 + tunnels 按 id 合并（token 沿用旧值）；`validateRoutes(list, prev)` 复用既有校验 |
+| 差异 | `diffView(prev, next)` 按 id 对齐，输出 added/removed/changed + `settingsChanged` |
+| 漂移 | apply 时写 `data/config/last-applied.json`，`/api/config/drift` 与其比对 |
+| 快照 | 80 份滚动；`readSnapshot` 用 `^[\w.-]+\.json$` 白名单防穿越 |
+| 实测 | 原样 apply 回去零差异、路由数与 Caddy 状态不变、出口不被重启 |
+| 测试 | API 210（+10）、DOM 110（+4：卡片/编辑器/载入合法 JSON/drift 有反馈） |
+
 ## ✅ v0.14.3 — 一条命令建好一条出口
 
 | 项 | 实现 |

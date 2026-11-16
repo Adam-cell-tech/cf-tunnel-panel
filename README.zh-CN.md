@@ -1377,6 +1377,17 @@ Access 集成、指标面板、TCP/UDP 支持等）与**技术选型理由**（�
 | 端到端测试 8 → 23 项 | 真 Caddy 那一套现在验证：前缀剥离、前缀原样透传、基础认证三种情况、按 Host 的域名隔离、WebSocket 101 升级、维护模式 503 与 `Retry-After`、IP 黑名单 403、admin 不监听 2019、access log 与 `trusted_proxies`，并在 `finally` 里还原规则与设置。 |
 | 审计去重 | handler 已经记了人话动作的请求，不再额外写一条 `POST /api/...` 兜底记录。 |
 
+### v0.15.0 更新 — 配置即代码
+
+| 改动 | 说明 |
+| --- | --- |
+| 声明式视图 | `GET /api/config` 把运行状态投影成一份可评审的 JSON：设置（公开字段）、出口（带 `hasToken`）、规则（不含 bcrypt 哈希）、生效中的分享。不含任何密钥——这条有测试兜着。 |
+| 按声明应用 | `POST /api/config/apply` 把这份 JSON 贴回来即可：`routes` 全量替换，`tunnels` **按 id 合并**，所以导出的文件（本来就不含 token）不会把你的隧道 token 抹掉。应用前先落一份 `before-apply` 快照。 |
+| 演练 + 差异 | `{dry:true}` 只校验并返回 `{added, removed, changed}`（按规则/出口逐条）外加 `touchesTunnels`，先看清影响面再决定。 |
+| 漂移检测 | 每次 apply 记 `last-applied.json`；`GET /api/config/drift` 拿它和运行状态比——**有人手改过面板**时这里是唯一能看出来的地方。 |
+| 快照 | `data/config/<ts>-<label>.json`，保留 80 份；`POST /api/config/snapshot` 手动存，`GET /api/config/snapshot?file=` 读回（拒绝路径穿越）。 |
+| 界面 | 设置 → **配置即代码**：载入当前、改、预览差异、应用、存快照、看漂移；快照表格点一行直接填回编辑器。 |
+
 ### v0.14.3 更新
 
 | 改动 | 说明 |

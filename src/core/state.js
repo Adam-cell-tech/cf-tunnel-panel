@@ -228,6 +228,10 @@ function validateRoutes(list, prevRoutes = []) {
   for (const [idx, r] of list.entries()) {
     const up = String(r.upstream || '').trim();
     if (!up) throw new Error(`第 ${idx + 1} 条规则缺少上游地址`);
+    // 上游必须是「host:port」或「带协议的完整地址」；只写个名字（如 not-a-url）Caddy 也连不上
+    if (!/^https?:\/\/[^\s/]+/i.test(up) && !/^[\w.\-\[\]:]+:\d+$/.test(up)) {
+      throw new Error(`第 ${idx + 1} 条：上游要写成 host:port 或 http://host:port，收到「${up.slice(0, 40)}」`);
+    }
     parseUpstream(up);
     if (r.backupUpstream) parseUpstream(r.backupUpstream);
     parseHeaderLines(r.headersReq);

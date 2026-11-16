@@ -321,6 +321,19 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
   }
 
   {
+    const { dom, doc, win } = await open('/settings', 1600);
+    chk('配置即代码: 卡片存在', !!doc.querySelector('#sec-code'), '');
+    chk('配置即代码: 有编辑器与按钮', !!(doc.querySelector('#cfgText') && doc.querySelector('#btnCfgApply') && doc.querySelector('#btnCfgDry')), '');
+    doc.querySelector('#btnCfgLoad').click();
+    await new Promise((r) => setTimeout(r, 900));
+    const txt = doc.querySelector('#cfgText').value || '';
+    chk('配置即代码: 载入当前声明是合法 JSON', txt.length > 100 && (() => { try { JSON.parse(txt); return true; } catch { return false; } })(), String(txt.length));
+    doc.querySelector('#btnCfgDrift').click();
+    await new Promise((r) => setTimeout(r, 900));
+    chk('配置即代码: drift 有反馈', /差异|一致|基线/.test(doc.querySelector('#cfgMsg').textContent || ''), doc.querySelector('#cfgMsg').textContent);
+    dom.window.close();
+  }
+  {
     const { dom, doc, win } = await open('/tools', 1400);
     chk('工具箱: 一键新建出口按钮存在', !!doc.querySelector('#btnQuick'), '');
     const box = doc.querySelector('#quickBox');
