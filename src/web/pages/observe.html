@@ -68,6 +68,9 @@
       <div class="right">
         <input id="auditQ" placeholder="搜人 / IP / 动作…" style="width:170px" aria-label="搜索审计日志" />
         <button class="sm ghost" id="btnAuditRefresh">刷新</button>
+        <select id="auditDate" aria-label="按日期查看审计日志" style="width:150px">
+          <option value="">最近两天</option>
+        </select>
         <a class="sm ghost" id="btnAuditCsv" href="/api/audit.csv?limit=2000" download>导出 CSV</a>
       </div>
     </div>

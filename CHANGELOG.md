@@ -2,6 +2,34 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.20.0 — 审计留档按天、告警模板、Grafana 集群面板
+
+三件都是「出了事能查、平时能看」的东西。
+
+- **审计日志按天分文件 + 保留策略**：以前是单个 `data/audit.log`，超过 2MB 只留最后 3000 行，
+  等于只记得最近几小时 —— 「上周三谁改的规则」根本查不到。现在每天一个
+  `data/audit/audit-YYYY-MM-DD.jsonl`，单文件超 8MB 截断到 5000 行，默认保留 30 天
+  （`PANEL_AUDIT_DAYS` 可调，启动与每小时各清一次）。老文件首次启动自动搬进新目录，不丢历史。
+  观测页审计卡多了日期下拉（默认「最近两天」），导出 CSV 也跟着筛选走；接口新增
+  `GET /api/audit/days`，`/api/audit` 与 `/api/audit.csv` 都支持 `date=YYYY-MM-DD`。
+- **告警规则模板** `docs/prometheus-alerts.yml`：10 条，覆盖面板抓不到、没有主实例、主实例频繁切换、
+  代码漂移、出口掉线、Caddy 下发失败、业务 5xx 占比、面板自身 5xx、面板被扫、通知发送失败。
+  每条都写了「看到它该去查什么」。
+- **Grafana 面板重做** `docs/grafana-dashboard.json`：12 个 panel —— 主实例 / 在线出口 / Caddy 下发 /
+  代码漂移 / 历史采样 / 面板请求六个数字，集群角色时间线、面板请求速率、业务请求、通知结果四张时序图，
+  出口状态与构建信息两张表。
+
+测试：API 251 项、DOM 116 项。
+
+## v0.19.0 – v0.19.2 — 历史共享 + 集群指标
+
+- **v0.19.0**：出口采样与通知记录落盘共享（`data/history/samples.jsonl`、`notify.jsonl`），
+  两台实例读同一份；`/api/history`、`/api/notify/history` 响应带 `shared:true`。
+- **v0.19.1**：采样触发改成「距上一条 ≥55 秒」而不是数 tick —— 原来进程重启相位归零，
+  滚动升级切主时曲线会空整一分钟。
+- **v0.19.2**：`/metrics` 升级为集群视角（`cf_role`/`cf_leader_info`/`cf_build_info`/`cf_code_drift`/
+  `cf_history_samples`/`cf_notify_total`/`cf_panel_requests_total`），另加面板自身请求计数。
+
 ## v0.18.0 — 横向扩展收口：两个实例终于「像一份系统」
 
 这一版几乎全是 bug 修复 —— 起因是「两个进程同时活」之后，很多以前不会暴露的假设开始漏气：

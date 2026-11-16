@@ -5,6 +5,15 @@
 
 ---
 
+## ✅ v0.20.0 — 审计留档按天、告警模板、Grafana 集群面板
+
+| 项 | 做法 | 实测 |
+| --- | --- | --- |
+| 审计分天 | `data/audit/audit-YYYY-MM-DD.jsonl`；单文件 8MB 上限截 5000 行；默认留 30 天（`PANEL_AUDIT_DAYS`），启动 + 每小时清理；旧 `audit.log` 自动迁移 | `GET /api/audit/days` 回当天文件与字节，`?date=` 只回当天，CSV 同样支持 |
+| 观测页按日期翻 | 审计卡加日期下拉（默认「最近两天」），导出链接跟随筛选 | DOM 断言下拉存在且首项为「最近两天」 |
+| 告警模板 | `docs/prometheus-alerts.yml` 10 条（down / 无主 / 切主频繁 / 漂移 / 出口掉线 / 下发失败 / 代理 5xx / 面板 5xx / 被扫 / 通知失败） | 文件头含 scrape 配置与「/metrics 免登录」说明 |
+| Grafana 面板 | `docs/grafana-dashboard.json` 12 panel：6 数字 + 4 时序 + 2 表格 | JSON 已校验，`${DS_PROMETHEUS}` 导入变量 |
+
 ## ✅ v0.18.0 — 横向扩展收口（两个实例像一份系统）
 
 | 项 | 做法 | 实测 |

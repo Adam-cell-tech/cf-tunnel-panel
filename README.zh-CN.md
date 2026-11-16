@@ -6,7 +6,7 @@
 > 发布成 `https://你的域名/某个路径`，**不用公网 IP、不用改路由器、不用开端口**。
 > 支持**多条隧道同时在线**（快速 + 命名、或多账号多域名）。
 
-- 版本：**v0.9.0**（server.js 按职责拆成 15 个模块 + 审计日志）
+- 版本：**v0.20.0**（审计按天留档 + 告警模板 + Grafana 集群面板）
 - 适用：NAS、自建网站、Home Assistant、Jellyfin、Gitea、Immich、qBittorrent……任何 HTTP 服务
 - 平台：Linux / arm64 / amd64 均可（本仓库在 Ubuntu 20.04 + Tegra arm64 上实测）
 
@@ -28,6 +28,20 @@
 12. [技术路线图](./docs/ROADMAP.md)
 
 ---
+
+### v0.20.0 更新
+
+- **审计日志按天分文件**：每天一个 `data/audit/audit-YYYY-MM-DD.jsonl`，单日超 8MB 只留最后 5000 行，
+  默认保留 30 天（`PANEL_AUDIT_DAYS` 可调，启动与每小时各清一次）。以前是单个文件、超 2MB 就截断，
+  「上周三谁改的规则」查不到；老文件首次启动会自动搬进新目录。
+  观测页审计卡加了日期下拉（默认「最近两天」），新增 `GET /api/audit/days`，
+  `/api/audit` 与 `/api/audit.csv` 支持 `date=YYYY-MM-DD`。
+- **告警规则模板** `docs/prometheus-alerts.yml`：10 条 —— 面板抓不到 / 没有主实例 / 主实例频繁切换 /
+  代码漂移 / 出口掉线 / Caddy 下发失败 / 业务 5xx 占比 / 面板自身 5xx / 面板被扫 / 通知发送失败，
+  每条都写了「看到它该去查什么」。
+- **Grafana 面板重做** `docs/grafana-dashboard.json`：12 个 panel —— 主实例、在线出口、Caddy 下发、
+  代码漂移、历史采样、面板请求六个数字，集群角色时间线 / 面板请求速率 / 业务请求 / 通知结果四张图，
+  出口状态与构建信息两张表。
 
 ### v0.18.0 更新
 

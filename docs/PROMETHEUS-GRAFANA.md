@@ -72,3 +72,15 @@ groups:
 
 面板自己也带轻量通知（设置页 · 通知：掉线 / 换域名 / Caddy 失败，支持冷却和静默时段），
 不想上 Prometheus 时用那个就够了；上了 Prometheus 就把它当成第二道防线。
+
+---
+
+## v0.20.0 更新
+
+- 指标升级为集群视角：`cf_role{role}`、`cf_leader_info{id}`、`cf_build_info{version,code,mode}`、
+  `cf_code_drift`、`cf_history_samples`、`cf_notify_total{status}`、`cf_panel_requests_total{status}`、
+  `cf_panel_uptime_seconds`。
+- 现成告警规则：[`prometheus-alerts.yml`](prometheus-alerts.yml)（10 条，含「没主实例」「代码漂移」
+  「Caddy 下发失败」「面板被扫」等）。
+- 现成仪表盘：[`grafana-dashboard.json`](grafana-dashboard.json)（12 个 panel，导入时选 Prometheus 数据源）。
+- 两台实例都可以抓；`cf_role` 能看出被抓的是 leader 还是 standby，`cf_leader_info` 给出当前主实例 id。

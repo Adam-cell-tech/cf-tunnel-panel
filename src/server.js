@@ -23,7 +23,7 @@ const QRCode = require('qrcode');
 const bcrypt = require('bcryptjs');
 
 const _audit = require('./core/audit');
-const { record: auditRecord, list: auditList, stats: auditStats, byHour: auditByHour, actionOf } = _audit;
+const { record: auditRecord, list: auditList, stats: auditStats, byHour: auditByHour, actionOf, days: auditDays } = _audit;
 
 const _paths = require('./core/paths');
 const { ACCESS_LOG_FILE, ASSET_DIR, ASSET_TYPES, BACKUP_DIR, CADDY_ADMIN, CADDY_LOG_DIR, CLOUDFLARED, CLOUDFLARE_DEFAULT_RANGES, DATA_DIR, LB_POLICIES, LOGLEVELS, LOG_MAX, METHODS, PAGES, PAGE_DIR, PORT, PROTOCOLS, STATE_FILE, VERSION, WEB_DIR, accessLogPathForCaddy, pkgVersion } = _paths;
@@ -338,8 +338,12 @@ async function handler(req, res) {
     return sendJson(res, 200, { ok: true, buckets: auditByHour(url.searchParams.get('hours') || 12) });
   }
 
+  if (p === '/api/audit/days' && req.method === 'GET') {
+    return sendJson(res, 200, { ok: true, days: auditDays(), keepDays: require('./core/audit').KEEP_DAYS });
+  }
   if (p === '/api/audit' && req.method === 'GET') {
-    return sendJson(res, 200, { ...auditList({ limit: url.searchParams.get('limit'), q: url.searchParams.get('q') || '' }), stats: auditStats() });
+    const date = url.searchParams.get('date') || '';
+    return sendJson(res, 200, { ...auditList({ limit: url.searchParams.get('limit'), q: url.searchParams.get('q') || '', date }), stats: auditStats(), days: auditDays() });
   }
 
   if (p === '/api/state' && req.method === 'GET') {
@@ -454,7 +458,7 @@ async function handler(req, res) {
   if (p === '/api/audit.csv' && req.method === 'GET') {
     const url = new URL(req.url, 'http://x');
     const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 2000, 1), 5000);
-    const items = auditList({ limit, q: url.searchParams.get('q') || '' }).rows || [];
+    const items = auditList({ limit, q: url.searchParams.get('q') || '', date: url.searchParams.get('date') || '' }).rows || [];
     // CSV 单元格：①引号双写；②防 Excel 公式注入 —— 以 = + - @ 开头的单元格
     // 会被 Excel 当公式执行（规则名/对象名都是用户可填的），前面垫一个单引号。
     const cell = (v) => {

@@ -240,6 +240,9 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     }
     chk('观测: 有只看错误开关', !!doc.querySelector('#logOnlyErr'), '');
     chk('观测: 有审计日志卡片', !!doc.querySelector('#auditBody') && !!doc.querySelector('#auditQ'), '');
+    const ad = doc.querySelector('#auditDate');
+    chk('观测: 审计可按日期查看（v0.20.0）', !!ad && ad.options.length >= 1, ad ? `${ad.options.length} 个选项` : '');
+    chk('观测: 日期下拉首项是「最近两天」', !!ad && (ad.options[0].textContent || '').includes('最近两天'), ad ? ad.options[0].textContent.trim() : '');
     await new Promise((r) => setTimeout(r, 600));
     const ab = doc.querySelector('#auditBody');
     chk('观测: 审计表渲染出记录', !!ab && !!ab.querySelector('table, .empty'), ab ? ab.textContent.trim().slice(0, 30) : '');

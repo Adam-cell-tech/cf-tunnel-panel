@@ -575,6 +575,16 @@ const EN_V0142C = {
 };
 Object.assign(EN, EN_V0142C);
 
+const EN_V0200 = {
+  '最近两天': 'Last 2 days',
+  '按日期查看审计日志': 'View audit log by date',
+  '保留最近': 'Keep last',
+  '天，每天一个文件': 'days, one file per day',
+  '导出 CSV': 'Export CSV',
+  '搜索审计日志': 'Search audit log',
+};
+Object.assign(EN, EN_V0200);
+
 const EN_PAGES = {
   '加签密钥（可选）': 'Signing secret (optional)',
   '机器人安全设置里勾了「加签」才需要；只勾「自定义关键词」就留空': 'Only needed when the bot has signing enabled; leave empty if you use a keyword instead',

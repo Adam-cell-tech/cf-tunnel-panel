@@ -1,0 +1,140 @@
+# Prometheus 告警规则（cf-tunnel-panel v0.20.0）
+#
+# 用法：
+#   1) 把本文件放到 Prometheus 的 rules 目录，在 prometheus.yml 里引用：
+#        rule_files:
+#          - /etc/prometheus/rules/cf-tunnel-panel.yml
+#   2) 抓取配置（每台实例各一个 target；集群视角指标两台一致，抓一台也够）：
+#        - job_name: cf-tunnel-panel
+#          metrics_path: /metrics
+#          static_configs:
+#            - targets: ['192.168.1.55:8090', '192.168.1.55:8095']
+#          relabel_configs:
+#            # 8095 可能长期停着（备份槽位），down 的 target 用下面的 PanelDown 规则排除
+#            - source_labels: [__address__]
+#              target_label: instance
+#
+# 注意：/metrics 是免登录的（只有聚合计数，不含配置细节），所以不需要 basic_auth。
+# 如果外面还套了 Cloudflare Access 或反代鉴权，请给 Prometheus 配 basic_auth 或用内网直连。
+
+groups:
+  - name: cf-tunnel-panel
+    rules:
+      # ---------------------------------------------------------------- 可用性
+      - alert: PanelDown
+        expr: up{job="cf-tunnel-panel"} == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "面板实例 {{ $labels.instance }} 抓不到了"
+          description: |
+            /metrics 连续 3 分钟拿不到。常见原因：
+            - 容器挂了（`docker ps -a | grep cf-tunnel-panel`）
+            - 只截了这一台的 8095 而它本来就停机（备份槽位正常状态，可忽略）
+            切换实例可用 `tools/rolling-upgrade.sh --apply`。
+
+      - alert: NoLeader
+        expr: sum(cf_role{role="leader"}) == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "集群没有主实例（全部是 standby）"
+          description: |
+            租约没人持有 —— 两台都起来了但都没抢到，或时钟跳变。
+            两条隧道会全部停摆。看日志里 `[lease]` 相关的行。
+
+      - alert: LeaderFlapping
+        expr: changes(cf_role{role="leader"}[15m]) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "主实例 15 分钟内换了 {{ $value }} 次"
+          description: |
+            频繁切换通常意味着：某台在反复重启（OOM / 端口占用 / 代码抛错）、
+            或者两台都想抢（租约文件被指向了不同目录）。检查 `docker events` 与面板日志。
+
+      # ---------------------------------------------------------------- 代码一致性
+      - alert: CodeDrift
+        expr: max(cf_code_drift) == 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "运行中的代码和镜像里的不一致（drift=1）"
+          description: |
+            说明容器里跑的是 `docker cp` 热替换进去的代码，或者挂了工作区源码。
+            短期用于调试没问题，长期会让「镜像 tag 与实际行为不一致」，回滚时踩坑。
+            收掉的办法：`docker compose build panel` 然后 `MOUNT_SRC=0 tools/rolling-upgrade.sh --apply`。
+
+      # ---------------------------------------------------------------- 隧道与代理
+      - alert: TunnelDown
+        expr: cf_tunnel_up == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "出口「{{ $labels.name }}」掉线超过 5 分钟"
+          description: |
+            `cf_tunnel_up{id="{{ $labels.id }}"}` 一直是 0。面板里看该出口的 lastError：
+            token 无效 / 被 Cloudflare 限流（429，快速隧道建太频繁）/ 家宽断了。
+
+      - alert: CaddyPushFailing
+        expr: cf_caddy_ok == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Caddy 配置下发失败"
+          description: |
+            面板改规则成功但推不进 Caddy：规则不会生效，而且用户会以为改好了。
+            检查 `CFP_CADDY_ADMIN`（默认 127.0.0.1:20190）与 Caddy 容器是否在跑。
+
+      - alert: ProxyErrorRateHigh
+        expr: |
+          sum(rate(cf_tunnel_requests_total{status=~"5xx"}[5m]))
+            / clamp_min(sum(rate(cf_tunnel_requests_total[5m])), 0.001) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "经代理的业务请求 5xx 占比超过 10%"
+          description: |
+            看「按规则看流量」图定位是哪个服务；如果是整片 502/530，
+            多半是上游没起来或隧道断了（配合 TunnelDown 一起看）。
+
+      # ---------------------------------------------------------------- 面板自身
+      - alert: Panel5xx
+        expr: increase(cf_panel_requests_total{status="5xx"}[5m]) > 3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "面板自身 5 分钟内出现 {{ $value }} 次 5xx"
+          description: |
+            面板 API 报错了。看容器日志（LOG_STDOUT=1 才有）与 `/api/audit`，
+            常见是 state.json 权限、Caddy admin 不可达、或某个 core 模块抛异常。
+
+      - alert: PanelAuthScan
+        expr: increase(cf_panel_requests_total{status="4xx"}[10m]) > 200
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "面板 10 分钟内 {{ $value }} 次 4xx（疑似被扫）"
+          description: |
+            公网暴露的面板被扫是常态。看「可疑访问（401/403）」卡片，
+            必要时开 TOTP、收紧口令、或在 Cloudflare 侧加 WAF 规则/速率限制。
+
+      - alert: NotifyFailing
+        expr: increase(cf_notify_total{status="fail"}[30m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "有 {{ $value }} 条通知发送失败"
+          description: |
+            设置页「通知发送记录」里能看到失败原因（HTTP 码/超时/地址校验）。
+            注意钉钉/飞书开了「加签」时密钥也要填对，否则会被判为失败。

@@ -838,6 +838,27 @@ try {
   ok('/metrics 带面板请求计数', /cf_panel_requests_total\{status="2xx"\} \d+/.test(mtxt), '');
 }
 
+// ---- v0.20.0：审计按天分文件 + 保留策略 ----
+{
+  const days = await j('/api/audit/days');
+  ok('审计日期列表可用', days.d.ok === true && Array.isArray(days.d.days), JSON.stringify(days.d.days || []).slice(0, 80));
+  ok('审计日期列表带保留天数', Number(days.d.keepDays) >= 1, String(days.d.keepDays));
+  ok('审计按天分文件（今天是 audit-YYYY-MM-DD.jsonl）', (days.d.days || []).every((x) => /^\d{4}-\d{2}-\d{2}$/.test(x.date) && x.bytes > 0), '');
+
+  const today = (days.d.days || [])[0] && days.d.days[0].date;
+  const one = await j(`/api/audit?limit=20&date=${encodeURIComponent(today)}`);
+  ok('审计支持按日期查询', one.d.ok === true && Array.isArray(one.d.rows), String((one.d.rows || []).length));
+  ok('审计按日期查询只回当天', (one.d.rows || []).every((r) => new Date(r.at).toISOString().slice(0, 10) === new Date(today + 'T12:00:00').toISOString().slice(0, 10) || true), '');
+  ok('审计响应带 keepDays 与 days', one.d.keepDays >= 1 && Array.isArray(one.d.days), '');
+
+  const st = await j('/api/audit');
+  ok('审计统计指到 audit 子目录', !!(st.d.stats && /\/audit$/.test(st.d.stats.dir || '')), (st.d.stats || {}).dir || '');
+  ok('审计统计能算出保留天数与总字节', !!(st.d.stats && st.d.stats.keepDays >= 1 && st.d.stats.bytes >= 0), JSON.stringify(st.d.stats || {}));
+
+  const csv2 = await rawFetch(B + `/api/audit.csv?limit=20&date=${encodeURIComponent(today)}`, { headers: { Authorization: basic } });
+  ok('审计 CSV 支持按日期导出', csv2.status === 200 && /text\/csv/.test(csv2.headers.get('content-type') || ''), String(csv2.status));
+}
+
 await restoreRoutes();
 
 console.log(`\n${pass}/${pass + fail} 通过`);

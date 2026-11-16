@@ -7,11 +7,26 @@
 > changes, no open ports**. Multiple tunnels can run at the same time (quick + named, or several
 > accounts and domains).
 
-- Version: **v0.19.2**
+- Version: **v0.20.0**
 - Works with: NAS, self-hosted sites, Home Assistant, Jellyfin, Gitea, Immich, qBittorrent… any HTTP service
 - Stack: `node:http` backend (zero dependencies), hand-written frontend (no build step), `Caddy` for routing,
   `cloudflared` for the tunnel — one `docker compose up` and you are done
 - License: [MIT](LICENSE)
+
+---
+
+## What's new in v0.20.0
+
+- **The audit log now rotates daily.** One `data/audit/audit-YYYY-MM-DD.jsonl` per day, trimmed to the last
+  5000 lines if a single day exceeds 8 MB, kept for 30 days (`PANEL_AUDIT_DAYS`). Earlier versions kept one
+  `audit.log` capped at ~3000 lines, so "who changed that rule last Wednesday" was unanswerable. The audit
+  card on the Observe page gained a date picker; `GET /api/audit/days` lists available days and
+  `/api/audit` / `/api/audit.csv` accept `?date=YYYY-MM-DD`.
+- **Alert rules template** — `docs/prometheus-alerts.yml`: 10 rules (panel down, no leader, leader flapping,
+  code drift, tunnel down, Caddy push failing, proxy 5xx ratio, panel 5xx, panel being scanned, notification
+  failures), each with a "what to check" note.
+- **Grafana dashboard rebuilt** around the cluster-aware metrics — 12 panels over leader/role state, panel
+  request rate, proxy traffic, notifications, tunnel status and build info.
 
 ---
 

@@ -141,11 +141,34 @@ function renderAudit() {
   bindPager(box, (pg) => { auditPage = pg; renderAudit(); });
 }
 
-async function loadAudit() {
+function auditQuery() {
   const q = ($('#auditQ') || {}).value || '';
-  const d = await api(`/api/audit?limit=200${q ? `&q=${encodeURIComponent(q)}` : ''}`);
+  const date = ($('#auditDate') || {}).value || '';
+  const parts = ['limit=200'];
+  if (q) parts.push('q=' + encodeURIComponent(q));
+  if (date) parts.push('date=' + encodeURIComponent(date));
+  return parts.join('&');
+}
+
+/** 审计文件按天分文件了（v0.20.0）：把可选日期灌进下拉，导出 CSV 也跟着选中日期走 */
+async function loadAuditDays() {
+  const sel = $('#auditDate');
+  if (!sel) return;
+  try {
+    const d = await api('/api/audit/days');
+    const cur = sel.value;
+    const keep = d.keepDays || 30;
+    sel.innerHTML = `<option value="">最近两天</option>` +
+      (d.days || []).map((x) => `<option value="${esc(x.date)}">${esc(x.date)}（${Math.max(1, Math.round(x.bytes / 1024))} KB）</option>`).join('');
+    sel.value = cur;
+    sel.title = `保留最近 ${keep} 天，每天一个文件`;
+  } catch { /* 读不到就只留「最近两天」 */ }
+}
+
+async function loadAudit() {
+  const d = await api(`/api/audit?${auditQuery()}`);
   auditRows = d.rows || [];
-  auditTotal = (d.stats && d.stats.count) || auditRows.length;
+  auditTotal = Number(d.count || 0) || (d.stats && d.stats.count) || auditRows.length;
   renderAudit();
 }
 
@@ -257,8 +280,18 @@ async function loadSecurity() {
   }
 }
 
-  loadAudit().catch(() => {});
-  $('#btnAuditRefresh').addEventListener('click', () => loadAudit().catch((e) => toast(e.message)));
+  loadAuditDays().then(() => loadAudit()).catch(() => {});
+  const syncCsv = () => {
+    const el = $('#btnAuditCsv');
+    if (!el) return;
+    const q = ($('#auditQ') || {}).value || '';
+    const date = ($('#auditDate') || {}).value || '';
+    el.href = '/api/audit.csv?limit=2000' + (q ? '&q=' + encodeURIComponent(q) : '') + (date ? '&date=' + encodeURIComponent(date) : '');
+  };
+  syncCsv();
+  if ($('#auditDate')) $('#auditDate').addEventListener('change', () => { syncCsv(); loadAudit().catch((e) => toast(e.message)); });
+  if ($('#auditQ')) $('#auditQ').addEventListener('input', syncCsv);
+  $('#btnAuditRefresh').addEventListener('click', () => { syncCsv(); loadAuditDays().then(() => loadAudit()).catch((e) => toast(e.message)); });
   if ($('#btnSecRefresh')) $('#btnSecRefresh').addEventListener('click', () => loadSecurity().catch((e) => toast(e.message)));
   if ($('#secHours')) $('#secHours').addEventListener('change', () => loadSecurity().catch(() => {}));
   loadSecurity().catch(() => {});
