@@ -412,4 +412,83 @@ function diffRoutes(backupRoutes, currentRoutes) {
 
 const upstreamHealth = new Map(); // upstream url -> { ok, ms, error, at }
 
-module.exports = { upstreamHealth, HISTORY_MAX, badgeSvg, diffRoutes, healthOf, histTick, metricsText, readAccess, refreshUpstreamHealth, requestsLastMinute, rtHistory, sampleHistory, shadowReport, simulateMatch, systemInfo, tcpProbeOnce, trafficByHour, trafficByPath, upstreamTarget };
+
+/**
+ * 可疑访问：401/403（认证失败、被拒）按「规则」和「来源 IP」两个维度聚合。
+ * 面板挂了 /db、/term 这类服务后，公网天天有人扫，这里回答「谁在试、试的哪条、试了多少次」。
+ * @returns {{available:boolean, hours:number, total:number, byRule:Array, byIp:Array, last:string, note:string}}
+ */
+function securityAttempts(hours = 24, limit = 3000) {
+  const h = Math.max(0.1, Math.min(168, Number(hours) || 24));
+  const cap = Math.max(50, Math.min(8000, Number(limit) || 3000));
+  const now = Date.now();
+  const start = now - h * 3600 * 1000;
+  const out = { available: false, hours: h, total: 0, byRule: [], byIp: [], last: '', note: '' };
+  let text = '';
+  try {
+    if (!fs.existsSync(ACCESS_LOG_FILE)) { out.note = '还没有访问日志（有流量后这里会自动出现）'; return out; }
+    const st = fs.statSync(ACCESS_LOG_FILE);
+    const size = st.size;
+    const from = Math.max(0, size - 4 * 1024 * 1024);
+    const fd = fs.openSync(ACCESS_LOG_FILE, 'r');
+    const buf = Buffer.alloc(size - from);
+    fs.readSync(fd, buf, 0, buf.length, from);
+    fs.closeSync(fd);
+    text = buf.toString('utf8');
+    out.available = true;
+  } catch (e) {
+    out.note = '日志读不出来：' + (e && e.message ? e.message : e);
+    return out;
+  }
+  const lines = text.split('\n');
+  if (lines.length && !lines[0].trim().startsWith('{')) lines.shift(); // 首行可能被截断
+  const byRule = new Map();
+  const byIp = new Map();
+  let last = 0;
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    let o;
+    try { o = JSON.parse(line); } catch (_) { continue; }
+    if (!String(o.logger || '').includes('http.log.access')) continue;
+    const ts = typeof o.ts === 'number' ? o.ts * 1000 : Date.parse(String(o.ts || ''));
+    if (!ts || ts < start) continue;
+    const status = Number(o.status) || 0;
+    if (status !== 401 && status !== 403) continue;
+    const rq = o.request || {};
+    const uri = o.uri || rq.uri || '/';
+    const host = o.host || rq.host || '';
+    const method = o.method || rq.method || 'GET';
+    const pathOnly = String(uri).split('?')[0];
+    const ip = String(o.remote_ip || rq.remote_ip || (rq.headers && (rq.headers['cf-connecting-ip'] || [])[0]) || o.client_ip || '') || 'unknown';
+    const m = simulateMatch(pathOnly, host, method);
+    const idx = m && m.matched ? (m.ofIndex != null ? m.ofIndex : m.index - 1) : -1;
+    const rule = idx >= 0 ? state.routes[idx] : null;
+    const rid = rule ? rule.id : '';
+    const rname = rule ? (rule.name || rule.path || '(未命名)') : '(没命中规则)';
+    out.total += 1;
+    if (ts > last) last = ts;
+    let a = byRule.get(rid);
+    if (!a) { a = { id: rid, name: rname, path: rule ? rule.path || '/' : '', count: 0, ips: new Map() }; byRule.set(rid, a); }
+    a.count += 1;
+    const pa = a.ips.get(ip);
+    if (!pa) a.ips.set(ip, { ip, count: 1, last: ts }); else { pa.count += 1; pa.last = ts; }
+    let b = byIp.get(ip);
+    if (!b) { b = { ip, count: 0, last: ts, rules: new Set() }; byIp.set(ip, b); }
+    b.count += 1; if (ts > b.last) b.last = ts;
+    b.rules.add(rname);
+  }
+  const iso = (t) => (t ? new Date(t).toISOString() : '');
+  out.byRule = [...byRule.values()]
+    .map((a) => ({ id: a.id, name: a.name, path: a.path, count: a.count, ips: [...a.ips.values()].sort((x, y) => y.count - x.count).slice(0, 5).map((x) => ({ ip: x.ip, count: x.count, last: iso(x.last) })) }))
+    .sort((x, y) => y.count - x.count)
+    .slice(0, 20);
+  out.byIp = [...byIp.values()]
+    .map((b) => ({ ip: b.ip, count: b.count, last: iso(b.last), rules: [...b.rules].slice(0, 5) }))
+    .sort((x, y) => y.count - x.count)
+    .slice(0, 20);
+  out.last = iso(last);
+  if (!text) out.note = '日志为空';
+  return out;
+}
+
+module.exports = { upstreamHealth, HISTORY_MAX, badgeSvg, diffRoutes, healthOf, histTick, metricsText, readAccess, refreshUpstreamHealth, requestsLastMinute, rtHistory, sampleHistory, shadowReport, simulateMatch, systemInfo, tcpProbeOnce, trafficByHour, trafficByPath, securityAttempts, upstreamTarget };

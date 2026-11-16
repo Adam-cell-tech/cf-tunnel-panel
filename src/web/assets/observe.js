@@ -197,8 +197,57 @@ async function loadRouteStats() {
   }
 }
 
+
+async function loadSecurity() {
+  const box = $('#secBody');
+  if (!box) return;
+  const hours = Number($('#secHours').value || 24);
+  try {
+    const d = await api(`/api/security/attempts?hours=${hours}`);
+    $('#secMsg').textContent = d.available
+      ? `窗口内共 ${d.total} 次被拒${d.last ? '，最后一次 ' + d.last.slice(11, 19) : ''}`
+      : (d.note || '');
+    if (!d.available || !d.total) {
+      box.innerHTML = `<div class="empty">这个窗口内没有被拒的请求（世界很安静）</div>`;
+      return;
+    }
+    const ruleRows = (d.byRule || []).map((r) => `<tr>
+      <td class="mono" data-label="规则">${r.id
+        ? `<a class="jump" href="/rules?focus=${encodeURIComponent(r.id)}">${esc(r.name)}</a>`
+        : esc(r.name)}</td>
+      <td class="mono" data-label="路径">${esc(r.path || '—')}</td>
+      <td class="mono err-hint" data-label="被拒次数">${r.count}</td>
+      <td class="mono muted" data-label="主要来源">${esc((r.ips || []).map((x) => x.ip + ' ×' + x.count).join('，'))}</td>
+    </tr>`).join('');
+    const ipRows = (d.byIp || []).map((x) => `<tr>
+      <td class="mono" data-label="来源 IP">${esc(x.ip)}</td>
+      <td class="mono err-hint" data-label="被拒次数">${x.count}</td>
+      <td class="mono muted" data-label="打的规则">${esc((x.rules || []).join('、') || '未命中规则')}</td>
+      <td class="mono muted" data-label="最后">${esc((x.last || '').slice(11, 19))}</td>
+    </tr>`).join('');
+    box.innerHTML = `
+      <div class="row" style="padding:10px 12px;gap:8px;border-bottom:1px solid var(--line);flex-wrap:wrap">
+        <span class="tag err">共 ${d.total} 次</span>
+        <span class="tag">${(d.byIp || []).length} 个来源 IP</span>
+      </div>
+      <div class="tbl-wrap"><table class="stackable">
+        <thead><tr><th>规则</th><th>路径</th><th>被拒次数</th><th>主要来源</th></tr></thead>
+        <tbody>${ruleRows || '<tr><td colspan="4" class="empty">没有命中规则的拒绝</td></tr>'}</tbody>
+      </table></div>
+      <div class="tbl-wrap"><table class="stackable">
+        <thead><tr><th>来源 IP</th><th>被拒次数</th><th>打的规则</th><th>最后</th></tr></thead>
+        <tbody>${ipRows}</tbody>
+      </table></div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="hint warn">读取失败：${esc(e.message)}</div>`;
+  }
+}
+
   loadAudit().catch(() => {});
   $('#btnAuditRefresh').addEventListener('click', () => loadAudit().catch((e) => toast(e.message)));
+  if ($('#btnSecRefresh')) $('#btnSecRefresh').addEventListener('click', () => loadSecurity().catch((e) => toast(e.message)));
+  if ($('#secHours')) $('#secHours').addEventListener('change', () => loadSecurity().catch(() => {}));
+  loadSecurity().catch(() => {});
   if ($('#btnRstatRefresh')) $('#btnRstatRefresh').addEventListener('click', () => loadRouteStats().catch((e) => toast(e.message)));
   loadRouteStats().catch(() => {});
   let auditTimer = null;

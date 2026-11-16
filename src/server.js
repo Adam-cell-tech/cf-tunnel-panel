@@ -62,7 +62,7 @@ const _tunnels = require('./core/tunnels');
 const { QUICK_RE, applyTunnelFields, normalizeTunnelToken, publicTunnels, runtimeOf, startAll, startTunnel, stopAll, stopTunnel, syncTunnels, tokenTunnelOf, tunnelArgs } = _tunnels;
 
 const _insight = require('./core/insight');
-const { upstreamHealth, HISTORY_MAX, badgeSvg, diffRoutes, healthOf, histTick, metricsText, readAccess, refreshUpstreamHealth, requestsLastMinute, rtHistory, sampleHistory, shadowReport, simulateMatch, systemInfo, tcpProbeOnce, trafficByHour, trafficByPath, upstreamTarget } = _insight;
+const { upstreamHealth, HISTORY_MAX, badgeSvg, diffRoutes, healthOf, histTick, metricsText, readAccess, refreshUpstreamHealth, requestsLastMinute, rtHistory, sampleHistory, securityAttempts, shadowReport, simulateMatch, systemInfo, tcpProbeOnce, trafficByHour, trafficByPath, upstreamTarget } = _insight;
 
 const _bench = require('./core/bench');
 const { BENCH_MAX_MB, benchLocalOnce, coloOf, sendBenchBlob } = _bench;
@@ -405,6 +405,12 @@ async function handler(req, res) {
     });
   }
 
+  if (p === '/api/security/attempts' && req.method === 'GET') {
+    const hours = Number(url.searchParams.get('hours') || 24);
+    const limit = Number(url.searchParams.get('limit') || 3000);
+    return sendJson(res, 200, securityAttempts(hours, limit));
+  }
+
   if (p === '/api/access' && req.method === 'GET') {
     const limit = Math.max(1, Math.min(500, Number(url.searchParams.get('limit') || 100)));
     const d = readAccess(limit);
@@ -498,6 +504,7 @@ async function handler(req, res) {
               sessionIp: n.events.sessionIp !== false,
               errorSpike: n.events.errorSpike !== false,
               loginFail: n.events.loginFail !== false,
+              authScan: n.events.authScan !== false,
             }
             : (prevN.events || { tunnelDown: true, urlChange: true, caddyFail: true, sessionIp: true }),
           cooldownSec: Math.max(0, Math.min(86400, Number(cool) || 0)),

@@ -222,6 +222,25 @@ const EN_V0135 = {
 };
 Object.assign(EN, EN_V0135);
 
+// v0.13.7 新增（可疑访问）
+const EN_V0137 = {
+  '可疑访问（401 / 403）': 'Suspicious requests (401 / 403)',
+  '统计窗口': 'Window',
+  '最近 6 小时': 'Last 6 hours',
+  '最近 24 小时': 'Last 24 hours',
+  '最近 3 天': 'Last 3 days',
+  '最近 7 天': 'Last 7 days',
+  '被拒次数': 'Rejected',
+  '主要来源': 'Top sources',
+  '来源 IP': 'Client IP',
+  '打的规则': 'Rules hit',
+  '有 IP 在扫受保护服务': 'An IP is probing protected services',
+  '这个窗口内没有被拒的请求（世界很安静）': 'Nothing was rejected in this window (all quiet)',
+  '没有命中规则的拒绝': 'Rejections that matched no rule',
+  '公网上的服务（尤其是': 'Public services (especially ',
+};
+Object.assign(EN, EN_V0137);
+
 const EN_PAGES = {
   '加签密钥（可选）': 'Signing secret (optional)',
   '机器人安全设置里勾了「加签」才需要；只勾「自定义关键词」就留空': 'Only needed when the bot has signing enabled; leave empty if you use a keyword instead',

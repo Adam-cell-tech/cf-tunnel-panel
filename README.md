@@ -581,6 +581,13 @@ The script snapshots the route table to `/tmp` before touching it and restores f
 | E2E coverage 8 → 23 | The real-Caddy suite now proves prefix stripping, prefix passthrough, basic auth (401/401/200), Host-based routing isolation, WebSocket 101 upgrade, maintenance 503 + `Retry-After`, IP blacklist 403, admin off 2019, access-log writer and `trusted_proxies` — and restores routes/settings in `finally`. |
 | Audit de-duplication | A request whose handler already logged a human-readable action no longer also emits the generic `POST /api/...` row. |
 
+### v0.13.7 highlights
+
+| Change | Detail |
+| --- | --- |
+| Suspicious traffic view | New `/api/security/attempts?hours=` aggregates every 401/403 by **rule** and by **client IP** (top 5 IPs per rule). The Observe page gets a card with a 6h/24h/3d/7d window and links into the matching rule. |
+| Scan alert | When one IP gets rejected ≥20 times in 10 minutes, a new `authScan` notification fires (own 30-minute cooldown, toggle in Settings). Built for `db`/`term` style services that get port-scanned daily. |
+
 ### v0.13.6 highlights
 
 | Change | Detail |

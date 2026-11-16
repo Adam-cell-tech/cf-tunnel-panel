@@ -188,6 +188,17 @@ const lg = await fetch(B + '/legacy');
 ok('/legacy 已下线（404）', lg.status === 404, String(lg.status));
 // 新增：规则命中统计 / 配置导出 YAML
 {
+  const sec = await j('/api/security/attempts?hours=24');
+  const d = sec.d || {};
+  ok('/api/security/attempts 可用', sec.status === 200 && typeof d.total === 'number', JSON.stringify(d).slice(0, 80));
+  ok('/api/security/attempts 两个维度都在', Array.isArray(d.byRule) && Array.isArray(d.byIp), `${(d.byRule || []).length}/${(d.byIp || []).length}`);
+  ok('/api/security/attempts 计数自洽', !d.total || (d.byRule || []).length > 0, `total=${d.total}`);
+  const sec6 = await j('/api/security/attempts?hours=6&limit=100');
+  ok('/api/security/attempts 窗口参数生效', sec6.status === 200 && Number(sec6.d.hours) === 6, String(sec6.d && sec6.d.hours));
+  const st2 = await j('/api/state');
+  ok('state 里通知事件含 authScan', !st2.d.state.settings.notify.events || st2.d.state.settings.notify.events.authScan !== false, JSON.stringify(st2.d.state.settings.notify.events));
+}
+{
   const acc = await j('/api/access?limit=50');
   const rows = (acc.d && acc.d.rows) || [];
   const bad = rows.filter((r) => r.rule && (!r.rule.id || typeof r.rule.name !== 'string'));

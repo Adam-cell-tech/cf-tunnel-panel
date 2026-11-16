@@ -202,6 +202,9 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
 
   {
     const { doc, errors, win } = await open('/observe');
+    chk('观测: 可疑访问卡片存在', !!doc.querySelector('#secBody'), String(!!doc.querySelector('#secBody')));
+    chk('观测: 可疑访问有内容或空态', !!doc.querySelector('#secBody .empty') || !!doc.querySelector('#secBody table'), String(!!doc.querySelector('#secBody')));
+    chk('观测: 可疑访问窗口可切换', !!doc.querySelector('#secHours'), '');
     chk('观测: 有状态筛选', !!doc.querySelector('#accStatus'), '');
     chk('观测: 有路径搜索', !!doc.querySelector('#accPath'), '');
     chk('观测: 有时间范围', !!doc.querySelector('#accRange'), '');

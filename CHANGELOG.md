@@ -12,6 +12,15 @@
 - `package.json` 增加 `engines.node >= 20`。
 - 测试：API 113、DOM 75。
 
+## v0.13.7 — 2026-11-16
+
+### 新增
+- **可疑访问统计** `GET /api/security/attempts?hours=&limit=`：把访问日志里的 401/403 按规则与来源 IP 聚合，含每条规则的前 5 个来源、全局前 20 个 IP；观测页新增卡片（窗口 6h/24h/3d/7d，规则名可点回规则页）。
+- **扫描告警 `authScan`**：`monitor.js` 每 5 分钟检查 10 分钟窗口，单 IP 被拒 ≥20 次触发通知，30 分钟冷却；`settings.notify.events.authScan` 可在设置页关掉。
+
+### 修复
+- 设置页「通知事件」的保存补上 `authScan`，避免勾选被静默丢弃。
+
 ## v0.13.6 — 2026-11-16
 
 ### 新增

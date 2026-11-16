@@ -173,6 +173,7 @@ function fill() {
   if ($('#evSessionIp')) $('#evSessionIp').checked = !!(n.events && n.events.sessionIp);
   if ($('#evErrorSpike')) $('#evErrorSpike').checked = !!(n.events && n.events.errorSpike);
   if ($('#evLoginFail')) $('#evLoginFail').checked = !!(n.events && n.events.loginFail);
+  if ($('#evAuthScan')) $('#evAuthScan').checked = !!(n.events && n.events.authScan);
   $('#notifyCool').value = n.cooldownSec === undefined ? 300 : n.cooldownSec;
   $('#notifyQuiet').value = n.quietHours || '';
   const tpl = n.template || {};
@@ -199,6 +200,7 @@ async function save() {
       secret: $('#notifySecret').value.trim(),
       events: { tunnelDown: $('#evDown').checked, urlChange: $('#evUrl').checked, caddyFail: $('#evCaddy').checked, sessionIp: $('#evSessionIp') ? $('#evSessionIp').checked : true,
         errorSpike: $('#evErrorSpike') ? $('#evErrorSpike').checked : true,
+        authScan: $('#evAuthScan') ? $('#evAuthScan').checked : true,
         loginFail: $('#evLoginFail') ? $('#evLoginFail').checked : true },
       cooldownSec: Number($('#notifyCool').value) || 0,
       quietHours: $('#notifyQuiet').value.trim(),

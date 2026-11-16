@@ -13,13 +13,14 @@ const { saveState } = require('./state');
 const { publicUrlOf, tunnelRt } = require('./registry');
 const { caddy } = require('./caddy');
 const { pushCaddy } = require('./pusher');
-const { readAccess, sampleHistory } = require('./insight');
+const { readAccess, sampleHistory, securityAttempts } = require('./insight');
 const audit = require('./audit');
 const { notify } = require('./notify');
 let seenCaddyOk = true;
 let histTick = 0;
 let lastSpike = 0;      // 上次 5xx 告警时间（防刷屏）
-let lastLoginAlert = 0; // 采样节拍：每 12 次（12×5s=60s）落一个点
+let lastLoginAlert = 0;
+let lastScanAlert = 0; // 采样节拍：每 12 次（12×5s=60s）落一个点
 function startMonitor() {
   setInterval(() => {
     histTick += 1;
@@ -35,6 +36,14 @@ function startMonitor() {
           lastSpike = now;
           notify('errorSpike', '面板：5 分钟内 5xx 比例偏高',
             `${bad.length}/${recent.length} 个请求是 5xx（${Math.round((bad.length / recent.length) * 100)}%）\n主机：${os.hostname()}`);
+        }
+        // 公网有人扫 /db /term 这类服务：单 IP 10 分钟内 401/403 超过 20 次就提醒一次
+        const sec = securityAttempts(10 / 60, 2000);
+        const worst = (sec.byIp || [])[0];
+        if (worst && worst.count >= 20 && now - lastScanAlert > 30 * 60 * 1000) {
+          lastScanAlert = now;
+          notify('authScan', '面板：有 IP 在反复试探受保护服务',
+            `${worst.ip} 在 10 分钟内被拒 ${worst.count} 次\n打的规则：${(worst.rules || []).join('、') || '未命中规则'}\n可以在「代理规则」里给该路径加 IP 白名单或基础认证。`);
         }
         const fails = (audit.list({ limit: 200 }).rows || []).filter((a) => a.action === '登录失败' && now - (a.at || 0) < 10 * 60 * 1000);
         if (fails.length >= 5 && now - lastLoginAlert > 15 * 60 * 1000) {

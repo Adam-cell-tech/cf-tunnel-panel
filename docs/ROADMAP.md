@@ -5,6 +5,17 @@
 
 ---
 
+## ✅ v0.13.7 — 谁在敲你的门
+
+| 项 | 实现 |
+| --- | --- |
+| 按规则/按 IP 聚合 401·403 | `insight.securityAttempts(hours, limit)`，读日志末 4MB，`simulateMatch` 归属 |
+| 接口 | `GET /api/security/attempts?hours=&limit=`（hours 0.1–168） |
+| 页面 | 观测页「可疑访问」卡：规则的拒绝次数 + 主要来源 IP，IP 维度表；规则名链到 `/rules?focus=` |
+| 告警 | 单 IP 10 分钟 ≥20 次 → `authScan` 通知，30 分钟冷却 |
+
+测试：API 176、DOM 87、e2e 23。
+
 ## ✅ v0.13.6 — 从日志直接跳进规则
 
 | 项 | 实现 |

@@ -29,7 +29,7 @@ function defaultState() {
       notify: {
         url: '', format: 'generic',
         secret: '',       // 钉钉/飞书「加签」密钥（可选），只在 URL 里有 sign 校验时才需要
-        events: { tunnelDown: true, urlChange: true, caddyFail: true, sessionIp: true, errorSpike: true, loginFail: true },
+        events: { tunnelDown: true, urlChange: true, caddyFail: true, sessionIp: true, errorSpike: true, loginFail: true, authScan: true },
         cooldownSec: 300,  // 同一事件多少秒内不重复提醒（0 = 不冷却）
         quietHours: '',    // 静默时段，如 "23:00-07:00"，可逗号分隔多段
         // 自定义文案模板（留空 = 用默认）：可用占位符 {event} {title} {text} {host} {time} {running}/{total}
