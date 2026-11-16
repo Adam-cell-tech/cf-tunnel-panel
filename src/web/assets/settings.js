@@ -102,6 +102,7 @@ async function loadSystem() {
       const d2 = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m2 = Math.floor((s % 3600) / 60);
       return d2 ? `${d2} 天 ${h} 小时` : h ? `${h} 小时 ${m2} 分` : `${m2} 分钟`;
     };
+    const pr = (d.panelRequests && d.panelRequests.byStatus) || {};
     box.innerHTML = `<table><tbody>
       <tr><td class="muted">面板版本</td><td class="mono">v${esc(d.version)}</td></tr>
       <tr><td class="muted">Node / 平台</td><td class="mono">${esc(d.node)} · ${esc(d.platform || '')}</td></tr>
@@ -113,6 +114,9 @@ async function loadSystem() {
       <tr><td class="muted">Caddy 访问日志</td><td>${kb(d.caddyLogBytes)}（Caddy 侧 10MB × 3 份自动轮转）</td></tr>
       <tr><td class="muted">内存占用</td><td>${d.memMB} MB</td></tr>
       <tr><td class="muted">主机</td><td class="mono">${esc(d.host)}</td></tr>
+      <tr><td class="muted">面板请求</td><td class="mono">${pr.total} 次（2xx ${pr['2xx']} · 3xx ${pr['3xx']} · 4xx ${pr['4xx']} · 5xx ${pr['5xx']}）</td></tr>
+      <tr><td class="muted">历史采样</td><td class="mono">${(d.history && d.history.samples) || 0} 点 · 通知 ${(d.history && d.history.notifies) || 0} 条（两台共享）</td></tr>
+      <tr><td class="muted">最热的面板路径</td><td class="mono">${(d.panelRequests && d.panelRequests.top || []).slice(0, 3).map((x) => esc(x.path) + ' ×' + x.count).join('　') || '—'}</td></tr>
     </tbody></table>`;
   } catch (e) {
     box.innerHTML = `<div class="hint err">${esc(e.message)}</div>`;

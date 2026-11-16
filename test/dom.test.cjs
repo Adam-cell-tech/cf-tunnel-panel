@@ -276,6 +276,7 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('设置: 有只读账号表单', !!doc.querySelector('#viewerUser') && !!doc.querySelector('#btnViewer'), '');
     chk('设置: 有通知发送记录表', !!doc.querySelector('#notifyHist'), '');
     chk('设置: 有系统信息表', !!doc.querySelector('#sysInfo table, #sysInfo .empty, #sysInfo .hint'), '');
+    chk('设置: 系统信息含面板请求与历史统计', /面板请求/.test((doc.querySelector('#sysInfo') || {}).textContent || '') && /历史采样/.test((doc.querySelector('#sysInfo') || {}).textContent || ''), ((doc.querySelector('#sysInfo') || {}).textContent || '').slice(0, 60));
     chk('设置: 备份表在小屏可堆叠（class）', !!doc.querySelector('#backupList table, #backupList .empty'), '');
     chk('设置: 有跳到主内容的链接', !!doc.querySelector('.skip-link'), '');
     chk('设置: 有命令面板按钮', !!doc.querySelector('#btnPalette'), '');

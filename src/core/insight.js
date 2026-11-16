@@ -14,6 +14,7 @@ const state = _state.stateProxy;
 const { tunnelById, tunnelRt } = require('./registry');
 const { caddy, tunnelHostOf } = require('./caddy');
 const history = require('./history');
+const ident = require('./ident');
 const lease = require('./lease');
 /**
  * 按「归属规则」聚合的流量趋势：回答「哪个服务在吃流量」。
@@ -131,6 +132,7 @@ function systemInfo() {
   try { backups = fs.readdirSync(BACKUP_DIR).filter((f) => f.endsWith('.json')).length; } catch {}
   return {
     history: history.stats(),
+    panelRequests: panelReqSnapshot(),
     version: VERSION,
     node: process.version,
     uptimeSec: Math.round(process.uptime()),
@@ -355,6 +357,29 @@ const rtHistory = [];          // [{t, running, total, caddyOk, req}]
 let histTick = 0;
 
 // 最近一分钟的请求数（只读日志尾部 96KB，够一分钟用）
+// ---------------------------------------------------------------- 面板自身请求计数
+// Caddy 的 access.log 只覆盖「经由代理的业务流量」，面板自己的 /api 请求不在里面。
+// 想回答「面板最近是不是被谁狂扫」就得自己数：这里只做内存计数（每实例一份，
+// 进程重启归零），通过 /metrics 暴露，别指望它当持久审计（那是 audit.log 的活）。
+const panelReq = { total: 0, since: Date.now(), byStatus: { '2xx': 0, '3xx': 0, '4xx': 0, '5xx': 0 }, byPath: new Map() };
+
+function countPanelReq(status, pathname) {
+  panelReq.total += 1;
+  const cls = status >= 500 ? '5xx' : status >= 400 ? '4xx' : status >= 300 ? '3xx' : '2xx';
+  panelReq.byStatus[cls] = (panelReq.byStatus[cls] || 0) + 1;
+  if (panelReq.byPath.size < 300) {
+    const key = String(pathname).split('?')[0];
+    panelReq.byPath.set(key, (panelReq.byPath.get(key) || 0) + 1);
+  }
+  return panelReq;
+}
+
+function panelReqSnapshot() {
+  const top = [...panelReq.byPath.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
+    .map(([k, v]) => ({ path: k, count: v }));
+  return { total: panelReq.total, since: panelReq.since, byStatus: { ...panelReq.byStatus }, top };
+}
+
 function metricsText() {
   const lines = [];
   const run = state.tunnels.filter((t) => tunnelRt(t.id).status === 'running').length;
@@ -376,6 +401,46 @@ function metricsText() {
     const rt = tunnelRt(t.id);
     lines.push(`cf_tunnel_up{id="${t.id}",name="${String(t.name).replace(/"/g, '')}"} ${rt.status === 'running' ? 1 : 0}`);
   }
+  // ---- 集群视角（v0.19.2）：任何一台实例被抓都能说明「谁是主、历史累计多少、面板挨了多少请求」 ----
+  let role = 'leader';
+  let leaderId = '';
+  try { role = lease.isLeader() ? 'leader' : 'standby'; leaderId = String((lease.status().holder || {}).id || ''); } catch {}
+  lines.push('# HELP cf_role 本实例在集群里的角色（1=当前角色）');
+  lines.push('# TYPE cf_role gauge');
+  lines.push(`cf_role{role="leader"} ${role === 'leader' ? 1 : 0}`);
+  lines.push(`cf_role{role="standby"} ${role === 'standby' ? 1 : 0}`);
+  lines.push('# HELP cf_leader_info 当前主实例 id（值恒为 1）');
+  lines.push('# TYPE cf_leader_info gauge');
+  lines.push(`cf_leader_info{id="${leaderId.replace(/"/g, '')}"} 1`);
+  lines.push('# HELP cf_build_info 版本与代码指纹');
+  lines.push('# TYPE cf_build_info gauge');
+  try {
+    const bi = ident.buildInfo();
+    lines.push(`cf_build_info{version="${VERSION}",code="${bi.code || ''}",mode="${role}"} 1`);
+    lines.push('# HELP cf_code_drift 运行代码与镜像代码是否不一致');
+    lines.push('# TYPE cf_code_drift gauge');
+    lines.push(`cf_code_drift ${bi.drift ? 1 : 0}`);
+  } catch {}
+  const hs = history.stats();
+  lines.push('# HELP cf_history_samples 历史采样点总数（两台实例共享同一份文件）');
+  lines.push('# TYPE cf_history_samples gauge');
+  lines.push(`cf_history_samples ${hs.samples}`);
+  lines.push('# HELP cf_notify_total 通知发送结果统计（共享）');
+  lines.push('# TYPE cf_notify_total counter');
+  {
+    const by = {};
+    for (const n of history.notifyList()) by[n.status || 'unknown'] = (by[n.status || 'unknown'] || 0) + 1;
+    for (const [k, v] of Object.entries(by)) lines.push(`cf_notify_total{status="${k}"} ${v}`);
+    if (!Object.keys(by).length) lines.push('cf_notify_total{status="none"} 0');
+  }
+  const pr = panelReqSnapshot();
+  lines.push('# HELP cf_panel_requests_total 面板自身收到的请求（不含静态资源，每实例内存计数）');
+  lines.push('# TYPE cf_panel_requests_total counter');
+  for (const [k, v] of Object.entries(pr.byStatus)) lines.push(`cf_panel_requests_total{status="${k}"} ${v}`);
+  lines.push('# HELP cf_panel_uptime_seconds 面板进程运行时长');
+  lines.push('# TYPE cf_panel_uptime_seconds gauge');
+  lines.push(`cf_panel_uptime_seconds ${Math.round((Date.now() - pr.since) / 1000)}`);
+
   const acc = readAccess(200);
   if (acc.available) {
     lines.push('# HELP cf_tunnel_requests_total 访问日志里的请求数（按状态码分组）');
@@ -505,4 +570,4 @@ function securityAttempts(hours = 24, limit = 3000) {
   return out;
 }
 
-module.exports = { upstreamHealth, HISTORY_MAX, badgeSvg, diffRoutes, healthOf, histTick, metricsText, readAccess, refreshUpstreamHealth, requestsLastMinute, rtHistory, sampleHistory, shadowReport, simulateMatch, systemInfo, tcpProbeOnce, trafficByHour, trafficByPath, securityAttempts, upstreamTarget };
+module.exports = { countPanelReq, panelReqSnapshot, upstreamHealth, HISTORY_MAX, badgeSvg, diffRoutes, healthOf, histTick, metricsText, readAccess, refreshUpstreamHealth, requestsLastMinute, rtHistory, sampleHistory, shadowReport, simulateMatch, systemInfo, tcpProbeOnce, trafficByHour, trafficByPath, securityAttempts, upstreamTarget };

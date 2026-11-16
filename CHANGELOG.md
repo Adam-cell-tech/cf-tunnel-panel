@@ -30,6 +30,21 @@
 - 测试：**229 接口 + 113 页面 + 32 真 Caddy e2e**（e2e 新增「备份实例认得 leader 登录的会话」
   「备份实例看到 leader 刚改的配置」两条跨实例断言）。
 
+## v0.19.2 — 监控指标升级成「集群视角」
+
+`/metrics` 以前只描述“这台实例自己”：抓的是 standby 就只能看到它那份出口状态，
+而且面板自己的 `/api` 请求根本不在 Caddy 的 access.log 里，被扫描时看不出来。
+
+- 新增指标：
+  - `cf_role{role="leader|standby"}`、`cf_leader_info{id}` —— 一眼看出这台是谁、谁是主；
+  - `cf_build_info{version,code,mode}`、`cf_code_drift` —— 版本/代码指纹/是否跑着镜像外的代码；
+  - `cf_history_samples`、`cf_notify_total{status}` —— 读共享历史文件，两台抓出来的数一致；
+  - `cf_panel_requests_total{status}`、`cf_panel_uptime_seconds` —— 面板自身请求（按状态类），
+    静态资源、`/healthz`、`/metrics`、`/badge.svg`、`/__bench/*` 都不计入，避免健康检查把 2xx 刷成噪声。
+- `GET /api/system` 增加 `panelRequests {total, since, byStatus, top[10]}`；
+  设置页「关于」多两行：面板请求合计与最热路径、历史采样/通知条数。
+- 计数是**每实例内存**（进程重启归零），要长期审计看 `audit.log`，两者用途不同。
+
 ## v0.19.1 — 采样按「上一条有多旧」触发，主备切换不再漏一分钟
 
 v0.19.0 把曲线落盘后立刻暴露一个瑕疵：采样是 `histTick % 12 === 0`（每 12 个 5 秒 tick）

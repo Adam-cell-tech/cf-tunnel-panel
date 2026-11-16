@@ -22,6 +22,17 @@
 
 测试：229 接口 + 113 页面 + 32 真 Caddy e2e。
 
+## ✅ v0.19.2 — 指标升级为集群视角
+
+| 项 | 说明 |
+| --- | --- |
+| 角色/主实例 | `cf_role{role}`、`cf_leader_info{id}` |
+| 构建信息 | `cf_build_info{version,code,mode}`、`cf_code_drift` |
+| 共享历史 | `cf_history_samples`、`cf_notify_total{status}`（两台一致） |
+| 面板自身请求 | `cf_panel_requests_total{status}`、`cf_panel_uptime_seconds`（每实例） |
+| 系统信息 | `/api/system.panelRequests{total,since,byStatus,top}` + 设置页「关于」展示 |
+| 测试 | API 242（+6）、DOM 114（+1） |
+
 ## ✅ v0.19.1 — 采样触发不再随进程重启归零
 
 | 项 | 说明 |

@@ -67,7 +67,7 @@ const _tunnels = require('./core/tunnels');
 const { QUICK_RE, applyTunnelFields, normalizeTunnelToken, publicTunnels, runtimeOf, startAll, startTunnel, stopAll, stopTunnel, syncTunnels, tokenTunnelOf, tunnelArgs } = _tunnels;
 
 const _insight = require('./core/insight');
-const { upstreamHealth, HISTORY_MAX, badgeSvg, diffRoutes, healthOf, histTick, metricsText, readAccess, refreshUpstreamHealth, requestsLastMinute, rtHistory, sampleHistory, securityAttempts, shadowReport, simulateMatch, systemInfo, tcpProbeOnce, trafficByHour, trafficByPath, upstreamTarget } = _insight;
+const { countPanelReq, upstreamHealth, HISTORY_MAX, badgeSvg, diffRoutes, healthOf, histTick, metricsText, readAccess, refreshUpstreamHealth, requestsLastMinute, rtHistory, sampleHistory, securityAttempts, shadowReport, simulateMatch, systemInfo, tcpProbeOnce, trafficByHour, trafficByPath, upstreamTarget } = _insight;
 
 const _bench = require('./core/bench');
 const { BENCH_MAX_MB, benchLocalOnce, coloOf, sendBenchBlob } = _bench;
@@ -1701,6 +1701,11 @@ const onReq = (req, res) => {
     try {
       const skip = path0 === '/metrics' || path0 === '/badge.svg' || path0.startsWith('/assets/') || path0 === '/boot.js' ||
         path0.startsWith('/__bench/') || path0 === '/api/audit' || path0 === '/api/audit.csv' || path0 === '/api/logs' || path0 === '/api/logs/stream';
+      // 面板自身请求计数（v0.19.2）：静态资源与探针端点不算，避免健康检查把 2xx 刷成噪声
+      const probePath = path0 === '/healthz' || path0 === '/metrics' || path0 === '/badge.svg' || path0.startsWith('/assets/') || path0.startsWith('/__bench/');
+      if (!probePath) {
+        try { countPanelReq(res.statusCode, path0); } catch {}
+      }
       if (skip) return;
       const mutating = req.method !== 'GET' && req.method !== 'HEAD';
       const failed = res.statusCode >= 400 && path0.startsWith('/api');

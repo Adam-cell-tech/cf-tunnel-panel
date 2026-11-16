@@ -826,6 +826,16 @@ try {
   const sys = await j('/api/system');
   ok('系统信息里能看到历史文件', !!(sys.d.history && sys.d.history.inited), JSON.stringify(sys.d.history || {}));
   ok('历史文件落在 DATA_DIR/history', !!(sys.d.history && /\/history$/.test(sys.d.history.dir || '')), (sys.d.history || {}).dir || '');
+  ok('面板自身请求有计数', !!(sys.d.panelRequests && sys.d.panelRequests.total > 0), JSON.stringify((sys.d.panelRequests || {}).byStatus || {}));
+
+  // 集群视角指标（任何一台被抓都能看出角色/主实例/历史累计）
+  const met = await rawFetch(B + '/metrics');
+  const mtxt = await met.text();
+  ok('/metrics 带角色指标', /cf_role\{role="(leader|standby)"\} 1/.test(mtxt), '');
+  ok('/metrics 带主实例 id', /cf_leader_info\{id="[^"]*"\} 1/.test(mtxt), '');
+  ok('/metrics 带构建信息', /cf_build_info\{version="[^"]+"/.test(mtxt), '');
+  ok('/metrics 带历史采样数', /cf_history_samples \d+/.test(mtxt), '');
+  ok('/metrics 带面板请求计数', /cf_panel_requests_total\{status="2xx"\} \d+/.test(mtxt), '');
 }
 
 await restoreRoutes();
