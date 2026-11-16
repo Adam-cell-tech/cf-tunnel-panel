@@ -333,3 +333,8 @@ pre.log .l-system{color:#a0a8b4}
 .mono a.jump { color: var(--acc); text-decoration: none; border-bottom: 1px dashed color-mix(in srgb, var(--acc) 55%, transparent); }
 .mono a.jump:hover { border-bottom-style: solid; }
 .rule-h .hits { font-size: 12px; }
+
+/* 图表刻度（HTML 定位，避免 SVG 横向拉伸把字压扁） */
+.chart-x{position:relative;height:15px;margin-top:2px;font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+.chart-x span{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap}
+.chart{display:block;width:100%}

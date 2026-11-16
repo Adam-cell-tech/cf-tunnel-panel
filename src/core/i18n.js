@@ -250,6 +250,15 @@ const EN_V0138 = {
 };
 Object.assign(EN, EN_V0138);
 
+// v0.13.9 新增（图表刻度与空态）
+const EN_V0139 = {
+  '还在采样中（每分钟一个点），几分钟后这里就有曲线了': 'Still sampling (one point per minute) — the curve shows up in a couple of minutes',
+  '刚开始采样（1 个点），再等 1~2 分钟就出曲线': 'Just started sampling (1 point) — the curve needs one or two more minutes',
+  '每分钟采一个点，曲线需要至少两个点才能画出来': 'One point per minute; a curve needs at least two points',
+  '还没有流量数据（有访问后这里会自动出现）': 'No traffic yet (this fills in once requests arrive)',
+};
+Object.assign(EN, EN_V0139);
+
 const EN_PAGES = {
   '加签密钥（可选）': 'Signing secret (optional)',
   '机器人安全设置里勾了「加签」才需要；只勾「自定义关键词」就留空': 'Only needed when the bot has signing enabled; leave empty if you use a keyword instead',

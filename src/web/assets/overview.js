@@ -77,54 +77,98 @@ async function paintStats(d) {
 }
 
 // 极简 SVG 图：柱状（总量 + 错误叠加）与折线（在线出口数），不引第三方库
+// ---------------------------------------------------------------- 图表工具
+// Caddy/浏览器都不会给 SVG 里的 <text> 做等比缩放，之前用 preserveAspectRatio="none"
+// 把整张图横向拉伸，刻度字被拉扁且贴着卡片底边。现在：绘图区留在 SVG 里，刻度用 HTML 绝对定位，
+// 字号恒定、永远贴着条形中心。
+const CH = 44;      // 绘图区高度（viewBox 单位）
+const CPAD = 1.2;   // 左右留白，避免首尾柱子被卡片边缘切掉
+
+function chartLabels(keys) {
+  const n = Math.max(1, keys.length);
+  const step = n > 8 ? 2 : 1;
+  const items = keys.map((t, i) => (i % step ? '' :
+    `<span style="left:${(((i + 0.5) / n) * 100).toFixed(2)}%">${new Date(t).getHours()}:00</span>`)).join('');
+  return `<div class="chart-x">${items}</div>`;
+}
+
+function gridLines() {
+  return `<line x1="0" y1="0.6" x2="100" y2="0.6" stroke="var(--line)" stroke-width="0.4" stroke-dasharray="2 2"></line>`
+    + `<line x1="0" y1="${CH / 2}" x2="100" y2="${CH / 2}" stroke="var(--line)" stroke-width="0.4" stroke-dasharray="2 2"></line>`
+    + `<line x1="0" y1="${CH}" x2="100" y2="${CH}" stroke="var(--line)" stroke-width="0.5"></line>`;
+}
+
+// 一组（或多组堆叠）柱子的公共画法，返回 { svg, labels }
+function barsSvg(keys, series, max) {
+  const n = Math.max(1, keys.length);
+  const innerW = 100 - CPAD * 2;
+  const bw = innerW / n;
+  let body = gridLines();
+  keys.forEach((_, i) => {
+    let y = CH;
+    series.forEach((s) => {
+      const v = Number(s.values[i]) || 0;
+      if (!v) return;
+      const h = Math.max(0.7, (v / max) * CH);
+      y = Math.max(0, y - h);
+      body += `<rect x="${(CPAD + i * bw + bw * 0.16).toFixed(2)}" y="${y.toFixed(2)}" width="${(bw * 0.68).toFixed(2)}" height="${h.toFixed(2)}" rx="0.6" fill="${s.color}" opacity="${s.opacity || 0.9}"></rect>`;
+    });
+  });
+  return { svg: `<svg class="chart" viewBox="0 0 100 ${CH}" preserveAspectRatio="none" role="img" aria-label="统计图表">${body}</svg>`, labels: chartLabels(keys) };
+}
+
 function drawTrend(buckets) {
   const box = $('#trendBox');
   const n = buckets.length;
-  if (!n) { box.innerHTML = '<div class="empty">还没有流量数据</div>'; return; }
-  const max = Math.max(1, ...buckets.map((b) => b.total));
-  const W = 100, H = 42, bw = W / n;
-  const bars = buckets.map((b, i) => {
-    const h = (b.total / max) * H;
-    const eh = (b.err / max) * H;
-    const x = i * bw;
-    return `<rect x="${x + bw * 0.12}" y="${H - h}" width="${bw * 0.76}" height="${h}" rx="0.8" fill="var(--acc)" opacity="0.85"></rect>`
-      + (eh > 0 ? `<rect x="${x + bw * 0.12}" y="${H - eh}" width="${bw * 0.76}" height="${eh}" rx="0.8" fill="var(--err)"></rect>` : '');
-  }).join('');
-  const labels = buckets.map((b, i) => {
-    if (n > 8 && i % 2) return '';
-    const d = new Date(b.t);
-    return `<text x="${i * bw + bw / 2}" y="${H + 6.5}" font-size="3.6" text-anchor="middle" fill="var(--dim)">${d.getHours()}:00</text>`;
-  }).join('');
+  if (!n) { box.innerHTML = '<div class="empty">还没有流量数据（有访问后这里会自动出现）</div>'; return; }
+  const max = Math.max(1, ...buckets.map((b) => b.total)) * 1.08;
+  const keys = buckets.map((b) => b.t);
+  const c = barsSvg(keys, [
+    { values: buckets.map((b) => b.total), color: 'var(--acc)', opacity: 0.85 },
+    { values: buckets.map((b) => b.err), color: 'var(--err)', opacity: 0.95 },
+  ], max);
   const total = buckets.reduce((a, b) => a + b.total, 0);
   const err = buckets.reduce((a, b) => a + b.err, 0);
-  box.innerHTML = `<div class="row" style="gap:8px;margin-bottom:6px">
+  box.innerHTML = `<div class="row" style="gap:8px;margin-bottom:8px;flex-wrap:wrap">
       <span class="tag">合计 ${total} 次</span>
       <span class="tag err">错误 ${err} 次（${total ? Math.round((err / total) * 100) : 0}%）</span>
-      <span class="tag">峰值 ${max}/小时</span>
+      <span class="tag">峰值 ${Math.max(0, ...buckets.map((b) => b.total))}/小时</span>
     </div>
-    <svg class="chart" viewBox="0 0 ${W} ${H + 10}" preserveAspectRatio="none" role="img" aria-label="每小时请求数">${bars}${labels}</svg>`;
+    ${c.svg}${c.labels}`;
 }
 
 function drawHist(points) {
   const box = $('#histBox');
   if (!points.length) { box.innerHTML = '<div class="empty">还在采样中（每分钟一个点），几分钟后这里就有曲线了</div>'; return; }
-  const maxTotal = Math.max(1, ...points.map((p) => p.total));
-  const W = 100, H = 42;
-  const step = points.length > 1 ? W / (points.length - 1) : W;
-  const y = (v) => H - (v / maxTotal) * H;
-  const line = points.map((p, i) => `${i * step},${y(p.running)}`).join(' ');
-  const area = `0,${H} ` + points.map((p, i) => `${i * step},${y(p.running)}`).join(' ') + ` ${(points.length - 1) * step},${H}`;
-  const minUp = Math.min(...points.map((p) => p.running));
+  const total = Math.max(1, ...points.map((p) => Number(p.total) || 0));
+  const scale = total * 1.12;                       // 上留一点余量，避免"全在线"时曲线贴住顶边
+  // 只有一个采样点时曲线画不出来（polyline 需要 2 个点），改成画一条水平虚线 + 说明
+  if (points.length < 2) {
+    const p0 = points[0];
+    box.innerHTML = `<div class="row" style="gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <span class="tag ok">当前 ${p0.running} / ${p0.total} 在线</span>
+        <span class="tag warn">刚开始采样（1 个点），再等 1~2 分钟就出曲线</span>
+      </div>
+      <div class="empty" style="padding:6px 0">每分钟采一个点，曲线需要至少两个点才能画出来</div>`;
+    return;
+  }
+  const step = points.length > 1 ? 100 / (points.length - 1) : 100;
+  const y = (v) => CH - (Math.max(0, Math.min(v, scale)) / scale) * CH;
+  const pts = points.map((p, i) => `${(i * step).toFixed(2)},${y(p.running).toFixed(2)}`).join(' ');
+  const area = `0,${CH} ${pts} ${((points.length - 1) * step).toFixed(2)},${CH}`;
+  const minUp = Math.min(...points.map((p) => Number(p.running) || 0));
   const last = points[points.length - 1];
-  box.innerHTML = `<div class="row" style="gap:8px;margin-bottom:6px">
+  const keys = points.map((p) => p.t);
+  box.innerHTML = `<div class="row" style="gap:8px;margin-bottom:8px;flex-wrap:wrap">
       <span class="tag ok">当前 ${last.running} / ${last.total} 在线</span>
       <span class="tag">区间最低 ${minUp}</span>
       <span class="tag">${points.length} 个采样点</span>
     </div>
-    <svg class="chart" viewBox="0 0 ${W} ${H + 10}" preserveAspectRatio="none" role="img" aria-label="出口在线数历史">
-      <polygon points="${area}" fill="var(--acc)" opacity="0.18"></polygon>
-      <polyline points="${line}" fill="none" stroke="var(--acc)" stroke-width="1.2" vector-effect="non-scaling-stroke"></polyline>
-    </svg>`;
+    <svg class="chart" viewBox="0 0 100 ${CH}" preserveAspectRatio="none" role="img" aria-label="出口在线数历史">
+      ${gridLines()}
+      <polygon points="${area}" fill="var(--acc)" opacity="0.16"></polygon>
+      <polyline points="${pts}" fill="none" stroke="var(--acc)" stroke-width="1.4" vector-effect="non-scaling-stroke" stroke-linejoin="round"></polyline>
+    </svg>${chartLabels(keys.filter((_, i) => i % Math.max(1, Math.ceil(points.length / 6)) === 0))}`;
 }
 
 function drawAudit(buckets) {
@@ -132,28 +176,21 @@ function drawAudit(buckets) {
   if (!box) return;
   const n = buckets.length;
   if (!n) { box.innerHTML = '<div class="empty">还没有变更记录</div>'; return; }
-  const max = Math.max(1, ...buckets.map((b) => b.total));
-  const W = 100, H = 42, bw = W / n;
-  const bars = buckets.map((b, i) => {
-    const h = (b.total / max) * H;
-    const eh = (b.err / max) * H;
-    const x = i * bw;
-    return `<rect x="${x + bw * 0.12}" y="${H - h}" width="${bw * 0.76}" height="${h}" rx="0.8" fill="var(--warn)" opacity="0.85"></rect>`
-      + (eh > 0 ? `<rect x="${x + bw * 0.12}" y="${H - eh}" width="${bw * 0.76}" height="${eh}" rx="0.8" fill="var(--err)"></rect>` : '');
-  }).join('');
-  const labels = buckets.map((b, i) => {
-    if (n > 8 && i % 2) return '';
-    return `<text x="${i * bw + bw / 2}" y="${H + 6.5}" font-size="3.6" text-anchor="middle" fill="var(--dim)">${new Date(b.t).getHours()}:00</text>`;
-  }).join('');
+  const max = Math.max(1, ...buckets.map((b) => b.total)) * 1.08;
+  const keys = buckets.map((b) => b.t);
+  const c = barsSvg(keys, [
+    { values: buckets.map((b) => b.total), color: 'var(--warn)', opacity: 0.85 },
+    { values: buckets.map((b) => b.err), color: 'var(--err)', opacity: 0.95 },
+  ], max);
   const total = buckets.reduce((a, b) => a + b.total, 0);
   const err = buckets.reduce((a, b) => a + b.err, 0);
-  box.innerHTML = `<div class="row" style="gap:8px;margin-bottom:6px">
+  box.innerHTML = `<div class="row" style="gap:8px;margin-bottom:8px;flex-wrap:wrap">
       <span class="tag">合计 ${total} 次改动</span>
-      <span class="tag err">失败 ${err} 次</span>
-      <span class="tag">${total === 0 ? '这段时间没人动过' : '峰值 ' + max + '/小时'}</span>
+      <span class="tag ${err ? 'err' : ''}">失败 ${err} 次</span>
+      <span class="tag">${total === 0 ? '这段时间没人动过' : '峰值 ' + Math.max(0, ...buckets.map((b) => b.total)) + '/小时'}</span>
       <a class="sm" href="/observe">看明细 →</a>
     </div>
-    <svg class="chart" viewBox="0 0 ${W} ${H + 10}" preserveAspectRatio="none" role="img" aria-label="每小时变更次数">${bars}${labels}</svg>`;
+    ${c.svg}${c.labels}`;
 }
 
 // 按规则堆叠柱状图：一眼看出哪个服务在吃流量
@@ -168,28 +205,17 @@ function drawPaths(groups, hours, unmatched) {
     return;
   }
   const keys = groups[0].buckets.map((b) => b.t);
-  const n = keys.length;
-  const W = 100, H = 42, bw = W / Math.max(1, n);
   let stackMax = 1;
   keys.forEach((_, i) => {
     const sum = groups.reduce((a, g) => a + ((g.buckets[i] || {}).total || 0), 0);
     if (sum > stackMax) stackMax = sum;
   });
-  let bars = '';
-  keys.forEach((_, i) => {
-    let y = H;
-    groups.forEach((g, gi) => {
-      const v = (g.buckets[i] || {}).total || 0;
-      if (!v) return;
-      const h = (v / stackMax) * H;
-      y -= h;
-      bars += `<rect x="${i * bw + bw * 0.12}" y="${y}" width="${bw * 0.76}" height="${h}" rx="0.8" fill="${PATH_COLORS[gi % PATH_COLORS.length]}" opacity="0.9"></rect>`;
-    });
-  });
-  const labels = keys.map((t, i) => {
-    if (n > 8 && i % 2) return '';
-    return `<text x="${i * bw + bw / 2}" y="${H + 6.5}" font-size="3.6" text-anchor="middle" fill="var(--dim)">${new Date(t).getHours()}:00</text>`;
-  }).join('');
+  stackMax *= 1.08;
+  const c = barsSvg(keys, groups.map((g, gi) => ({
+    values: keys.map((_, i) => (g.buckets[i] || {}).total || 0),
+    color: PATH_COLORS[gi % PATH_COLORS.length],
+    opacity: 0.9,
+  })), stackMax);
   const legend = groups.map((g, gi) => {
     const color = PATH_COLORS[gi % PATH_COLORS.length];
     const label = `${esc(g.name)} · ${g.total}${g.err ? ` · 5xx ${g.err}` : ''}`;
@@ -198,8 +224,8 @@ function drawPaths(groups, hours, unmatched) {
       ? `<a class="tag jump" href="/rules?focus=${encodeURIComponent(g.id)}" title="${tip}" style="border-left:3px solid ${color}">${label} →</a>`
       : `<span class="tag" style="border-left:3px solid ${color}">${label}</span>`;
   }).join('');
-  box.innerHTML = `<div class="row" style="gap:6px;margin-bottom:6px;flex-wrap:wrap">${legend}</div>
-    <svg class="chart" viewBox="0 0 ${W} ${H + 10}" preserveAspectRatio="none" role="img" aria-label="按规则的每小时请求数">${bars}${labels}</svg>
+  box.innerHTML = `<div class="row" style="gap:6px;margin-bottom:8px;flex-wrap:wrap">${legend}</div>
+    ${c.svg}${c.labels}
     <div class="sub" style="margin-top:4px">最近 ${hours} 小时；另有 ${(unmatched && unmatched.total) || 0} 次没命中任何规则（健康检查、未知路径）${(unmatched && unmatched.err) ? `，其中 5xx ${unmatched.err} 次` : ''}</div>`;
 }
 

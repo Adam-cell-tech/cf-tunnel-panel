@@ -581,6 +581,14 @@ The script snapshots the route table to `/tmp` before touching it and restores f
 | E2E coverage 8 → 23 | The real-Caddy suite now proves prefix stripping, prefix passthrough, basic auth (401/401/200), Host-based routing isolation, WebSocket 101 upgrade, maintenance 503 + `Retry-After`, IP blacklist 403, admin off 2019, access-log writer and `trusted_proxies` — and restores routes/settings in `finally`. |
 | Audit de-duplication | A request whose handler already logged a human-readable action no longer also emits the generic `POST /api/...` row. |
 
+### v0.13.9 highlights
+
+| Change | Detail |
+| --- | --- |
+| Charts actually readable | The plot stays in SVG, but the hour labels are now HTML positioned over it — no more squashed text from `preserveAspectRatio="none"`. Bars got side padding (first/last no longer clipped), a baseline + mid gridline, and a 1.08 head-room so a peak doesn't touch the border. |
+| Three charts per row | The trend / history / change cards were in a 2-column grid, so the third wrapped and left a hole; moved to `.grid3`. |
+| No more blank card | *Exit uptime history* with a single sample used to draw an invisible polyline; it now explains "still sampling" (and the real curve needs ≥2 points). |
+
 ### v0.13.8 highlights
 
 | Change | Detail |
