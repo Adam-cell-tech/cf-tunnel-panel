@@ -409,6 +409,44 @@ async function handler(req, res) {
     }
   }
 
+  // 监控页：面板替你去问 Prometheus（targets / 告警），省得再开一个标签页
+  if (p === '/api/monitor/status' && req.method === 'GET') {
+    const base = String((state.settings.monitoring || {}).promUrl || '').trim().replace(/\/+$/, '');
+    if (!/^https?:\/\/[^\s]+$/i.test(base)) {
+      return sendJson(res, 200, { ok: false, promUrl: base, error: '还没配 Prometheus 地址（设置 → 监控嵌入）' });
+    }
+    const grab = async (pathname) => {
+      const r = await fetch(base + pathname, { signal: AbortSignal.timeout(4000) });
+      if (!r.ok) throw new Error(`${pathname} → HTTP ${r.status}`);
+      return r.json();
+    };
+    try {
+      const ready = await fetch(base + '/-/ready', { signal: AbortSignal.timeout(3000) }).then((r) => r.ok).catch(() => false);
+      let targets = [];
+      let alerts = [];
+      try {
+        const t = await grab('/api/v1/targets?state=active');
+        targets = ((t.data && t.data.activeTargets) || []).map((x) => ({
+          job: (x.labels && x.labels.job) || '', instance: (x.labels && x.labels.instance) || '',
+          health: x.health || 'unknown', scrapeUrl: x.scrapeUrl || '',
+          lastScrape: x.lastScrape || '', lastError: (x.lastError || '').slice(0, 200),
+        })).sort((a, b) => String(a.health).localeCompare(String(b.health)));
+      } catch (e) { targets = []; }
+      try {
+        const a = await grab('/api/v1/alerts');
+        alerts = ((a.data && a.data.alerts) || []).map((x) => ({
+          name: (x.labels && x.labels.alertname) || '', state: x.state || '',
+          severity: (x.labels && x.labels.severity) || '', summary: (x.annotations && x.annotations.summary) || '',
+          activeAt: x.activeAt || '',
+        }));
+      } catch (e) { alerts = []; }
+      const down = targets.filter((t) => t.health !== 'up').length;
+      return sendJson(res, 200, { ok: true, promUrl: base, ready, targets, alerts, summary: { total: targets.length, up: targets.length - down, down } });
+    } catch (e) {
+      return sendJson(res, 200, { ok: false, promUrl: base, error: `连不上 Prometheus：${e.message}` });
+    }
+  }
+
   // 按出口聚合：多条隧道跑不同域名时，看谁在吃流量、谁在报错
   if (p === '/api/tunnels/stats' && req.method === 'GET') {
     const url2 = new URL(req.url, 'http://x');
@@ -767,6 +805,11 @@ async function handler(req, res) {
             text: String((n.template && n.template.text) !== undefined ? n.template.text : ((prevN.template || {}).text || '')).slice(0, 500),
           },
         };
+      }
+      if (body.monitoring && typeof body.monitoring === 'object') {
+        const u = String(body.monitoring.promUrl === undefined ? ((state.settings.monitoring || {}).promUrl || '') : body.monitoring.promUrl).trim().replace(/\/+$/, '').slice(0, 200);
+        if (u && !/^https?:\/\/[^\s]+$/i.test(u)) throw new Error('Prometheus 地址必须是 http:// 或 https:// 开头');
+        state.settings.monitoring = { promUrl: u };
       }
       if (body.cf && typeof body.cf === 'object') {
         state.settings.cf = {

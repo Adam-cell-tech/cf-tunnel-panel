@@ -715,6 +715,46 @@ const EN_V0240 = {
 };
 Object.assign(EN, EN_V0240);
 
+const EN_V0250 = {
+  "监控": "Monitor",
+  "Prometheus 的 targets 与告警、Grafana 的图，都在这页看": "Prometheus targets, alerts and Grafana panels — all on one page",
+  "抓取目标": "Scrape targets",
+  "正在告警": "firing",
+  "面板角色": "Panel role",
+  "刷新": "Refresh",
+  "打开 Grafana ↗": "Open Grafana ↗",
+  "正常": "up",
+  "DOWN": "DOWN",
+  "未知": "unknown",
+  "就绪": "ready",
+  "未就绪": "not ready",
+  "连不上": "unreachable",
+  "任务": "Job",
+  "实例": "Instance",
+  "状态": "Status",
+  "最近抓取": "Last scrape",
+  "错误": "Error",
+  "告警": "Alerts",
+  "级别": "Severity",
+  "开始": "Started",
+  "说明": "Summary",
+  "待定": "pending",
+  "当前没有告警 —— 这是好事": "No alerts right now — good",
+  "没有抓取目标": "No scrape targets",
+  "秒前": "s ago",
+  "分钟前": "min ago",
+  "小时前": "h ago",
+  "主实例": "leader",
+  "备份（只读）": "standby (read-only)",
+  "Prometheus 地址（监控页用）": "Prometheus URL (used by the Monitor page)",
+  "面板会替你查 targets 与告警；留空 = 不查。": "The panel queries targets and alerts for you; leave blank to disable.",
+  "来自 Prometheus 的规则（docs/prometheus-alerts.yml）": "Rules from Prometheus (docs/prometheus-alerts.yml)",
+  "同一个控制台里看曲线，数据还是 Prometheus 的": "Curves in the same console, data still from Prometheus",
+  "出口在线、规则命中、可疑访问都在「观测」页；这里只汇总外部监控系统的状态。": "Exit status, rule hits and suspicious access live on the Observe page; this page only summarises the external monitoring stack.",
+  "正在查询…": "Querying…"
+};
+Object.assign(EN, EN_V0250);
+
 const EN_PAGES = {
   '加签密钥（可选）': 'Signing secret (optional)',
   '机器人安全设置里勾了「加签」才需要；只勾「自定义关键词」就留空': 'Only needed when the bot has signing enabled; leave empty if you use a keyword instead',

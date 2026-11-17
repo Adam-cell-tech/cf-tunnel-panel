@@ -44,6 +44,8 @@ function defaultState() {
       cf: { token: '', accountId: '', zoneId: '' },
       // Grafana 嵌入（可选）：把 Grafana 的单个 panel 直接嵌进首页
       // 需要 Grafana 侧 conf/grafana.ini 里 allow_embedding = true，并开启匿名只读（或允许第三方 cookie）
+      // 外部监控：面板帮你查 Prometheus，不用再开一个标签页
+      monitoring: { promUrl: 'http://127.0.0.1:9090' },
       grafana: {
         enabled: false,
         url: '',                 // 例如 http://192.168.1.55:3000
@@ -364,6 +366,7 @@ function publicRoute(r) {
 function publicSettings() {
   const s = JSON.parse(JSON.stringify(state.settings));
   s.cf = { accountId: s.cf.accountId, zoneId: s.cf.zoneId, hasToken: !!s.cf.token };
+  s.monitoring = { promUrl: String((s.monitoring && s.monitoring.promUrl) || '') };
   s.grafana = {
     enabled: !!(s.grafana && s.grafana.enabled),
     url: (s.grafana && s.grafana.url) || '',

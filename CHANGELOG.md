@@ -2,6 +2,24 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.25.0
+
+监控系统不再只是「文档里的一套 YAML」：面板里多了一个「监控」页，Prometheus 抓到了谁、谁在告警，一眼能看到。
+
+### 新增
+- **监控页 `/monitor`**：四张概览卡（Prometheus 就绪、抓取目标 up/down、正在告警数、面板角色）+ 抓取目标表（job / 实例 / 健康 / 最近抓取 / 错误）+ 告警表（名字 / 级别 / 状态 / 开始时间 / 说明）+ 内嵌 Grafana 三个面板。30 秒自动刷新。
+  - 后端 `GET /api/monitor/status` 代理查询 Prometheus 的 `/-/ready`、`/api/v1/targets?state=active`、`/api/v1/alerts`；地址在设置页「监控嵌入」卡的 **Prometheus 地址**（`settings.monitoring.promUrl`，默认 `http://127.0.0.1:9090`），留空就不查。
+- 侧栏新增「监控」入口（7 个页面）。
+
+### 修复
+- **`PanelDown` 永远在响**：规则原来是 `up{job="cf-tunnel-panel"} == 0`，而 blue/green 总有一色是停的 —— 等于常驻告警。改成 `sum(up{job="cf-tunnel-panel"}) == 0`（两色都抓不到才算挂）。
+- **`NotifyFailing` 的说明是 `1.0132312312312313 条`**：`{{ $value }}` 直接插浮点数，改成 `{{ $value | printf "%.0f" }}`。
+- 修 YAML 引号踩坑：`summary: "…printf "%.0f" …"` 会被解析坏，Prometheus 直接起不来；必须外层单引号。改完用 `promtool check rules` 验一遍。
+- 窄屏 CSS 里 `.chart` 高度有两处重复定义（96px 被后面的 126px 覆盖），删掉无效那条。
+
+### 变更
+- 新增 36 条界面词条；`docs/PROMETHEUS-GRAFANA.md` 补监控页与 promtool 校验步骤。
+
 ## v0.24.0
 
 两件事：监控图不再只能局域网看，通知不再只能配一条。

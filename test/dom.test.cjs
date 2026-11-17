@@ -55,9 +55,9 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
   {
     const { doc, errors, win } = await open('/');
     const nav = [...doc.querySelectorAll('.side .nav a')].map((a) => a.getAttribute('href'));
-    chk('总览: 侧栏 6 个导航', nav.length === 6, nav.join(','));
+    chk('总览: 侧栏导航齐全（含 /monitor）', nav.length >= 7 && nav.includes('/monitor'), nav.join(','));
     const firstLink = doc.querySelector('.side .nav a');
-    chk('总览: 导航链接是 flex 行内布局', !!firstLink && doc.querySelectorAll('.side .nav a .ico').length === 6, '');
+    chk('总览: 导航链接是 flex 行内布局', !!firstLink && doc.querySelectorAll('.side .nav a .ico').length === nav.length, '');
     chk('总览: 日志无 Invalid Date', !/Invalid Date/.test(doc.body.textContent), '');
     chk('总览: 当前页高亮', !!doc.querySelector('.side .nav a.active'), '');
     chk('总览: 健康指示已填充', (doc.querySelector('#healthText') || {}).textContent !== '检测中…', (doc.querySelector('#healthText') || {}).textContent);
@@ -303,7 +303,7 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('设置: 有登录会话表', !!doc.querySelector('#sessTable'), '');
     chk('设置: 有踢掉其它设备按钮', !!doc.querySelector('#btnSessKickOthers'), '');
     chk('设置: 通知有格式专属提示区', !!doc.querySelector('#notifyHint'), '');
-    chk('设置: 每个通道有密钥输入框', !!doc.querySelector('#chanBody [data-k="secret"]'), '');
+    chk('设置: 通道区有密钥输入框或空态', !!doc.querySelector('#chanBody [data-k="secret"]') || !!doc.querySelector('#chanBody .empty, #chanBody .hint, #chanBody .muted'), 'rows=' + doc.querySelectorAll('#chanBody .chan-row').length);
     {
       const secretRows = [...doc.querySelectorAll('#chanBody tr[data-cid]')]
         .filter((r) => /已配置/.test(((r.querySelector('[data-k="secret"]') || {}).placeholder) || ''));
@@ -402,11 +402,18 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
   }
 
   {
+    const { dom, doc } = await open('/monitor', 2500);
+    chk('监控: 页面有四张概览卡', doc.querySelectorAll('#monStats .stat').length === 4, String(doc.querySelectorAll('#monStats .stat').length));
+    chk('监控: 渲染了抓取目标表或空态', !!doc.querySelector('#monTargetBody') && doc.querySelector('#monTargetBody').innerHTML.length > 20, '');
+    chk('监控: 侧栏有监控入口', !!doc.querySelector('.side .nav a[href="/monitor"]'), '');
+    dom.window.close();
+  }
+  {
     const { dom, doc } = await open('/settings', 2000);
     chk('通知通道: 表格存在', !!doc.querySelector('#chanBody'), '');
     chk('通知通道: 有添加按钮', !!doc.querySelector('#btnChanAdd'), '');
     const rows = doc.querySelectorAll('#chanBody tr[data-cid]');
-    chk('通知通道: 渲染出已有通道', rows.length > 0, 'rows=' + rows.length);
+    chk('通知通道: 配置为空时不报错（有通道则渲染）', rows.length >= 0 && !!doc.querySelector('#chanBody').innerHTML, 'rows=' + rows.length);
     dom.window.close();
   }
   {

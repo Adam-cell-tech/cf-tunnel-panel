@@ -13,6 +13,19 @@
 | 预置 | 数据源 uid `prom-main`、仪表盘 uid `cfp-main`（slug `a650163`）、匿名只读、`allow_embedding` | 匿名 `/d-solo/cfp-main/a650163?panelId=7` 200 |
 | 面板侧 | `settings.grafana` 指向 `http://192.168.1.55:3000`，panelId 1/7/9 | 首页 CSP 含该源、`#grafanaCard` 出现 |
 
+## ✅ v0.25.0 — 监控系统接进面板
+
+| 项 | 做法 | 实测 |
+| --- | --- | --- |
+| 监控页 | `/monitor` 四张概览卡 + 目标表 + 告警表 + Grafana 嵌入 | `/monitor` 200、`/api/monitor/status` `{ok:true,ready:true,summary:{total:2,up:1,down:1}}` |
+| Prometheus 代理 | `GET /api/monitor/status` 查 `/-/ready`、`/api/v1/targets`、`/api/v1/alerts`，3 秒超时 | 停着的那一色显示 down + 具体错误 |
+| 地址配置 | `settings.monitoring.promUrl`（默认 `http://127.0.0.1:9090`），保存时校验必须 http(s) | 传 `ftp://` → 400 |
+| `PanelDown` 修复 | `up{...} == 0` → `sum(up{...}) == 0` | 修复前常驻 firing，修复后消失 |
+| 告警说明 | `{{ $value | printf "%.0f" }}` + YAML 单引号 | `promtool check rules` SUCCESS 10 rules |
+| CSS | 删掉被覆盖的 `.chart{height:96px}` | 窄屏仍 126px |
+
+未做：告警静默/抑制的面板侧入口（仍在 Prometheus 侧配置）、多 Prometheus 实例聚合。
+
 ## ✅ v0.24.0 — 多通道通知 + 监控上 HTTPS
 
 | 项 | 做了什么 | 实测 |

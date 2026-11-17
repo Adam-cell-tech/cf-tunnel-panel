@@ -48,6 +48,7 @@ const PAGES = [
   { path: '/rules', file: 'rules', title: '代理规则', ico: '⛓' },
   { path: '/tools', file: 'tools', title: '工具箱', ico: '⚒' },
   { path: '/observe', file: 'observe', title: '观测', ico: '◔' },
+  { path: '/monitor', file: 'monitor', title: '监控', ico: '◈' },
   { path: '/settings', file: 'settings', title: '设置', ico: '⚙' },
 ];
 // Caddy 把 access log 以 JSON 行写到这里；Caddy 容器里挂在 /logs，面板侧读同一份文件

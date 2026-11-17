@@ -41,6 +41,12 @@ Prometheus 已经同时抓 blue/green 两个槽位，Grafana 会自动导入 `do
 并开好匿名只读 + `allow_embedding`，所以首页「监控面板」的三个字段可以直接填（细节见
 `tools/monitoring/README.md`）。
 
+### v0.25.0 更新
+
+- **新增「监控」页（`/monitor`）**：Prometheus 是否就绪、抓取目标（up/down、最近抓取、错误）、正在告警/待定的规则、以及三个内嵌 Grafana 面板，30 秒自动刷新。数据来自 `GET /api/monitor/status`，Prometheus 地址在「设置 → 监控嵌入」里填。
+- **修 `PanelDown` 常驻告警**：原规则 `up{job="cf-tunnel-panel"} == 0` 在 blue/green 下永远成立（总有一色停着），改成 `sum(up{job="cf-tunnel-panel"}) == 0`。
+- 告警说明里的 `1.0132312312312313` 改成 `1`；修掉会让 Prometheus 起不来的 YAML 引号问题，并用 `promtool check rules` 验证。
+
 ### v0.24.0 更新
 
 - **通知多通道**：`settings.notify.channels[]`（最多 8 条），每条独立 `name / format / url / secret / enabled`；一条通知发给所有启用的通道。设置页变成通道表，每行可单独测试 / 停用 / 删除，`POST /api/notify/test {channelId}` 只测一条。老的 `notify.url/format/secret` 读取时虚拟成「默认通道」，老配置不用迁移。

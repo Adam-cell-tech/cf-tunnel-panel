@@ -973,6 +973,15 @@ try {
   const csp = page.headers.get('content-security-policy') || '';
   ok('Grafana：CSP 放行了这个源', /frame-src[^;]*https:\/\/grafana\.jianghugs\.shop/.test(csp), csp.slice(0, 60));
 
+  // 监控页：Prometheus 聚合
+  const mon = await j('/api/monitor/status');
+  ok('监控：返回结构完整', mon.status === 200 && 'ok' in mon.d && 'promUrl' in mon.d, 'ok=' + mon.d.ok);
+  ok('监控：targets 是数组', Array.isArray(mon.d.targets), String((mon.d.targets || []).length));
+  ok('监控：alerts 是数组', Array.isArray(mon.d.alerts), String((mon.d.alerts || []).length));
+  const monBad = await j('/api/settings', { method: 'POST', body: { monitoring: { promUrl: 'ftp://nope' } } });
+  ok('监控：非法 Prometheus 地址被拒', monBad.status === 400, String(monBad.status));
+  await j('/api/settings', { method: 'POST', body: { monitoring: { promUrl: 'http://127.0.0.1:9090' } } });
+
   const ts = await j('/api/tunnels/stats?hours=24');
   ok('出口流量：返回每个出口一行', ts.status === 200 && Array.isArray(ts.d.tunnels) && ts.d.tunnels.length > 0, String((ts.d.tunnels || []).length));
   ok('出口流量：字段齐全', (ts.d.tunnels || []).every((t) => 'id' in t && 'count' in t && 'err5' in t && 'p95' in t && 'host' in t), '');

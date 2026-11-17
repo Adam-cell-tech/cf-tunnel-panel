@@ -244,6 +244,9 @@
   <div id="sec-code" class="card">
     <div class="hd"><h2>配置即代码</h2><div class="sub">状态 <span class="mono">state.json</span> 投影成一份声明式 JSON：导出、改、预览差异、整份应用</div></div>
     <div class="bd stack">
+      <div class="field"><label>Prometheus 地址（监控页用）</label><input id="monProm" placeholder="http://127.0.0.1:9090" />
+        <div class="sub">面板会替你查 targets 与告警；留空 = 不查。<span class="mono">tools/monitoring</span> 里有一键起一套的 compose。</div></div>
+
       <div class="row">
         <button class="sm" id="btnCfgLoad">载入当前声明</button>
         <button class="sm ghost" id="btnCfgDry">预览差异</button>

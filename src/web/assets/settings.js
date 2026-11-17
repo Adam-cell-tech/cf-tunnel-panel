@@ -143,6 +143,11 @@ const NOTIFY_FMT = {
   },
 };
 
+function fillMonitoring() {
+  const mon = (ST.state.settings || {}).monitoring || {};
+  if ($('#monProm')) $('#monProm').value = mon.promUrl || '';
+}
+
 function fillGrafana() {
   const g = (ST && ST.state && ST.state.settings && ST.state.settings.grafana) || {};
   const set = (id, v) => { const el = $(id); if (el) el.value = v == null ? '' : String(v); };
@@ -261,6 +266,7 @@ function fill() {
   $('#panelUser').value = (ST.state.panel && ST.state.panel.user) || '';
   $('#verTag').textContent = '版本 ' + (ST.version || '—');
   fillNotifyChannels();
+  fillMonitoring();
   fillGrafana();
 }
 

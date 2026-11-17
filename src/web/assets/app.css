@@ -301,7 +301,6 @@ pre.log .l-system{color:#a0a8b4}
   .topbar{flex-direction:column;align-items:flex-start;gap:10px}
   .topbar .tools{width:100%;flex-wrap:wrap}
   .form-grid{grid-template-columns:1fr}
-  .chart{height:96px}
   .pal-wrap{padding-top:6vh}
 }
 

@@ -27,6 +27,12 @@ Prometheus already scrapes both blue/green slots, and Grafana auto-imports the d
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
 
+## What's new in v0.25.0
+
+- **New "Monitor" page (`/monitor`)** — Prometheus readiness, scrape targets (up/down + last scrape + last error), firing/pending alerts, and three embedded Grafana panels, all refreshing every 30s. Backed by `GET /api/monitor/status`; the Prometheus URL lives in Settings → *Monitoring*.
+- **`PanelDown` no longer fires forever** — it used `up{job="cf-tunnel-panel"} == 0`, and blue/green always has one slot stopped. Now `sum(up{job="cf-tunnel-panel"}) == 0`.
+- Alert summaries print `1` instead of `1.0132312312312313` (`printf "%.0f"`), and the YAML quoting that silently prevented Prometheus from starting is fixed (validated with `promtool check rules`).
+
 ## What's new in v0.24.0
 
 - **Multiple notification channels.** `settings.notify.channels[]` (up to 8), each with its own `name / format / url / secret / enabled`. Every notification is delivered to all enabled channels; the settings page shows a channel table where each row can be tested, disabled or removed on its own, and `POST /api/notify/test {channelId}` targets a single one. Legacy `notify.url/format/secret` is still read as a virtual "default" channel, so old configs keep working without migration.

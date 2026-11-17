@@ -22,7 +22,7 @@ groups:
     rules:
       # ---------------------------------------------------------------- 可用性
       - alert: PanelDown
-        expr: up{job="cf-tunnel-panel"} == 0
+        expr: sum(up{job="cf-tunnel-panel"}) == 0
         for: 3m
         labels:
           severity: critical
@@ -129,12 +129,12 @@ groups:
             必要时开 TOTP、收紧口令、或在 Cloudflare 侧加 WAF 规则/速率限制。
 
       - alert: NotifyFailing
-        expr: increase(cf_notify_total{status="fail"}[30m]) > 0
+        expr: sum(increase(cf_notify_total{status="fail"}[30m])) > 2
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "有 {{ $value }} 条通知发送失败"
+          summary: '最近 30 分钟通知持续发送失败（超过 2 条）'
           description: |
             设置页「通知发送记录」里能看到失败原因（HTTP 码/超时/地址校验）。
             注意钉钉/飞书开了「加签」时密钥也要填对，否则会被判为失败。
