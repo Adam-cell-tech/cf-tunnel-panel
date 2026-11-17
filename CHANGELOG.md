@@ -2,6 +2,12 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.29.5
+
+- 新增 `tools/release.sh`：一条命令完成发版 —— 升 `package.json` 版本 → 把 Release 说明插进 `CHANGELOG.md` 顶部 → 提交 → 打 `vX.Y.Z` tag → push；加 `--build` 还会构建镜像、打 tag、跑滚动升级，并校验 `/healthz` 的 `version` 与 `drift:false`。
+- 脚本是幂等可试的：`--dry` 只打印计划不写文件，`--no-push` 只本地提交打 tag，`--force` 允许脏工作区/同版本；版本号格式与已存在 tag 都有校验。
+- README（英/中）的「Releases 与预构建镜像」小节改成先介绍脚本，再给手工三步的备用做法。
+
 ## v0.29.4
 
 - **GitHub Releases 打通**：以前只在 `package.json` 里升版本、从没打过 git tag，而且 `.github/workflows/release.yml` 只推 ghcr 镜像、没有创建 Release 的步骤 —— 所以 Releases 页面一直是空的。现在 push 一个 `v*` tag 就会自动：构建 amd64+arm64 镜像 → 推 ghcr → 用 `CHANGELOG.md` 中该版本那一段作为 Release 说明创建 Release（预发布版自动标 prerelease）。
