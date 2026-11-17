@@ -538,7 +538,7 @@ document.addEventListener('DOMContentLoaded', () => {
   } else {
     refresh();
   }
-  setInterval(() => refresh(false), 5000);
+  cfpEvery(5000, () => refresh(false));
 });
 
 })();

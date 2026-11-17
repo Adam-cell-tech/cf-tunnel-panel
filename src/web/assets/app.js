@@ -324,7 +324,13 @@ function initLang() {
     });
     mo.observe(document.body, { childList: true, subtree: true });
   }
-  setInterval(() => translateTree(document), 2500);
+  // 兜底整树扫描：MutationObserver 已经覆盖「新节点/文本改动」，
+  // 这里只在页面启动后补 24 次（约 60 秒），之后停掉 —— 别让它 2.5 秒一次扫到天荒地老。
+  let left = 24;
+  const safety = setInterval(() => {
+    translateTree(document);
+    if (--left <= 0) clearInterval(safety);
+  }, 2500);
 }
 
 function initTheme() {
@@ -506,15 +512,56 @@ function tunnelUrl(t, d = window.ST) {
 }
 function caddyOk(d = window.ST) { return !!(d && d.runtime && d.runtime.caddy && d.runtime.caddy.ok); }
 
+/* ---------------- 轮询工具 ---------------- */
+/**
+ * 页面不可见时彻底停表：定时器在后台照样跑，手机锁屏、切到别的标签页时
+ * 每 5 秒拉一次 /api/state、重画三张图，纯属白耗流量和电。
+ * 回到前台立刻补跑一次，用户不会看到过期数据。
+ */
+function cfpEvery(ms, fn) {
+  let timer = null;
+  const run = () => {
+    if (document.hidden) return;
+    try {
+      const r = fn();
+      if (r && typeof r.catch === 'function') r.catch(() => {});
+    } catch { /* 单次失败不该拖垮整条轮询链 */ }
+  };
+  const start = () => { if (timer === null) timer = setInterval(run, ms); };
+  const stop = () => { if (timer !== null) { clearInterval(timer); timer = null; } };
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) stop();
+    else { start(); run(); }
+  });
+  start();
+  return { stop, start, run };
+}
+window.cfpEvery = cfpEvery;
+
 /* ---------------- 日志流 ---------------- */
+/**
+ * 日志流（SSE）。页面切到后台就断开、回到前台重连：
+ * SSE 连接即使在后台也会被服务端持续推送，手机流量伤不起；反正回到前台会补拉一次最近的日志。
+ */
 function openLogStream(onLine) {
-  try {
-    const es = new EventSource('/api/logs/stream');
-    es.onmessage = (ev) => {
-      try { onLine(JSON.parse(ev.data)); } catch { /* 忽略坏帧 */ }
-    };
-    return es;
-  } catch { return null; }
+  let es = null;
+  const open = () => {
+    if (es) return;
+    try {
+      es = new EventSource('/api/logs/stream');
+      es.onmessage = (ev) => {
+        try { onLine(JSON.parse(ev.data)); } catch { /* 忽略坏帧 */ }
+      };
+      es.onerror = () => { /* 浏览器自己会重连；断网/休眠时靠可见性事件再拉一次 */ };
+    } catch { es = null; }
+  };
+  const close = () => { if (es) { try { es.close(); } catch { /* 已经关了 */ } es = null; } };
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) close();
+    else { open(); }
+  });
+  open();
+  return { close, reopen: open };
 }
 
 /* ---------------- 顶部健康指示 ---------------- */
@@ -576,5 +623,5 @@ document.addEventListener('DOMContentLoaded', () => {
   if (y) y.textContent = new Date().getFullYear();
   // 侧栏健康指示：每页都刷一次，失败静默
   loadState().then((d) => { paintHealth(d); markRoleHint(); }).catch(() => {});
-  setInterval(() => { loadState(true).then(paintHealth).catch(() => {}); }, 15000);
+  cfpEvery(15000, () => loadState(true).then(paintHealth));
 });

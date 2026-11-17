@@ -568,3 +568,11 @@ pre.log .lv-inf .dot{background:var(--acc)}
   .card > .hd .right > .btn,
   .card > .hd .right > button { flex: 0 0 auto; }
 }
+
+/* ---- 窄屏顶栏：☀️ / ⌘K / EN / 退出 这几个只有 26px 高，手指点不准 ---- */
+@media (max-width: 720px) {
+  .topbar .tools > .sm,
+  .topbar .tools > button,
+  .topbar .tools > a { min-height: 34px; padding: 0 10px; }
+  .side-tools > .sm { min-height: 34px; min-width: 38px; }
+}

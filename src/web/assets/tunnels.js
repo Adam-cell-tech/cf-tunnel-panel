@@ -345,9 +345,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   refresh();
   focusExit();
-  setInterval(() => refresh(false), 5000);
+  cfpEvery(5000, () => refresh(false));
   loadExitStats();
-  setInterval(() => { if (!document.hidden) loadExitStats(); }, 30000);
+  cfpEvery(30000, () => loadExitStats());
   if ($('#btnExitStats')) $('#btnExitStats').addEventListener('click', () => loadExitStats().catch((e) => toast(e.message, 'err')));
   if ($('#exitStatsHours')) $('#exitStatsHours').addEventListener('change', () => loadExitStats().catch((e) => toast(e.message, 'err')));
 });

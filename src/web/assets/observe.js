@@ -344,15 +344,14 @@ document.addEventListener('click', async (e) => {
     auditTimer = setTimeout(() => { auditPage = 1; loadAudit().catch(() => {}); }, 300);
   });
   openLogStream(appendLog);
-  setInterval(() => {
+  cfpEvery(8000, () => {
     if (!$('#accessAuto').checked) return;
-    if (document.hidden) return;                                  // 页面在后台就别刷了
     const a = document.activeElement;
     if (a && a.closest && a.closest('#accessBody')) return;        // 光标在表里（点分页/选文字）
     const sel = window.getSelection && window.getSelection();
     if (sel && String(sel).length) return;                         // 正在复制某行数据，别把它抢走
     loadAccess();
-  }, 8000);
+  });
 });
 
 })();

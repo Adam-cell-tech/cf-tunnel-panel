@@ -151,6 +151,6 @@ async function load() {
         await load();
       } catch (err) { toast(err.message, 'err'); }
     });
-    setInterval(() => { if (!document.hidden) load().catch(() => {}); }, 30000);
+    cfpEvery(30000, () => load());
   });
 })();

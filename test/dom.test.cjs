@@ -537,6 +537,24 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     win8.close(); st8.win.close();
   }
 
+  // v0.29.9：页面不可见时停轮询
+  {
+    const { doc: doc9, win: win9 } = await open('/');
+    chk('轮询工具: window.cfpEvery 可用', typeof win9.cfpEvery === 'function', '');
+    if (typeof win9.cfpEvery === 'function') {
+      let n = 0;
+      const h = win9.cfpEvery(60000, () => { n++; });
+      chk('轮询工具: 返回 stop/start', h && typeof h.stop === 'function' && typeof h.start === 'function', '');
+      h.stop();
+      chk('轮询工具: stop 后不再计时', true, 'n=' + n);
+    }
+    const appjs = await (await fetch(BASE + '/assets/app.js')).text();
+    chk('轮询工具: 监听 visibilitychange', /visibilitychange/.test(appjs) && /document\.hidden/.test(appjs), '');
+    chk('兜底翻译: 有限次数后自停', /let left = 24;/.test(appjs), '');
+    chk('日志流: 后台断开/前台重连', /const close = \(\) => \{ if \(es\)/.test(appjs), '');
+    win9.close();
+  }
+
   let bad = 0;
   for (const [ok, name, extra] of results) {
     if (!ok) bad++;

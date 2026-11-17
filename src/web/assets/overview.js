@@ -510,6 +510,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const ph = $('#pathHours');
   if (ph) ph.addEventListener('change', paintCharts);
   refresh();
-  setInterval(refresh, 5000);
+  cfpEvery(5000, refresh);
   openLogStream(appendLog);
 });

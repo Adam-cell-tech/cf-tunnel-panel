@@ -485,7 +485,7 @@ async function runBench() {
     $('#cfToken').placeholder = cf.hasToken ? '已保存（留空不改）' : '粘贴 Cloudflare API Token';
   }).catch(() => {});
   $('#btnBenchAll').addEventListener('click', runBench);
-  setInterval(() => { if (!document.hidden) loadShares(); }, 20000);
+  cfpEvery(20000, () => loadShares());
 });
 
 })();
