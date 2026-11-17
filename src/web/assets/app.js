@@ -191,7 +191,6 @@ const NUMPAT = [
   [/^版本 (.+)$/, 'version $1'],
   [/^(.+?)（Caddy 侧 (\d+)MB × (\d+) 份自动轮转）$/, '$1 (Caddy side rotates ${2}MB × ${3})'],
   [/^(.+?) · (\d+) →$/, '$1 · $2 →'],
-  [/^代码已更新（指纹 (.+?) → (.+?)），上次预热是 (.+?)。资源 URL 变了，建议$/, 'Code updated ($1 → $2); last warm-up $3. Asset URLs changed, recommended:'],
 ];
 
 // 词组级兜底：只替换单位词，尽量不破坏语法

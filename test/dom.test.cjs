@@ -438,6 +438,36 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     dom.window.close();
   }
   {
+    const { dom, doc, win } = await open('/', 2500);
+    // v0.29.7 三条界面反馈
+    const bar = doc.querySelector('#warmBar');
+    const grid = doc.querySelector('.content .grid4');
+    chk('总览: 预热横幅在页面顶部（统计卡之前）',
+      !!bar && !!grid && (bar.compareDocumentPosition(grid) & win.Node.DOCUMENT_POSITION_FOLLOWING) > 0,
+      bar && grid ? 'ok' : '缺元素');
+    chk('总览: 横幅可关闭（有 × 按钮位）', !!bar && /banner|hidden/.test(bar.className), bar ? bar.className : '');
+    const auditCard = doc.querySelector('#auditBox') && doc.querySelector('#auditBox').closest('.card');
+    const auditHead = auditCard && auditCard.querySelector('.hd');
+    chk('总览: 变更趋势摘要不在标题行', !!auditHead && !/次改动/.test(auditHead.textContent || ''), auditHead ? auditHead.textContent.trim().slice(0, 30) : '');
+    chk('总览: 三张图表的摘要都渲染在图下方',
+      ['#trendBox', '#histBox', '#auditBox'].every((sel) => {
+        const box = doc.querySelector(sel);
+        if (!box) return true;
+        const sum = box.querySelector('.chart-sum');
+        if (!sum) return /empty/.test(box.className) || box.innerHTML.includes('empty');
+        const svg = box.querySelector('svg');
+        return !svg || (svg.compareDocumentPosition(sum) & win.Node.DOCUMENT_POSITION_FOLLOWING) > 0;
+      }), '');
+    const gf = doc.querySelector('#grafanaCard iframe');
+    if (gf) {
+      const t = (doc.documentElement.getAttribute('data-theme') === 'light') ? 'light' : 'dark';
+      chk('Grafana: 嵌入 URL 主题跟随页面', new RegExp('theme=' + t).test(gf.getAttribute('src') || '') || new RegExp('theme=(light|dark)').test(gf.getAttribute('src') || ''),
+        (gf.getAttribute('src') || '').slice(0, 90));
+    }
+    dom.window.close();
+  }
+
+  {
     const { dom, doc } = await open('/', 2500);
     chk('Grafana: 首页有图表面板卡', !!doc.querySelector('#grafanaCard'), '');
     const frame = doc.querySelector('#grafanaCard .gframe');

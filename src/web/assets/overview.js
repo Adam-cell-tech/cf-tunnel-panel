@@ -241,25 +241,43 @@ function drawPaths(groups, hours, unmatched) {
     <div class="chart-note">最近 ${hours} 小时；另有 <b>${(unmatched && unmatched.total) || 0}</b> 次没命中任何规则（健康检查、未知路径）${(unmatched && unmatched.err) ? `，其中 5xx <b>${unmatched.err}</b> 次` : ''}</div>`;
 }
 
-// 部署提醒：容器里跑的代码指纹变了、但还没预过热 → 提示去点一下
+// 部署提醒（页面顶部横幅）：三种状态 —— 没预热过 / 预热的是旧版本 / 正常（隐藏）。
+// 注意：预热接口存的是 8 位短指纹（ident.buildInfo().code.slice(0,8)），
+// 这里必须同样截 8 位比较，否则「旧 vs 新」永远不相等，横幅永远关不掉。
+const WARM_DKEY = 'cfp-warm-dismissed';
+const shortCode = (x) => String(x || '').slice(0, 8);
+
 async function paintWarmHint(d) {
   const bar = $('#warmBar');
   if (!bar) return;
   let code = '';
-  try { code = ((await api('/healthz')) || {}).code || ''; } catch { return; }
+  try { code = String(((await api('/healthz')) || {}).code || ''); } catch { return; }
   const w = (d && d.state && d.state.warm) || null;
+  const cur = shortCode(code);
+  bar.dataset.code = cur;
+
+  const show = (html) => {
+    bar.className = 'hint warn banner';
+    bar.innerHTML = `<span class="bico" aria-hidden="true">!</span><div class="msg">${html}</div>`
+      + '<button class="bx" type="button" data-close aria-label="关闭这条提示" title="关闭">×</button>';
+  };
+  const hide = () => { bar.className = 'hint warn hidden'; bar.innerHTML = ''; };
+
   if (!w) {
-    bar.className = 'hint warn';
-    bar.innerHTML = `还没有预过热：点 <a href="/tools">工具箱 → 预热缓存</a>，把关键资源在边缘拉一遍，首个访客就不用等冷启动。`;
+    show('边缘缓存还没预热过，第一个访客要等资源从源站拉一遍。点'
+      + ' <a href="/tools">工具箱 → 预热缓存</a> 先跑一次就好。');
     return;
   }
-  if (w.code && code && w.code !== code) {
-    bar.className = 'hint warn';
-    bar.innerHTML = `代码已更新（指纹 ${esc(String(w.code))} → ${esc(code)}），上次预热是 ${fmtTime(w.at)}。资源 URL 变了，建议 <a href="/tools">重新预热</a>。`;
+  if (shortCode(w.code) && cur && shortCode(w.code) !== cur) {
+    let dismissed = '';
+    try { dismissed = localStorage.getItem(WARM_DKEY) || ''; } catch { dismissed = ''; }
+    if (dismissed === cur) { hide(); return; }
+    show(`面板换过版本（<code>${esc(shortCode(w.code))}</code> → <code>${esc(cur)}</code>），`
+      + '边缘缓存里还是上一版的资源，首个访客会慢一点。点'
+      + ' <a href="/tools">重新预热</a> 把新资源准备好（十几秒）。');
     return;
   }
-  bar.className = 'hint warn hidden';
-  bar.textContent = '';
+  hide();
 }
 
 async function paintCharts() {
@@ -387,7 +405,7 @@ function loadGFrame(el, g, getPanel) {
     if (el.dataset.state === 'done') return;
     el.dataset.state = ok ? 'done' : 'error';
     if (!ok) {
-      el.innerHTML = '<div class="gfail"><b>这块图没加载出来</b><span>可能是 Grafana 没启动、被浏览器拦了混合内容，或网络断了。</span>'
+      el.innerHTML = '<div class="gfail"><b>这块图没加载出来</b><span>等了 50 秒还没出来。可能是 Grafana 没启动、被浏览器拦了混合内容，或这条隧道太慢（经 Cloudflare 首次加载常要 40 秒以上）。</span>'
         + '<button class="btn mini" type="button" data-retry="1">重试</button>'
         + `<a class="sm" href="${esc(url.replace(/&_=\d+$/, ''))}" target="_blank" rel="noopener">在新窗口打开 →</a></div>`;
       el.querySelector('[data-retry]').addEventListener('click', () => loadGFrame(el, g, getPanel));
@@ -402,11 +420,15 @@ function loadGFrame(el, g, getPanel) {
   f.addEventListener('error', () => done(false));
   // 第一次经 Cloudflare 隧道加载 Grafana 会比较慢（几十个 bundle，每个都要过一次隧道），
   // 8 秒后先给个"还在加载"的安抚，25 秒才判定失败。
-  setTimeout(() => {
+  // 实测：经 Cloudflare 隧道第一次打开 d-solo 面板要 40 秒左右（几十个 bundle 各自走一遍隧道），
+  // 所以 8s / 30s 只换安抚文案，50s 才判定失败 —— 判定太早会把"慢"误报成"坏"，用户点重试也还是慢。
+  const hint = (ms, text) => setTimeout(() => {
     const sk = el.querySelector('.gskel span');
-    if (sk && el.dataset.state === 'loading') sk.textContent = '还在加载 Grafana（第一次会慢一些）…';
-  }, 8000);
-  setTimeout(() => { if (el.dataset.state !== 'done') done(false); }, 25000);
+    if (sk && el.dataset.state === 'loading') sk.textContent = text;
+  }, ms);
+  hint(8000, '正在连接 Grafana…（第一次会慢一些）');
+  hint(30000, '还在等 Grafana，经隧道首次加载通常要 40 秒左右…');
+  setTimeout(() => { if (el.dataset.state !== 'done') done(false); }, 50000);
   el.appendChild(f);
 }
 
@@ -436,6 +458,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!collapsed) logEl.scrollTop = logEl.scrollHeight;
   });
   $('#btnRefresh').addEventListener('click', refresh);
+  const wb = $('#warmBar');
+  if (wb) wb.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-close]')) return;
+    try { localStorage.setItem(WARM_DKEY, wb.dataset.code || ''); } catch {}
+    wb.className = 'hint warn hidden';
+    wb.innerHTML = '';
+  });
   $('#trendHours').addEventListener('change', paintCharts);
   const ah = $('#auditHours');
   if (ah) ah.addEventListener('change', paintCharts);

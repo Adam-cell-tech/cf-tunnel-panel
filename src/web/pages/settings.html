@@ -220,7 +220,8 @@
         <label class="field"><span>仪表盘 uid/slug</span>
           <input id="grafDash" placeholder="cfp-main/cf-tunnel-panel" /></label>
         <label class="field"><span>主题</span>
-          <select id="grafTheme"><option value="">跟随面板</option><option value="dark">深色</option><option value="light">浅色</option></select></label>
+          <select id="grafTheme"><option value="">跟随面板（推荐）</option><option value="dark">固定深色</option><option value="light">固定浅色</option></select>
+          <span class="hint">「跟随面板」会按当前页面主题给嵌入图传 <code>theme=</code>，浅色页面里就不会出现一整块黑底。</span></label>
       </div>
       <div class="sub" style="margin:12px 0 6px">要显示的图（panelId 在 Grafana 里「查看 → Inspect → Panel JSON」的 id 字段；最多 3 个）</div>
       <div class="form-grid">

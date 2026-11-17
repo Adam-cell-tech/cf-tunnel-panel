@@ -513,3 +513,26 @@ pre.log .lv-inf .dot{background:var(--acc)}
 .side-tools{display:flex;gap:6px;padding:0 12px 10px}
 .side-tools .btn{flex:0 0 auto}
 @media (max-width:900px){.side-tools{padding:0 12px}}
+
+/* ---- v0.29.7：顶部可关闭横幅 + 图表卡摘要对齐 + Grafana 边界 ---- */
+/* 页面级横幅：以前夹在两张卡中间、文案又全是内部术语，容易被当成报错 */
+.hint.banner{display:flex;gap:10px;align-items:flex-start;padding:11px 12px;line-height:1.6;
+  border-left:3px solid var(--warn);border-radius:10px}
+.hint.banner .bico{flex:0 0 18px;width:18px;height:18px;border-radius:50%;margin-top:2px;
+  background:var(--warn);color:#fff;font-size:12px;font-weight:700;line-height:18px;text-align:center}
+.hint.banner .msg{flex:1 1 auto;min-width:0}
+.hint.banner .msg code{font-size:11.5px;padding:1px 5px;border-radius:4px;
+  background:var(--panel);border:1px solid var(--line);font-variant-numeric:tabular-nums}
+.hint.banner .bx{flex:0 0 auto;background:none;border:0;cursor:pointer;color:var(--dim);
+  font-size:16px;line-height:1;padding:3px 7px;border-radius:6px}
+.hint.banner .bx:hover{color:var(--fg);background:var(--panel)}
+
+/* 三张图表卡：卡片高度跟着内容走，摘要就容易一行高一行低 → 让摘要统一贴底 */
+.grid3 > .card{display:flex;flex-direction:column}
+.grid3 > .card > .bd{display:flex;flex-direction:column;flex:1 1 auto;min-width:0}
+.grid3 > .card .chart{flex:1 1 auto;min-height:110px}
+.grid3 > .card .chart-sum{margin-top:auto;padding-top:8px}
+
+/* Grafana 嵌入框：深色调的图嵌在浅色页面里要能看出边界，否则像加载失败 */
+.gframe{border:1px solid var(--line);box-shadow:0 1px 2px rgba(16,24,40,.06)}
+[data-theme="light"] .gframe{background:#fff}

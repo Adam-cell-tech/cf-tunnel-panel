@@ -973,6 +973,24 @@ const EN_PAGES = {
   "创建并启动": "Create & start",
 };
 
+// v0.29.7：顶部横幅改成大白话 + 可关闭
+const EN_V0297 = {
+  '边缘缓存还没预热过，第一个访客要等资源从源站拉一遍。点':
+    'The edge cache has never been warmed, so the first visitor waits for assets from origin. Click',
+  ' 先跑一次就好。': ' once and it is done.',
+  '面板换过版本（': 'The panel was upgraded (',
+  '），边缘缓存里还是上一版的资源，首个访客会慢一点。点':
+    '); the edge cache still holds the previous version, so the first visitor is slower. Click',
+  ' 重新预热': ' Re-warm',
+  ' 把新资源准备好（十几秒）。': ' to prepare the new assets (~15s).',
+  '关闭这条提示': 'Dismiss this notice',
+  '关闭': 'Dismiss',
+  '跟随面板（推荐）': 'Follow panel (recommended)',
+  '固定深色': 'Always dark',
+  '固定浅色': 'Always light',
+};
+Object.assign(EN, EN_V0297);
+
 Object.assign(EN, EN_PAGES);
 
 function langOf(req) {
