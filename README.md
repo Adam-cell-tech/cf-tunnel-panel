@@ -150,6 +150,24 @@ Gotcha worth knowing: Alertmanager 0.28 rejects `http_config.headers` (`field he
 
 ---
 
+## Releases and prebuilt images
+
+Every tagged version publishes a [GitHub Release](https://github.com/jianghugs/cf-tunnel-panel/releases)
+and a multi-arch image (`linux/amd64`, `linux/arm64`) to `ghcr.io`:
+
+```bash
+docker pull ghcr.io/jianghugs/cf-tunnel-panel:0.29.4     # exact version
+docker pull ghcr.io/jianghugs/cf-tunnel-panel:0.29       # latest 0.29.x
+docker pull ghcr.io/jianghugs/cf-tunnel-panel:latest     # newest
+```
+
+Release notes come straight from the matching section of `CHANGELOG.md`.
+
+**Cutting a release** (maintainers): bump `package.json`, add a `## vX.Y.Z` section to
+`CHANGELOG.md`, commit, then `git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z`.
+The `release` workflow does the rest — no manual image push. Tags containing `-`
+(e.g. `v0.30.0-rc.1`) are published as pre-releases.
+
 ## Table of contents
 
 1. [What it actually does](#1-what-it-actually-does)

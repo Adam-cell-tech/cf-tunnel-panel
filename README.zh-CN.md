@@ -21,6 +21,24 @@
 - 手机端修复整页横向溢出（`grid-template-columns:1fr` 的隐式 min-width 坑）；主题/语言/命令面板移到侧栏顶部。
 
 
+## Releases 与预构建镜像
+
+每个打了 tag 的版本都会自动发布一个 [GitHub Release](https://github.com/jianghugs/cf-tunnel-panel/releases)，
+并把多架构镜像（`linux/amd64` + `linux/arm64`）推到 `ghcr.io`：
+
+```bash
+docker pull ghcr.io/jianghugs/cf-tunnel-panel:0.29.4     # 指定版本
+docker pull ghcr.io/jianghugs/cf-tunnel-panel:0.29       # 0.29 系列最新
+docker pull ghcr.io/jianghugs/cf-tunnel-panel:latest     # 最新
+```
+
+Release 说明直接取自 `CHANGELOG.md` 里对应版本的那一段。
+
+**怎么发一个版本**（维护者）：改 `package.json` 的版本号 → 在 `CHANGELOG.md` 加 `## vX.Y.Z` 段 →
+提交 → `git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z`。剩下的 `release` workflow 会自动做
+（构建双架构镜像、推 ghcr、创建 Release），不需要手工推镜像。tag 里带 `-`（如 `v0.30.0-rc.1`）
+会被标成 prerelease。
+
 ## 目录
 
 1. [它到底做了什么](#1-它到底做了什么)

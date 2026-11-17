@@ -2,6 +2,11 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.29.4
+
+- **GitHub Releases 打通**：以前只在 `package.json` 里升版本、从没打过 git tag，而且 `.github/workflows/release.yml` 只推 ghcr 镜像、没有创建 Release 的步骤 —— 所以 Releases 页面一直是空的。现在 push 一个 `v*` tag 就会自动：构建 amd64+arm64 镜像 → 推 ghcr → 用 `CHANGELOG.md` 中该版本那一段作为 Release 说明创建 Release（预发布版自动标 prerelease）。
+- **镜像 tag 对齐**：`docker/metadata-action` 补上 `type=semver` 规则，同一次发布同时产出 `v0.29.4`、`0.29.4`、`0.29`、`latest` 四种 tag（之前只有 `v0.29.3` 和 `latest`，Release 正文里写的 `:0.29.3` 会 404）。
+
 ## v0.29.3
 
 - 仓库迁到 `github.com/jianghugs/cf-tunnel-panel`：README 克隆地址、登录页页脚链接、LICENSE 版权署名同步更新。
