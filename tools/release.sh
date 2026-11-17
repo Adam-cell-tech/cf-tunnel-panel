@@ -116,13 +116,27 @@ if [ "$DO_BUILD" -eq 1 ]; then
   MOUNT_SRC=0 bash tools/rolling-upgrade.sh --apply
   echo
   echo "--- /healthz ---"
-  curl -fsS "http://127.0.0.1:$PANEL_PORT/healthz" | python3 -c '
-import json,sys
-d=json.load(sys.stdin)
-print({k:d.get(k) for k in ("version","mode","code","imageCode","drift")})
-assert d.get("version")=="'"$VERSION"'", "版本号不符："+str(d.get("version"))
-assert d.get("drift") is False, "drift 为 true：镜像与运行代码不一致"
-' && echo "✅ 部署校验通过"
+  # 滚动升级会把 leader 换到另一色，端口可能是 8090 也可能是 8095 → 两个都探，取有响应的那个
+  LIVE=""; RESP=""
+  for cand in "$PANEL_PORT" 8090 8095; do
+    if out="$(curl -fsS --max-time 4 "http://127.0.0.1:$cand/healthz" 2>/dev/null)" && [ -n "$out" ]; then
+      LIVE="$cand"; RESP="$out"; break
+    fi
+  done
+  [ -n "$LIVE" ] || die "滚动升级后没有任何实例在 /healthz 上响应（8080/8090/8095 都试过了）"
+  printf '%s' "$RESP" | VERSION="$VERSION" LIVE="$LIVE" python3 -c '
+import json, os, sys
+d = json.load(sys.stdin)
+print("端口", os.environ["LIVE"], {k: d.get(k) for k in ("version", "mode", "code", "imageCode", "drift")})
+ver, want = d.get("version"), os.environ["VERSION"]
+if ver != want:
+    sys.exit("版本号不符：期望 %s，实际 %s" % (want, ver))
+if d.get("mode") != "leader":
+    sys.exit("新实例没有接管（mode=%s）" % d.get("mode"))
+if d.get("drift") is not False:
+    sys.exit("drift 为 true：镜像内代码与运行代码不一致")
+' || die "部署校验失败（见上一行原因）"
+  echo "✅ 部署校验通过"
 fi
 
 step "完成"
