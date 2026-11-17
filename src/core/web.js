@@ -80,7 +80,6 @@ function loginPage({ next = '/', error = '', lang = 'zh' } = {}) {
   const title = (state.settings && state.settings.panelTitle) || 'Cloudflare 隧道面板';
   const safeNext = String(next || '/').startsWith('/') ? String(next || '/') : '/';
   const t = (k) => i18n.t(lang, k);
-  const other = lang === 'en' ? 'zh' : 'en';
   return `<!doctype html>
 <html lang="${lang === 'en' ? 'en' : 'zh-CN'}" data-theme="dark">
 <head>
@@ -111,28 +110,36 @@ function loginPage({ next = '/', error = '', lang = 'zh' } = {}) {
       <button class="mini" type="button" id="btnTheme" title="${t('深浅色')}" aria-label="${t('深浅色')}">◐</button>
     </div>
     <h1>${t('登录面板')}</h1>
+    <p class="sub">${t('输入管理员账号登录')}</p>
     <form id="loginForm" autocomplete="on" data-next="${safeNext}">
-      <div class="field">
-        <label for="u">${t('用户名')}</label>
-        <input id="u" name="username" autocomplete="username" required autofocus>
-      </div>
-      <div class="field">
-        <label for="p">${t('密码')}</label>
-        <div class="pwd">
-          <input id="p" name="password" type="password" autocomplete="current-password" required>
-          <button class="eye" type="button" id="btnReveal" aria-label="${t('显示密码')}" title="${t('显示密码')}">👁</button>
+      <div class="cred">
+        <div class="field" id="uField">
+          <label for="u">${t('用户名')}</label>
+          <input id="u" name="username" autocomplete="username" required autofocus aria-describedby="uErr">
+          <p class="fmsg hidden" id="uErr" role="alert"></p>
         </div>
+        <div class="field" id="pField">
+          <label for="p">${t('密码')}</label>
+          <div class="pwd">
+            <input id="p" name="password" type="password" autocomplete="current-password" required aria-describedby="pErr">
+            <button class="eye" type="button" id="btnReveal" aria-label="${t('显示密码')}" title="${t('显示密码')}" aria-pressed="false">👁</button>
+          </div>
+          <p class="fmsg hidden" id="pErr" role="alert"></p>
+        </div>
+        <div class="field hidden" id="tWrap">
+          <label for="t">${t('二次验证码')}</label>
+          <input id="t" name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="9" aria-describedby="tHint">
+          <p class="fmsg faint" id="tHint">${t('验证器 App 里的 6 位数字，或恢复码（XXXX-XXXX）')}</p>
+        </div>
+        <label class="remember" for="rem">
+          <input class="chk" type="checkbox" id="rem" checked>
+          <span>${t('记住这台设备 30 天')}</span>
+        </label>
       </div>
-      <div class="field hidden" id="tWrap">
-        <label for="t">${t('二次验证码')}</label>
-        <input id="t" name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="9">
-        <div class="muted" style="font-size:12px;margin-top:4px">${t('输入验证器 App 里的 6 位数字；也可以用恢复码（XXXX-XXXX）')}</div>
-      </div>
-      <label class="inline login-rem"><input class="chk" type="checkbox" id="rem" checked> <span>${t('记住这台设备（30 天）')}</span></label>
-      <div class="hint err hidden" id="err">${error ? error : ''}</div>
-      <button class="primary" type="submit" style="width:100%;margin-top:6px">${t('登录')}</button>
+      <div class="hint err hidden" id="err" role="alert"></div>
+      <button class="primary login-submit" type="submit">${t('登录')}</button>
     </form>
-    <p class="tips">${t('登录后 7 天内免登录；在「设置 → 登录会话」里可以查看并踢掉其它设备。')}</p>
+    <p class="tips">${t('不勾选「记住这台设备」时，登录状态保留 7 天；随时可在「设置 → 登录会话」里查看并踢掉其它设备。')}</p>
   </main>
 </div>
 <script src="/boot.js?v=${ASSET_V}"></script>

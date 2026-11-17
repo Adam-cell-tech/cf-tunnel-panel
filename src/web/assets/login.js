@@ -10,6 +10,10 @@
   var p = document.getElementById('p');
   var tw = document.getElementById('tWrap');
   var tIn = document.getElementById('t');
+  var uField = document.getElementById('uField');
+  var pField = document.getElementById('pField');
+  var uErr = document.getElementById('uErr');
+  var pErr = document.getElementById('pErr');
   var submit = f.querySelector('button[type="submit"]');
   if (err.textContent) err.classList.remove('hidden');
 
@@ -51,6 +55,37 @@
     });
   }
 
+  /* 字段级错误：输入框红描边 + 下方 12px 红字，改输入就清掉 */
+  function setFieldError(field, box, msg) {
+    if (!field || !box) return;
+    if (msg) {
+      field.classList.add('bad');
+      box.textContent = msg;
+      box.classList.remove('hidden');
+      var inp = field.querySelector('input');
+      if (inp) inp.setAttribute('aria-invalid', 'true');
+    } else {
+      field.classList.remove('bad');
+      box.textContent = '';
+      box.classList.add('hidden');
+      var inp2 = field.querySelector('input');
+      if (inp2) inp2.removeAttribute('aria-invalid');
+    }
+  }
+  function clearErrors() {
+    setFieldError(uField, uErr, '');
+    setFieldError(pField, pErr, '');
+    err.classList.add('hidden');
+    err.textContent = '';
+  }
+  [u, p].forEach(function (el) {
+    if (!el) return;
+    el.addEventListener('input', function () {
+      if (el === u) setFieldError(uField, uErr, '');
+      if (el === p) setFieldError(pField, pErr, '');
+    });
+  });
+
   /* 进入二次验证那一步：锁住账号密码、把焦点给验证码 */
   function toTotp(challenge) {
     f.dataset.challenge = challenge || '';
@@ -59,37 +94,50 @@
     submit.textContent = t('下一步');
     u.readOnly = true;
     p.readOnly = true;
-    u.parentElement.classList.add('muted');
-    p.parentElement.classList.add('muted');
+    uField.classList.add('muted');
+    pField.classList.add('muted');
   }
 
   f.addEventListener('submit', async function (e) {
     e.preventDefault();
-    err.classList.add('hidden');
+    clearErrors();
     submit.disabled = true;
     var old = submit.textContent;
     var need = tw && !tw.classList.contains('hidden');
     submit.textContent = t('登录中…');
     try {
       var payload = need
-        ? { challenge: f.dataset.challenge, code: tIn.value, remember: rem.checked }
-        : { user: u.value, pass: p.value, remember: rem.checked };
+        ? { challenge: f.dataset.challenge, code: tIn.value, remember: rem && rem.checked }
+        : { user: u.value, pass: p.value, remember: rem && rem.checked };
       var r = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'cfp' },
         body: JSON.stringify(payload)
       });
       var d = await r.json().catch(function () { return {}; });
-      if (d && d.needTotp) { toTotp(d.challenge); submit.disabled = false; return; }
+      if (d && d.needTotp) { toTotp(d.challenge); submit.disabled = false; submit.textContent = t('下一步'); return; }
       if (r.ok && d.ok) { location.href = f.getAttribute('data-next') || '/'; return; }
-      err.textContent = d.error || t('登录失败');
-      err.classList.remove('hidden');
-      if (need) { tIn.select(); tIn.focus(); }
+      var msg = d.error || t('登录失败');
+      /* 账号/口令类错误落在对应字段上，其余（限流、网络）走整体提示 */
+      if (!need && r.status === 401) {
+        setFieldError(pField, pErr, msg);
+        p.focus(); p.select();
+      } else if (r.status === 429) {
+        err.textContent = msg;
+        err.classList.remove('hidden');
+      } else if (need) {
+        err.textContent = msg;
+        err.classList.remove('hidden');
+        tIn.select(); tIn.focus();
+      } else {
+        setFieldError(uField, uErr, msg);
+        u.focus();
+      }
     } catch (x) {
       err.textContent = t('网络错误：') + x.message;
       err.classList.remove('hidden');
     }
     submit.disabled = false;
-    submit.textContent = need ? t('下一步') : old;
+    if (submit.textContent === t('登录中…')) submit.textContent = need ? t('下一步') : old;
   });
 })();

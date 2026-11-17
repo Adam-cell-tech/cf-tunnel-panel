@@ -332,7 +332,17 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('登录页: 品牌区有三条卖点', doc.querySelectorAll('.login-hero .feat li').length === 3, String(doc.querySelectorAll('.login-hero .feat li').length));
     const uEl = doc.querySelector('#u'); const pEl = doc.querySelector('#p');
     chk('登录页: 用户名/密码没有预填占位值', !uEl.getAttribute('placeholder') && !pEl.getAttribute('placeholder') && !uEl.value && !pEl.value, '');
-    chk('登录页: 记住设备是 label 包 input（不再挤压布局）', !!doc.querySelector('label.login-rem > input#rem'), '');
+    chk('登录页: 记住设备是 label 包 input（不再挤压布局）', !!doc.querySelector('label.remember > input#rem'), '');
+    chk('登录页: 凭证区是一个分组卡片', !!doc.querySelector('form .cred') && doc.querySelectorAll('form .cred .field').length >= 2, String(doc.querySelectorAll('form .cred .field').length));
+    chk('登录页: 复选框有可见文本且用 for 绑定', (function () {
+      const lb = doc.querySelector('label.remember');
+      return !!lb && lb.getAttribute('for') === 'rem' && (lb.textContent || '').trim().length > 2;
+    })(), '');
+    chk('登录页: 提交按钮带焦点样式类', !!doc.querySelector('button.login-submit'), '');
+    chk('登录页: 记住设备的文字没有被裁（span 可收缩）', (function () {
+      const sp = doc.querySelector('.remember > span');
+      return !!sp && (sp.textContent || '').trim().length > 3;
+    })(), '');
     chk('登录页: 引用了 /boot.js', !!doc.querySelector('script[src^="/boot.js"]'), '');
     chk('登录页: 不出现侧边导航', !doc.querySelector('.side .nav'), '');
     chk('登录页: 无脚本错误', errors.length === 0, errors.join(' | ').slice(0, 160));

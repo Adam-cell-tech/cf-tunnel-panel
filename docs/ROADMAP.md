@@ -5,6 +5,20 @@
 
 ---
 
+## ✅ v0.28.3 — 登录页按 7 点评审重排
+
+| 评审项 | 原因 | 改法 |
+| --- | --- | --- |
+| 复选框文字被裁切 | 文字容器无 `min-width:0`/换行，被 `.login-wrap{overflow:hidden}` 切掉 | `.remember` flex + `min-width:0` + `overflow-wrap:anywhere`；长文案移到 `.tips` |
+| 垂直节奏不均 | 字段/复选框/按钮间距随意 | token `--sp-field:18px`、`--sp-group:24px`，逐段对齐 |
+| 表单缺视觉分组 | 各元素游离 | `.cred` 卡（浅底 + 边框 + 圆角 12px） |
+| 复选框原生样式 | 与圆角风格不搭 | `appearance:none` 18×18、圆角 5px、选中品牌色 + 白勾 |
+| 眼睛点击区小 | 触屏不好点 | 38×38，`@media (pointer:coarse)` 44×44 |
+| 右栏空旷 | 只有表单 | 加副标题与 `.tips` 帮助块 |
+| 无障碍缺失 | 复选框无绑定、无错误关联 | `<label for>`、`aria-describedby`、`role="alert"`、提交按钮 `focus-visible` 环 |
+
+实测：`/login` 200 / 3394 字节；DOM **148**（+4）、API **309**。
+
 ## ✅ v0.28.2 — 登录页细节修正
 
 | 项 | 原因 | 改法 |

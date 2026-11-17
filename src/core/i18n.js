@@ -778,6 +778,16 @@ const EN_LOGIN = {
 };
 Object.assign(EN, EN_LOGIN);
 
+// v0.28.3 登录页排版与错误态
+const EN_LOGIN2 = {
+  '输入管理员账号登录': 'Sign in with your admin account',
+  '记住这台设备 30 天': 'Remember this device for 30 days',
+  '验证器 App 里的 6 位数字，或恢复码（XXXX-XXXX）': '6 digits from your authenticator app, or a recovery code (XXXX-XXXX)',
+  '不勾选「记住这台设备」时，登录状态保留 7 天；随时可在「设置 → 登录会话」里查看并踢掉其它设备。':
+    'Without "remember this device" a session lasts 7 days. You can review and revoke other devices under Settings → Sessions at any time.',
+};
+Object.assign(EN, EN_LOGIN2);
+
 const EN_PAGES = {
   '加签密钥（可选）': 'Signing secret (optional)',
   '机器人安全设置里勾了「加签」才需要；只勾「自定义关键词」就留空': 'Only needed when the bot has signing enabled; leave empty if you use a keyword instead',

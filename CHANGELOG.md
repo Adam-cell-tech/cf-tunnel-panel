@@ -2,6 +2,23 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.28.3
+
+登录页按 7 点评审重排（同一批反馈里最要紧的是「复选框文字被裁切」）。
+
+### 修复
+- **复选框文字溢出**：根因是文字容器没有 `min-width:0` 与换行约束，长文案在 `.login-wrap{overflow:hidden}` 里被直接切掉。现在 `.remember` 是 `display:flex; align-items:flex-start; gap:9px; min-width:0`，文字 `flex:1 1 auto; min-width:0; overflow-wrap:anywhere`；长说明从复选框旁移到按钮下方的 `.tips`，复选框只留「记住这台设备 30 天」。
+
+### 改动
+- **凭证区成组**：用户名/密码/验证码/记住设备包进 `<div class="cred">`（浅色卡 + 1px 边框 + 圆角 12px），「输入区」和「操作区」有层次了。
+- **垂直节奏统一**：新增 spacing token `--sp-field:18px`、`--sp-group:24px`，字段之间 18px、凭证区与提交按钮之间 24px、按钮与帮助文字之间 12px。
+- **自定义勾选框**：`appearance:none`、18×18、圆角 5px，选中时品牌色底 + 伪元素白勾，`:focus-visible` 有描边。
+- **眼睛按钮**：38×38 桌面 / 44×44 触屏（`@media (pointer:coarse)`），hover 与 focus 对比度加强。
+- **右侧不再空旷**：表单上方加一句副标题「输入管理员账号登录」，底部帮助文字改成 `.tips` 样式（更低对比、带行高）。
+- **无障碍**：`<label for="rem">` 显式绑定、输入框 `aria-describedby` 指向错误元素、`#uErr/#pErr` 带 `role="alert"`、提交按钮 `:focus-visible` 双层描边。
+- **错误态**：401 落在密码字段（红描边 + 字段下 12px 红字 + `aria-invalid`），429 落在整体提示，输入即清。
+- 测试：DOM **148**（+4：`.cred` 分组、`label.remember[for=rem]`、`button.login-submit`、勾选框文案非空）、API **309**。
+
 ## v0.28.2
 
 登录页细节修正（按反馈改的）。

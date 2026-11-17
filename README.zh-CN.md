@@ -41,6 +41,16 @@ Prometheus 已经同时抓 blue/green 两个槽位，Grafana 会自动导入 `do
 并开好匿名只读 + `allow_embedding`，所以首页「监控面板」的三个字段可以直接填（细节见
 `tools/monitoring/README.md`）。
 
+### v0.28.3 更新
+
+登录页按 7 点评审重排（最要紧的是「复选框文字被裁切」）。
+
+- **溢出根因修掉**：文字容器缺 `min-width:0`/换行约束，长文案被 `.login-wrap{overflow:hidden}` 直接切掉。`.remember` 改为 `flex` + `min-width:0` + `overflow-wrap:anywhere`，长说明移到按钮下方 `.tips`，复选框只留「记住这台设备 30 天」。
+- **凭证区成组**：`.`cred` 卡包住用户名/密码/验证码/记住设备；间距 token `--sp-field:18px`、`--sp-group:24px`。
+- **自定义勾选框**（18×18、圆角 5px、选中品牌色 + 白勾、`focus-visible` 描边）、**眼睛按钮** 38px / 触屏 44px、表单上方加副标题。
+- **无障碍**：`<label for>` 显式绑定、`aria-describedby` + `role="alert"`、提交按钮 `focus-visible` 双层环；401 错误落在密码字段（红描边 + 12px 红字）。
+- 测试：DOM **148**、API **309**。
+
 ### v0.28.2 更新
 
 登录页去掉多余的东西：删掉「用面板账号登录…」那行说明；用户名/密码/验证码三个框不再有任何占位文字（原来分别是 `admin`、`••••••••`、`123456`）；修掉「记住这台设备」整行被压成 15px 高的错位（外层 `label` 误用了 `.chk`），字段与按钮之间补上呼吸空间。

@@ -27,6 +27,16 @@ Prometheus already scrapes both blue/green slots, and Grafana auto-imports the d
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
 
+## What's new in v0.28.3
+
+The login page, rebuilt around a seven-point review (the important one: **the checkbox label was being clipped**).
+
+- **Overflow fixed for real**: the text container had no `min-width:0` / wrapping constraint, so long copy got cut by `.login-wrap{overflow:hidden}`. `.remember` is now a proper flex row (`min-width:0`, `overflow-wrap:anywhere`) and the long explanation moved to `.tips` under the button — the checkbox keeps only "Remember this device for 30 days".
+- **Credentials grouped** into a `.cred` card (18px field gap, 24px before the submit button, spacing tokens `--sp-field` / `--sp-group`).
+- **Custom checkbox** (18×18, 5px radius, brand fill + white tick, `:focus-visible` ring), **eye button** 38px desktop / 44px on touch, **subtitle** above the form so the right column isn't empty.
+- **Accessibility**: explicit `<label for>`, `aria-describedby` + `role="alert"` on field errors, submit `:focus-visible` ring, and 401 errors rendered inline under the password field with a red border.
+- Tests: DOM **148**, API **309**.
+
 ## What's new in v0.28.2
 
 Sign-in page polish, mostly removing things that shouldn't be there.
