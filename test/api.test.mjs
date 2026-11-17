@@ -1060,6 +1060,23 @@ try {
   ok('概览：日志卡默认折叠有按钮', /id="btnLogToggle"/.test(v29ov) && /class="log collapsed"/.test(v29ov), '');
   ok('侧栏：主题/语言/命令面板移到顶部', /class="side-tools"/.test(v29ov), '');
 
+// v0.29.8：Grafana 局域网直连（lanUrl）
+{
+  const bad = await j('/api/settings', { method: 'POST', body: { grafana: { lanUrl: '192.168.1.55:3000' } } });
+  ok('Grafana：局域网地址必须是 http(s) URL', bad.status === 400, String(bad.status));
+  const cur = (await j('/api/state')).d.state.settings.grafana;
+  const set = await j('/api/settings', { method: 'POST', body: { grafana: Object.assign({}, cur, { lanUrl: 'http://192.168.1.55:3000' }) } });
+  ok('Grafana：能存下局域网地址', set.status === 200, String(set.status));
+  const st = (await j('/api/state')).d.state.settings.grafana;
+  ok('Grafana：局域网地址回显到 /api/state', st.lanUrl === 'http://192.168.1.55:3000', String(st.lanUrl));
+  const pg = await rawFetch(B + '/', { headers: { Authorization: 'Basic ' + Buffer.from('admin:' + PASS, 'utf8').toString('base64') } });
+  const csp3 = pg.headers.get('content-security-policy') || '';
+  ok('Grafana：CSP 同时放行正式地址与局域网地址',
+    /frame-src[^;]*https:\/\/grafana\.jianghugs\.shop/.test(csp3) && /frame-src[^;]*http:\/\/192\.168\.1\.55:3000/.test(csp3), csp3.slice(0, 200));
+  // 还原成「没有局域网地址」，免得影响后面只看正式地址的断言
+  await j('/api/settings', { method: 'POST', body: { grafana: Object.assign({}, st, { lanUrl: '' }) } });
+}
+
 await restoreRoutes();
 
 console.log(`\n${pass}/${pass + fail} 通过`);

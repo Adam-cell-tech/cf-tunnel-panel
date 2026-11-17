@@ -991,6 +991,17 @@ const EN_V0297 = {
 };
 Object.assign(EN, EN_V0297);
 
+// v0.29.8：Grafana 局域网直连
+const EN_V0298 = {
+  '局域网直连': 'LAN direct',
+  '局域网直连地址（可选）': 'LAN address (optional)',
+  '图直接从': 'Panels load straight from',
+  '取，没走 Cloudflare 隧道': ', skipping the Cloudflare tunnel',
+  'Grafana 已连上，正在画图…': 'Grafana connected, drawing…',
+  '局域网直连地址（可选）': 'LAN address (optional)',
+};
+Object.assign(EN, EN_V0298);
+
 Object.assign(EN, EN_PAGES);
 
 function langOf(req) {

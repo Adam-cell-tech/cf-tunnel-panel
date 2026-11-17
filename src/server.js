@@ -971,6 +971,12 @@ async function handler(req, res) {
         if (url && !/^https?:\/\/[^\s"'<>]+$/i.test(url)) {
           return sendJson(res, 400, { ok: false, error: 'Grafana 地址要写成 http://host:port（不要带路径、不要引号）' });
         }
+        // 局域网直连地址（可选）：页面本身以 http 打开时优先用它，绕开 Cloudflare 隧道，
+        // 嵌入图从 40 秒降到 1 秒内。https 页面里不会用它（否则是混合内容，浏览器直接拦）。
+        let lanUrl = String(g.lanUrl === undefined ? prev.lanUrl || '' : g.lanUrl).trim().replace(/\/+$/, '');
+        if (lanUrl && !/^https?:\/\/[^\s"'<>]+$/i.test(lanUrl)) {
+          return sendJson(res, 400, { ok: false, error: '局域网直连地址要写成 http://192.168.x.x:3000（不要带路径）' });
+        }
         // dashboard 形如 <uid>/<slug>：两种情况都兼容，只有 uid 时也能用
         const dash = String(g.dashboard === undefined ? prev.dashboard || '' : g.dashboard).trim().replace(/^\/+|\/+$/g, '');
         if (dash && !/^[\w.\-]{1,80}(\/[\w.\-]{1,80})?$/.test(dash)) {
@@ -999,7 +1005,7 @@ async function handler(req, res) {
         if (enabled && (!url || !dash || !panels.length)) {
           return sendJson(res, 400, { ok: false, error: '要开启嵌入，至少需要：Grafana 地址 + 仪表盘 uid + 一个 panelId' });
         }
-        state.settings.grafana = { enabled, url, dashboard: dash, theme, panels };
+        state.settings.grafana = { enabled, url, lanUrl, dashboard: dash, theme, panels };
       }
       saveState('settings');
       await pushCaddy();

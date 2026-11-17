@@ -371,6 +371,7 @@ function publicSettings() {
   s.grafana = {
     enabled: !!(s.grafana && s.grafana.enabled),
     url: (s.grafana && s.grafana.url) || '',
+    lanUrl: (s.grafana && s.grafana.lanUrl) || '',
     dashboard: (s.grafana && s.grafana.dashboard) || '',
     theme: (s.grafana && s.grafana.theme) || '',
     panels: ((s.grafana && s.grafana.panels) || []).slice(0, 3),

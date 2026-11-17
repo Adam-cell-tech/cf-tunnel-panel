@@ -335,6 +335,19 @@ function appendLog(rec) {
  * d-solo 只给一张图，尺寸可控（height 由设置里每条决定）。
  * 注意 Grafana 侧必须 allow_embedding = true，否则它自己会回 X-Frame-Options: deny。
  */
+/**
+ * 选这次实际要嵌的 Grafana 基地址：
+ * - 面板自己是 http 打开的（局域网 http://192.168.x.x:8090）→ 优先 lanUrl，绕开 Cloudflare 隧道：
+ *   几十个 bundle 各自过一趟隧道要 40 秒，走局域网不到 1 秒。
+ * - 其余情况（公网 https 页面）→ 用正式地址；https 页面里嵌 http 会被浏览器按混合内容拦掉。
+ */
+function grafanaBase(g) {
+  const lan = String(g.lanUrl || '').trim().replace(/\/+$/, '');
+  const pub = String(g.url || '').trim().replace(/\/+$/, '');
+  if (lan && location.protocol === 'http:') return { url: lan, via: 'lan' };
+  return { url: pub, via: 'public' };
+}
+
 function grafanaUrl(g, panel) {
   const dash = String(g.dashboard || '').replace(/^\/+|\/+$/g, '');
   const parts = dash.split('/');
@@ -342,7 +355,7 @@ function grafanaUrl(g, panel) {
   const slug = parts[1] || uid;
   const theme = g.theme || (document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
   const qs = new URLSearchParams({ orgId: '1', panelId: String(panel.panelId), kiosk: '', theme });
-  return `${g.url.replace(/\/+$/, '')}/d-solo/${encodeURIComponent(uid)}/${encodeURIComponent(slug)}?${qs.toString()}`;
+  return `${grafanaBase(g).url}/d-solo/${encodeURIComponent(uid)}/${encodeURIComponent(slug)}?${qs.toString()}`;
 }
 
 function paintGrafana(d) {
@@ -358,22 +371,30 @@ function paintGrafana(d) {
 
   // https 页面里嵌 http 的 Grafana：浏览器按「混合内容」直接拦掉，frame-src 放行也没用。
   // 与其显示两块白板，不如说清原因。
-  const mixed = location.protocol === 'https:' && /^http:\/\//i.test(String(g.url));
+  const base = grafanaBase(g);
+  const mixed = location.protocol === 'https:' && /^http:\/\//i.test(String(base.url));
+  const via = $('#grafanaVia');
+  if (via) {
+    via.className = 'tag' + (base.via === 'lan' ? ' ok' : '');
+    via.textContent = base.via === 'lan' ? '局域网直连' : '';
+    via.classList.toggle('hidden', base.via !== 'lan');
+    via.title = base.via === 'lan' ? ('图直接从 ' + base.url + ' 取，没走 Cloudflare 隧道') : '';
+  }
   const warn = $('#grafanaWarn');
   if (warn) {
     warn.classList.toggle('hidden', !mixed);
     if (mixed) {
-      warn.innerHTML = '当前页面是 https，而 Grafana 地址是 <code>' + esc(g.url) + '</code>，浏览器会按混合内容拦截这类 iframe。'
+      warn.innerHTML = '当前页面是 https，而 Grafana 地址是 <code>' + esc(base.url) + '</code>，浏览器会按混合内容拦截这类 iframe。'
         + '想让公网也能看到图：给 Grafana 也配一个 https 域名；只看局域网的话用 <code>http://' + esc(location.hostname) + ':8090</code> 打开本面板即可。';
     }
   }
   const open = $('#btnGrafanaOpen');
   if (open) {
     const dash = String(g.dashboard).replace(/^\/+|\/+$/g, '').split('/');
-    open.href = `${g.url.replace(/\/+$/, '')}/d/${encodeURIComponent(dash[0])}/${encodeURIComponent(dash[1] || dash[0])}`;
+    open.href = `${base.url}/d/${encodeURIComponent(dash[0])}/${encodeURIComponent(dash[1] || dash[0])}`;
   }
   // 已渲染过同样的配置就不重建（iframe 重建会闪、也会重新拉一次 Grafana）
-  const key = JSON.stringify({ url: g.url, dash: g.dashboard, theme: g.theme, panels: g.panels, mixed });
+  const key = JSON.stringify({ url: base.url, lan: g.lanUrl || '', dash: g.dashboard, theme: g.theme, panels: g.panels, mixed });
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   if (mixed) { box.innerHTML = ''; return; }
@@ -391,6 +412,14 @@ function paintGrafana(d) {
   box.querySelectorAll('.gframe').forEach((el) => io.observe(el));
 }
 
+// CSP 拦掉 iframe 时浏览器仍会触发 load 事件，于是看起来"加载完成了"、实际是一块灰板。
+// 监听 securitypolicyviolation 记时间戳，load 紧跟着来就判定为"被拦"，把真实原因说清楚。
+let cspBlockedAt = 0;
+document.addEventListener('securitypolicyviolation', (e) => {
+  const d = String((e && (e.effectiveDirective || e.violatedDirective)) || '');
+  if (d.indexOf('frame-src') >= 0 || d.indexOf('child-src') >= 0) cspBlockedAt = Date.now();
+});
+
 function loadGFrame(el, g, getPanel) {
   const p = getPanel(Number(el.dataset.i)) || {};
   el.dataset.state = 'loading';
@@ -401,20 +430,30 @@ function loadGFrame(el, g, getPanel) {
   f.title = p.title || ('Grafana panel ' + p.panelId);
   f.setAttribute('referrerpolicy', 'no-referrer');
   f.style.cssText = 'width:100%;height:100%;border:0;background:transparent;display:block';
-  const done = (ok) => {
+  const done = (ok, reason) => {
     if (el.dataset.state === 'done') return;
     el.dataset.state = ok ? 'done' : 'error';
     if (!ok) {
-      el.innerHTML = '<div class="gfail"><b>这块图没加载出来</b><span>等了 50 秒还没出来。可能是 Grafana 没启动、被浏览器拦了混合内容，或这条隧道太慢（经 Cloudflare 首次加载常要 40 秒以上）。</span>'
+      const why = reason || '等了 50 秒还没出来。可能是 Grafana 没启动、被浏览器拦了混合内容，或这条隧道太慢（经 Cloudflare 首次加载常要 40 秒以上）。';
+      el.innerHTML = '<div class="gfail"><b>这块图没加载出来</b><span>' + esc(why) + '</span>'
         + '<button class="btn mini" type="button" data-retry="1">重试</button>'
         + `<a class="sm" href="${esc(url.replace(/&_=\d+$/, ''))}" target="_blank" rel="noopener">在新窗口打开 →</a></div>`;
       el.querySelector('[data-retry]').addEventListener('click', () => loadGFrame(el, g, getPanel));
     }
   };
+  const startedAt = Date.now();
   f.addEventListener('load', () => {
-    // 骨架是绝对定位铺满的，必须移除，否则会一直盖在 iframe 上面
+    // 被 CSP 拦掉的 iframe 也会 load，但里面是一块灰板：靠违规事件的时间戳区分
+    if (cspBlockedAt && cspBlockedAt >= startedAt - 50) {
+      done(false, '面板的内容安全策略（CSP）没放行这个地址。到「设置 → 监控嵌入」把地址存一遍即可自动放行；如果刚改过地址，刷新页面再看。');
+      return;
+    }
+    // iframe 的 load 只代表「Grafana 的文档加载完」，它还要再画几秒图；
+    // 立刻撤骨架会露出一块灰底 Loading…，所以先把文案换成「正在画图」，1.2 秒后再撤。
     const skel = el.querySelector('.gskel');
-    if (skel) skel.remove();
+    const sk = skel && skel.querySelector('span');
+    if (sk) sk.textContent = 'Grafana 已连上，正在画图…';
+    if (skel) setTimeout(() => { if (skel.parentNode) skel.parentNode.removeChild(skel); }, 1200);
     done(true);
   });
   f.addEventListener('error', () => done(false));

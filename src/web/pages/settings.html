@@ -217,6 +217,11 @@
           <label class="chk"><input type="checkbox" id="grafEnabled" /> 在首页显示监控图</label></label>
         <label class="field"><span>Grafana 地址</span>
           <input id="grafUrl" placeholder="http://192.168.1.55:3000" /></label>
+        <label class="field"><span>局域网直连地址（可选）</span>
+          <input id="grafLan" placeholder="http://192.168.1.55:3000" />
+          <span class="hint">建议填。面板自己用 <code>http://192.168.x.x:8090</code> 打开时优先走这个地址，
+            嵌入图几乎立刻出来；而经 Cloudflare 隧道（https 页面）首次加载要 40 秒以上，那时会自动退回上面的 Grafana 地址。
+            https 页面里不会用这个 http 地址（会被浏览器当混合内容拦掉）。</span></label>
         <label class="field"><span>仪表盘 uid/slug</span>
           <input id="grafDash" placeholder="cfp-main/cf-tunnel-panel" /></label>
         <label class="field"><span>主题</span>

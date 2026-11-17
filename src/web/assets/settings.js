@@ -172,6 +172,7 @@ function fillGrafana() {
   const chk = (id, v) => { const el = $(id); if (el) el.checked = !!v; };
   chk('#grafEnabled', g.enabled);
   set('#grafUrl', g.url || '');
+  set('#grafLan', g.lanUrl || '');
   set('#grafDash', g.dashboard || '');
   const th = $('#grafTheme');
   if (th) th.value = g.theme || '';
@@ -326,6 +327,7 @@ async function save() {
   body.grafana = {
     enabled: $('#grafEnabled') ? $('#grafEnabled').checked : false,
     url: (($('#grafUrl') || {}).value || '').trim(),
+    lanUrl: (($('#grafLan') || {}).value || '').trim(),
     dashboard: (($('#grafDash') || {}).value || '').trim(),
     theme: (($('#grafTheme') || {}).value || ''),
     panels: gpanels,

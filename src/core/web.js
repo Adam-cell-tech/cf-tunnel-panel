@@ -162,12 +162,20 @@ function serveText(req, res, body, type, cache = 'no-cache', extra = {}) {
   const headers = Object.assign({ 'Content-Type': type, 'Cache-Control': cache, ETag: etag, Vary: 'Accept-Encoding' }, SEC_HEADERS, extra);
   if (/^text\/html/.test(type)) {
     // frame-src 只放行「设置里填的那个 Grafana 源」：不写死 *，也不允许任意站点被嵌进来
+    // 正式地址和局域网直连地址都要放行：局域网打开面板时嵌的是 lanUrl，
+    // 只写 url 会让 iframe 被 CSP 当非法来源拦掉（表现成一块灰板）。
     let frameSrc = "'self'";
     try {
       const g = (state.settings || {}).grafana || {};
-      if (g.enabled && g.url) {
-        const u = new URL(g.url);
-        frameSrc += ` ${u.protocol}//${u.host}`;
+      if (g.enabled) {
+        for (const raw of [g.url, g.lanUrl]) {
+          if (!raw) continue;
+          try {
+            const u = new URL(raw);
+            const origin = `${u.protocol}//${u.host}`;
+            if (!frameSrc.includes(origin)) frameSrc += ` ${origin}`;
+          } catch { /* 单个地址写坏就跳过它 */ }
+        }
       }
     } catch { /* 配置坏了就退化成只允许 self */ }
     headers['Content-Security-Policy'] = `default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' https://static.cloudflareinsights.com; connect-src 'self' https://cloudflareinsights.com; frame-src ${frameSrc}; base-uri 'none'; form-action 'self'`;

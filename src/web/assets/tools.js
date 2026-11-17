@@ -523,7 +523,12 @@ async function runBench() {
     try {
       const d = await api('/api/cf/cache/warm', { method: 'POST', body: {} });
       const rows = (d.results || []).map((r) => `${r.path} → ${r.status || 'ERR'} ${r.cache || ''}${r.age ? ' age=' + r.age : ''}${r.colo ? ' [' + r.colo + ']' : ''} ${r.ms}ms`).join('\n');
-      if (wmsg) wmsg.textContent = `${d.host}：${d.hit}/${d.total} 命中缓存（版本 ${d.version}）`;
+      // hit 是「这次请求本来就命中」的数量。第一次预热必然是 0/4（MISS 到源站），
+      // 那不是失败，是把资源推进缓存 —— 别用「0/4 命中」这种看着像出错的说法。
+      const msg = d.hit === 0
+        ? `${d.host}：已把 ${d.total} 个资源推进边缘缓存（版本 ${d.version}），下一次访问就是 HIT`
+        : `${d.host}：${d.total} 个资源，其中 ${d.hit} 个本来就在缓存里（版本 ${d.version}）`;
+      if (wmsg) wmsg.textContent = msg;
       const out = document.getElementById('cacheRuleOut');
       if (out) { out.textContent = rows; out.classList.remove('hidden'); }
     } catch (e) { if (wmsg) wmsg.textContent = e.message; }

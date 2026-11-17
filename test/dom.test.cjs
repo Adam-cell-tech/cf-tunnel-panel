@@ -526,6 +526,17 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     win3.close();
   }
 
+  // v0.29.8：Grafana 局域网直连
+  {
+    const { doc: doc8, win: win8 } = await open('/');
+    chk('概览: 有「局域网直连」徽标位', !!doc8.getElementById('grafanaVia'), '');
+    const st8 = await open('/settings');
+    chk('设置: 有局域网直连地址输入框', !!st8.doc.getElementById('grafLan'), '');
+    const ovjs = await (await fetch(BASE + '/assets/overview.js')).text();
+    chk('概览: http 页面优先用 lanUrl', /location\.protocol === 'http:'/.test(ovjs) && /lanUrl/.test(ovjs), '');
+    win8.close(); st8.win.close();
+  }
+
   let bad = 0;
   for (const [ok, name, extra] of results) {
     if (!ok) bad++;
