@@ -2,6 +2,10 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.29.3
+
+- 仓库迁到 `github.com/jianghugs/cf-tunnel-panel`：README 克隆地址、登录页页脚链接、LICENSE 版权署名同步更新。
+
 ## v0.29.2
 
 - Grafana 嵌入的超时从 12 秒放宽到 25 秒（经隧道首次加载要拉几十个 bundle），8 秒后骨架文案提示「还在加载，第一次会慢一些」。
