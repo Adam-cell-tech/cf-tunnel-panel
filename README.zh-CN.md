@@ -34,6 +34,13 @@ docker pull ghcr.io/jianghugs/cf-tunnel-panel:latest     # 最新
 
 Release 说明直接取自 `CHANGELOG.md` 里对应版本的那一段。
 
+也可以用仓库里的脚本一条命令发版（升版本、写 CHANGELOG、提交、打 tag、push；加 `--build` 还会构建镜像并滚动升级）：
+
+```bash
+tools/release.sh 0.30.0 --notes-file /tmp/notes.md --build
+tools/release.sh 0.30.0 --notes-file /tmp/notes.md --dry   # 只打印计划，不写文件
+```
+
 **怎么发一个版本**（维护者）：改 `package.json` 的版本号 → 在 `CHANGELOG.md` 加 `## vX.Y.Z` 段 →
 提交 → `git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z`。剩下的 `release` workflow 会自动做
 （构建双架构镜像、推 ghcr、创建 Release），不需要手工推镜像。tag 里带 `-`（如 `v0.30.0-rc.1`）

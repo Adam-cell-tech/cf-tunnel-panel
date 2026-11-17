@@ -163,6 +163,14 @@ docker pull ghcr.io/jianghugs/cf-tunnel-panel:latest     # newest
 
 Release notes come straight from the matching section of `CHANGELOG.md`.
 
+Or run the bundled script, which bumps the version, writes the `CHANGELOG` entry, commits,
+tags and pushes in one go (add `--build` to also rebuild the image and roll the two slots):
+
+```bash
+tools/release.sh 0.30.0 --notes-file /tmp/notes.md --build
+tools/release.sh 0.30.0 --notes-file /tmp/notes.md --dry   # 只打印计划
+```
+
 **Cutting a release** (maintainers): bump `package.json`, add a `## vX.Y.Z` section to
 `CHANGELOG.md`, commit, then `git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z`.
 The `release` workflow does the rest — no manual image push. Tags containing `-`

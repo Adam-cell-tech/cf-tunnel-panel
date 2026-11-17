@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# 一键发版：升版本 → 写 CHANGELOG → 提交 → 打 tag → push →（可选）构建镜像并滚动升级
+# 用法：
+#   tools/release.sh 0.29.5 --notes-file /tmp/notes.md [--build] [--no-push] [--dry] [--force]
+# 说明：
+#   --notes-file  Release/CHANGELOG 的正文（markdown 列表），必填；脚本把它插到 CHANGELOG 顶部
+#   --build       额外构建镜像、打 tag、跑 tools/rolling-upgrade.sh --apply，并校验 /healthz
+#   --no-push     只本地提交与打 tag，不 push（想先复核时用）
+#   --dry         只打印将要做什么，不写任何文件
+#   --force       允许工作区不干净 / 版本号没变
+set -euo pipefail
+
+VERSION=""; NOTES=""; DO_BUILD=0; NO_PUSH=0; DRY=0; FORCE=0
+PANEL_PORT="${PANEL_PORT:-8090}"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    0.*|[0-9]*) VERSION="$1"; shift ;;
+    --notes-file) NOTES="${2:-}"; shift 2 ;;
+    --build) DO_BUILD=1; shift ;;
+    --no-push) NO_PUSH=1; shift ;;
+    --dry) DRY=1; shift ;;
+    --force) FORCE=1; shift ;;
+    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    *) echo "未知参数：$1" >&2; exit 2 ;;
+  esac
+done
+
+die() { echo "错误：$*" >&2; exit 1; }
+step() { echo; echo "== $* =="; }
+
+[ -n "$VERSION" ] || die "缺少版本号，例如：tools/release.sh 0.29.5 --notes-file /tmp/notes.md"
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || die "版本号格式应为 X.Y.Z 或 X.Y.Z-rc.1，收到：$VERSION"
+[ -n "$NOTES" ] || die "缺少 --notes-file（Release 说明）。先把这版改了什么写成 markdown 列表存文件里。"
+[ -f "$NOTES" ] || die "notes 文件不存在：$NOTES"
+[ -s "$NOTES" ] || die "notes 文件是空的：$NOTES"
+
+cd "$(dirname "$0")/.."
+ROOT="$(pwd)"
+step "检查环境（$ROOT）"
+git rev-parse --git-dir >/dev/null 2>&1 || die "当前目录不是 git 仓库"
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+[ "$BRANCH" = "main" ] || echo "⚠️  当前分支是 $BRANCH（通常应在 main）"
+if [ -n "$(git status --porcelain)" ] && [ "$FORCE" -ne 1 ]; then
+  git status --short
+  die "工作区有未提交改动。先提交，或加 --force"
+fi
+git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null && die "tag v$VERSION 已存在"
+CUR="$(node -p "require('./package.json').version")"
+echo "当前版本：$CUR → 目标版本：$VERSION"
+
+step "计划"
+cat <<EOF
+  1. package.json          : $CUR → $VERSION
+  2. CHANGELOG.md          : 顶部插入 "## v$VERSION" 段（内容取自 $NOTES）
+  3. git commit            : "release: v$VERSION"
+  4. git tag               : v$VERSION
+  5. git push              : origin ${BRANCH}$([ "$NO_PUSH" -eq 1 ] && echo "（已跳过）")
+$([ "$DO_BUILD" -eq 1 ] && echo "  6. 构建镜像 + 滚动升级 + 校验 /healthz（端口 $PANEL_PORT）" || echo "  6. 跳过镜像构建（要构建加 --build）")
+EOF
+if [ "$DRY" -eq 1 ]; then echo; echo "（--dry 到此为止，没有写入任何文件）"; exit 0; fi
+
+step "1/6 写 package.json"
+node -e '
+const fs=require("fs"),f="package.json";
+const p=JSON.parse(fs.readFileSync(f,"utf8"));
+p.version=process.argv[1];
+fs.writeFileSync(f, JSON.stringify(p,null,2)+"\n");
+' "$VERSION"
+
+step "2/6 写 CHANGELOG.md"
+python3 - "$VERSION" "$NOTES" <<'PY'
+import sys, pathlib
+ver, notes_file = sys.argv[1], sys.argv[2]
+p = pathlib.Path('CHANGELOG.md')
+text = p.read_text(encoding='utf-8')
+if f'## v{ver}' in text:
+    sys.exit(f'CHANGELOG 里已经有 v{ver} 段')
+body = pathlib.Path(notes_file).read_text(encoding='utf-8').strip()
+section = f'## v{ver}\n\n{body}\n\n'
+# 插到第一个 "## " 之前；没有就追加
+idx = text.find('\n## ')
+if idx == -1:
+    new = text.rstrip() + '\n\n' + section
+else:
+    new = text[:idx+1] + section + text[idx+1:]
+p.write_text(new, encoding='utf-8')
+print(f'CHANGELOG 已插入 v{ver}（{len(body.splitlines())} 行）')
+PY
+
+step "3/6 提交"
+git add package.json CHANGELOG.md
+git commit -q -m "release: v$VERSION"
+git --no-pager log --oneline -1
+
+step "4/6 打 tag"
+git tag -a "v$VERSION" -m "v$VERSION"
+echo "已创建 tag v$VERSION"
+
+if [ "$NO_PUSH" -eq 1 ]; then
+  step "5/6 跳过 push（--no-push）"
+else
+  step "5/6 push"
+  git push -q origin "$BRANCH"
+  git push -q origin "v$VERSION"
+  echo "已 push $BRANCH 与 tag v$VERSION —— release workflow 会自动建 Release 并推 ghcr 镜像"
+fi
+
+if [ "$DO_BUILD" -eq 1 ]; then
+  step "6/6 构建镜像 + 滚动升级"
+  node tools/codehash.js
+  docker compose build panel --build-arg "GIT_SHA=$(git rev-parse --short HEAD)"
+  docker tag cf-tunnel-panel:local "cf-tunnel-panel:$VERSION"
+  IMG_HASH="$(docker run --rm --entrypoint cat cf-tunnel-panel:local /app/.code-hash)"
+  echo "镜像内 code-hash：$IMG_HASH"
+  MOUNT_SRC=0 bash tools/rolling-upgrade.sh --apply
+  echo
+  echo "--- /healthz ---"
+  curl -fsS "http://127.0.0.1:$PANEL_PORT/healthz" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+print({k:d.get(k) for k in ("version","mode","code","imageCode","drift")})
+assert d.get("version")=="'"$VERSION"'", "版本号不符："+str(d.get("version"))
+assert d.get("drift") is False, "drift 为 true：镜像与运行代码不一致"
+' && echo "✅ 部署校验通过"
+fi
+
+step "完成"
+cat <<EOF
+接下来可以核对：
+  Release : https://github.com/jianghugs/cf-tunnel-panel/releases/tag/v$VERSION
+  CI      : curl -sL "https://api.github.com/repos/jianghugs/cf-tunnel-panel/actions/runs?per_page=1" | grep -E '"conclusion"|"name"'
+  镜像    : docker pull ghcr.io/jianghugs/cf-tunnel-panel:$VERSION
+EOF
