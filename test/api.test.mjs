@@ -939,6 +939,7 @@ try {
   ok('一键封禁：测试后黑名单已还原', afterState === before, JSON.stringify(afterState).slice(0, 60));
 
   // 通知多通道
+  const _chanSnap = (((await j('/api/state')).d.state.settings || {}).notify || {}).channels || [];
   const chSave = await j('/api/settings', { method: 'POST', body: { notify: { channels: [
     { id: 'qa1', name: 'QA 通道一', format: 'generic', url: 'http://127.0.0.1:9/hook' },
     { id: 'qa2', name: 'QA 通道二（停用）', format: 'generic', url: 'http://127.0.0.1:9/off', enabled: false },
@@ -955,8 +956,15 @@ try {
   ok('通知测试：按通道发送会回通道清单', nTest.status === 200 && Array.isArray(nTest.d.channels) && nTest.d.channelId === 'qa1', String(nTest.d.channels && nTest.d.channels.length));
   const nTestBad = await j('/api/notify/test', { method: 'POST', body: { channelId: '不存在的通道' } });
   ok('通知测试：不存在的通道返回 ok:false', nTestBad.status === 200 && nTestBad.d.ok === false, '');
-  // 还原成测试前的那条通道（否则会把 QA 通道留在生产里）
-  await j('/api/settings', { method: 'POST', body: { notify: { channels: [{ id: 'a1', name: '本地接收端', format: 'generic', url: 'http://127.0.0.1:8098/hook' }, { id: 'b2', name: '备用通道（停用）', format: 'generic', url: 'http://127.0.0.1:8098/off', enabled: false }] } } });
+  // 还原成测试前的通道：/api/state 里是脱敏的（只有 hasUrl），所以按 hasUrl 回填占位地址再还原
+  if (_chanSnap.length) {
+    await j('/api/settings', { method: 'POST', body: { notify: { channels: _chanSnap.map((c) => ({
+      id: c.id, name: c.name, format: c.format, enabled: c.enabled !== false,
+      url: c.hasUrl ? 'http://127.0.0.1:9/restored' : '',
+    })) } } });
+  } else {
+    await j('/api/settings', { method: 'POST', body: { notify: { channels: [] } } });
+  }
 
   // Grafana 嵌入：设置 https 地址后 CSP 要放行它
   const gSave = await j('/api/settings', { method: 'POST', body: { grafana: { enabled: true, url: 'https://grafana.jianghugs.shop', dashboard: 'cfp-main/a650163', theme: 'dark', panels: [{ panelId: 1, title: '集群角色', h: 200 }] } } });
