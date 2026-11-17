@@ -31,6 +31,8 @@ function defaultState() {
       // 通知：出口掉线 / 换域名 / Caddy 下发失败时推一条
       notify: {
         url: '', format: 'generic',
+        // 多通道：每条 {id,name,format,url,secret,enabled}；为空时回落到下面的 url/format（老配置）
+        channels: [],
         secret: '',       // 钉钉/飞书「加签」密钥（可选），只在 URL 里有 sign 校验时才需要
         events: { tunnelDown: true, tunnelUp: true, urlChange: true, caddyFail: true, sessionIp: true, errorSpike: true, loginFail: true, authScan: true },
         cooldownSec: 300,  // 同一事件多少秒内不重复提醒（0 = 不冷却）
@@ -133,6 +135,17 @@ function newTunnel(patch = {}) {
 
 // v2（单隧道 state.tunnel）→ v3（state.tunnels 数组）
 function migrateState(obj) {
+  // 老的单通道配置升成数组（保留原字段，读不到 channels 时仍能回落）
+  const nt = obj.settings && obj.settings.notify;
+  if (nt && !Array.isArray(nt.channels)) {
+    nt.channels = [];
+    if (String(nt.url || '').trim()) {
+      nt.channels.push({
+        id: 'c1', name: '默认通道', format: nt.format || 'generic',
+        url: String(nt.url).trim(), secret: nt.secret || '', enabled: true,
+      });
+    }
+  }
   if (Array.isArray(obj.tunnels) && obj.tunnels.length) return obj;
   const old = obj.tunnel && typeof obj.tunnel === 'object' ? obj.tunnel : null;
   obj.tunnels = [
@@ -363,6 +376,14 @@ function publicSettings() {
   s.totp = { enabled: !!(state.totp && state.totp.enabled), recoveryLeft: ((state.totp && state.totp.recovery) || []).length };
   delete s.totp.secret;
   s.notify = {
+    channels: (Array.isArray(s.notify.channels) ? s.notify.channels : []).map((c, i) => ({
+      id: String(c.id || `c${i + 1}`),
+      name: String(c.name || `通道 ${i + 1}`),
+      format: String(c.format || 'generic'),
+      hasUrl: !!String(c.url || '').trim(),
+      hasSecret: !!String(c.secret || '').trim(),
+      enabled: c.enabled !== false,
+    })),
     format: s.notify.format,
     events: s.notify.events,
     hasUrl: !!s.notify.url,

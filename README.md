@@ -7,7 +7,7 @@
 > changes, no open ports**. Multiple tunnels can run at the same time (quick + named, or several
 > accounts and domains).
 
-- Version: **v0.23.0**
+- Version: **v0.24.0**
 - Works with: NAS, self-hosted sites, Home Assistant, Jellyfin, Gitea, Immich, qBittorrent… any HTTP service
 - Stack: `node:http` backend (zero dependencies), hand-written frontend (no build step), `Caddy` for routing,
   `cloudflared` for the tunnel — one `docker compose up` and you are done
@@ -26,6 +26,12 @@ cd tools/monitoring && docker compose up -d     # Grafana on :3000, Prometheus o
 Prometheus already scrapes both blue/green slots, and Grafana auto-imports the dashboard from
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
+
+## What's new in v0.24.0
+
+- **Multiple notification channels.** `settings.notify.channels[]` (up to 8), each with its own `name / format / url / secret / enabled`. Every notification is delivered to all enabled channels; the settings page shows a channel table where each row can be tested, disabled or removed on its own, and `POST /api/notify/test {channelId}` targets a single one. Legacy `notify.url/format/secret` is still read as a virtual "default" channel, so old configs keep working without migration.
+- **Grafana over HTTPS.** `grafana.jianghugs.shop` now goes through Caddy (`→ 127.0.0.1:3000`) and the same tunnel, with `GF_SERVER_ROOT_URL` / `GF_SERVER_DOMAIN` set on the container. The overview iframes are no longer blocked as mixed content, and `/d/…` share links point at the public hostname.
+- Caveat: Grafana runs **anonymous read-only** — anyone who can reach that hostname can view the panels (they cannot see configuration or change anything).
 
 ## What's new in v0.23.0
 

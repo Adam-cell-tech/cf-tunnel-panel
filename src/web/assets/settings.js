@@ -173,14 +173,59 @@ function syncGrafanaOpen() {
   a.href = `${url}/d/${encodeURIComponent(dash[0])}/${encodeURIComponent(dash[1] || dash[0])}`;
 }
 
-function applyNotifyFmt() {
-  const f = NOTIFY_FMT[$('#notifyFormat').value] || NOTIFY_FMT.generic;
-  $('#notifyUrlLabel').textContent = f.label;
-  const u = $('#notifyUrl');
-  u.placeholder = S && S.settings.notify.hasUrl ? '已配置（留空不改）' : f.ph;
-  $('#notifyHint').textContent = f.hint;
-  $('#notifySecretWrap').classList.toggle('hidden', !f.secret);
-  $('#notifySecret').placeholder = S && S.settings.notify.hasSecret ? '已配置（留空不改）' : (f.secret ? 'SEC 开头的密钥，留空不改' : '');
+/* ---- 通知通道表：多通道，各自独立启停/测试 ---- */
+let chanKey = 0;
+function chanRow(c) {
+  const id = c.id || 'n' + (++chanKey);
+  const fmt = c.format || 'generic';
+  const need = (NOTIFY_FMT[fmt] || NOTIFY_FMT.generic).secret;
+  return `<tr data-cid="${esc(id)}">
+    <td data-label="名称"><input data-k="name" value="${esc(c.name || '')}" placeholder="例如：飞书群" /></td>
+    <td data-label="格式"><select data-k="format">${Object.keys(NOTIFY_FMT).map((k) => `<option value="${k}"${k === fmt ? ' selected' : ''}>${esc(NOTIFY_FMT[k].label)}</option>`).join('')}</select></td>
+    <td data-label="地址"><input data-k="url" value="" placeholder="${esc(c.hasUrl ? '已配置（留空不改）' : (NOTIFY_FMT[fmt] || NOTIFY_FMT.generic).ph)}" /></td>
+    <td data-label="密钥"><input data-k="secret" type="password" value="" placeholder="${esc(c.hasSecret ? '已配置（留空不改）' : (need ? '有加签才需要' : '不需要'))}" ${need ? '' : 'disabled'} />
+      ${c.hasSecret ? '<button class="sm ghost" data-clear="1" title="清空这条通道的密钥">清空</button>' : ''}</td>
+    <td data-label="启用"><input class="chk" data-k="enabled" type="checkbox" ${c.enabled === false ? '' : 'checked'} /></td>
+    <td data-label="操作" class="nowrap"><button class="sm ghost" data-test="1">测试</button> <button class="sm danger" data-del="1">删除</button></td>
+  </tr>`;
+}
+
+function renderChannels(list) {
+  const body = $('#chanBody');
+  if (!body) return;
+  chanKey = 0;
+  const rows = (list && list.length) ? list : [];
+  body.innerHTML = rows.length ? rows.map(chanRow).join('')
+    : '<tr><td colspan="6" class="empty">还没有通道 —— 点下面「添加通道」（飞书 / 钉钉 / Bark / 通用 Webhook 都行）</td></tr>';
+  if ($('#notifyHint')) {
+    $('#notifyHint').textContent = rows.length
+      ? '同一条通知会发到所有「启用」的通道；格式决定 payload 长相，填错地址保存时会被挡下。'
+      : '没有通道时不会发任何通知。';
+  }
+}
+
+function collectChannels() {
+  const out = [];
+  document.querySelectorAll('#chanBody tr[data-cid]').forEach((tr, i) => {
+    const q = (k) => tr.querySelector(`[data-k="${k}"]`);
+    const clearBtn = tr.querySelector('[data-clear="1"]');
+    const c = {
+      id: tr.dataset.cid || `n${i + 1}`,
+      name: (q('name').value || '').trim() || `通道 ${i + 1}`,
+      format: q('format').value,
+      url: (q('url').value || '').trim(),
+      secret: (q('secret').value || '').trim(),
+      enabled: q('enabled').checked,
+    };
+    if (clearBtn && clearBtn.dataset.cleared === '1') c.clearSecret = true;
+    out.push(c);
+  });
+  return out;
+}
+
+function fillNotifyChannels() {
+  const n = (ST.state.settings || {}).notify || {};
+  renderChannels(n.channels || []);
 }
 
 function fill() {
@@ -199,9 +244,6 @@ function fill() {
   $('#rlRps').value = rl.rps || 20;
   $('#rlBurst').value = rl.burst || 40;
   const n = s.notify || {};
-  $('#notifyUrl').value = '';
-  $('#notifyUrl').placeholder = n.hasUrl ? '已配置（留空不改）' : 'https://…';
-  $('#notifyFormat').value = n.format || 'generic';
   $('#evDown').checked = !!(n.events && n.events.tunnelDown);
   $('#evUrl').checked = !!(n.events && n.events.urlChange);
   $('#evCaddy').checked = !!(n.events && n.events.caddyFail);
@@ -218,7 +260,7 @@ function fill() {
   if ($('#notifyTplText')) $('#notifyTplText').value = tpl.text || '';
   $('#panelUser').value = (ST.state.panel && ST.state.panel.user) || '';
   $('#verTag').textContent = '版本 ' + (ST.version || '—');
-  applyNotifyFmt();
+  fillNotifyChannels();
   fillGrafana();
 }
 
@@ -233,9 +275,7 @@ async function save() {
       rateLimit: { enabled: $('#rlOn').checked, rps: Number($('#rlRps').value) || 20, burst: Number($('#rlBurst').value) || 40 },
     },
     notify: {
-      url: $('#notifyUrl').value.trim(),
-      format: $('#notifyFormat').value,
-      secret: $('#notifySecret').value.trim(),
+      channels: collectChannels(),
       events: { tunnelDown: $('#evDown').checked, urlChange: $('#evUrl').checked, caddyFail: $('#evCaddy').checked, sessionIp: $('#evSessionIp') ? $('#evSessionIp').checked : true,
         tunnelUp: $('#evTunnelUp') ? $('#evTunnelUp').checked : true,
         errorSpike: $('#evErrorSpike') ? $('#evErrorSpike').checked : true,
@@ -362,18 +402,43 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  $('#notifyFormat').addEventListener('change', applyNotifyFmt);
-  $('#btnSecretClear').addEventListener('click', async () => {
-    try {
-      await api('/api/settings', { method: 'POST', body: { notify: { clearSecret: true } } });
-      toast('已清空加签密钥', 'ok');
-      await loadState(true); fill();
-    } catch (e) { toast(e.message, 'err'); }
-  });
+  if ($('#btnChanAdd')) {
+    $('#btnChanAdd').addEventListener('click', () => {
+      const body = $('#chanBody');
+      if (body.querySelector('.empty') || !body.querySelector('tr[data-cid]')) body.innerHTML = '';
+      body.insertAdjacentHTML('beforeend', chanRow({ name: '', format: 'generic', enabled: true, hasUrl: false, hasSecret: false }));
+      if ($('#chanMsg')) $('#chanMsg').textContent = '填好地址后点「保存设置」才会生效';
+    });
+  }
+  if ($('#chanBody')) {
+    $('#chanBody').addEventListener('click', async (e) => {
+      const tr = e.target.closest('tr[data-cid]');
+      if (!tr) return;
+      if (e.target.closest('[data-del]')) { tr.remove(); if ($('#chanMsg')) $('#chanMsg').textContent = '已移除，记得保存'; return; }
+      const clear = e.target.closest('[data-clear]');
+      if (clear) {
+        clear.dataset.cleared = clear.dataset.cleared === '1' ? '' : '1';
+        clear.textContent = clear.dataset.cleared === '1' ? '将清空' : '清空';
+        return;
+      }
+      if (e.target.closest('[data-test]')) {
+        const id = tr.dataset.cid;
+        e.target.disabled = true;
+        try {
+          // 先存盘再测：测试按钮用的是服务端已保存的地址
+          await save();
+          const d = await api('/api/notify/test', { method: 'POST', body: { channelId: id } });
+          toast(d.ok ? '这条通道发送成功' : '发送失败，看通知记录里的原因', d.ok ? 'ok' : 'err');
+          if ($('#chanMsg')) $('#chanMsg').textContent = d.ok ? '已发送' : '失败，见「通知记录」';
+        } catch (err) { toast(err.message, 'err'); }
+        e.target.disabled = false;
+      }
+    });
+  }
   $('#btnNotifyClear').addEventListener('click', async () => {
-    if (!confirm('清空通知 Webhook 地址？')) return;
+    if (!confirm('清空所有通知通道？（关掉通知）')) return;
     try {
-      await api('/api/settings', { method: 'POST', body: { notify: { clearUrl: true } } });
+      await api('/api/settings', { method: 'POST', body: { notify: { channels: [], clearUrl: true, clearSecret: true } } });
       $('#notifyMsg').textContent = '已清空';
       ST = await loadState();
       fill();

@@ -2,6 +2,23 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.24.0
+
+两件事：监控图不再只能局域网看，通知不再只能配一条。
+
+### 新增
+- **通知多通道**：`settings.notify.channels[]`（最多 8 条），每条独立 `name / format / url / secret / enabled`，一条通知会发给所有启用的通道；设置页「掉线通知」改成通道表，每行可单独测试/删除/停用。`POST /api/notify/test` 支持 `{channelId}` 只测一条。
+  - 兼容：老的 `notify.url / format / secret` 在读取时虚拟成一条「默认通道」，老配置不用迁移也能继续发；`migrateState()` 会顺手把它们写成 `channels[0]`。
+  - 保存时按每条通道自己的 `format` 校验地址（钉钉必须 `oapi.dingtalk.com/robot/send`、飞书必须 `open-apis/bot/v2/hook`、bark 必须 `host/key`），密钥留空=保留旧值、`clearSecret` 才清空，id 重复直接 400。
+- **Grafana 走 HTTPS**：`grafana.jianghugs.shop` 经由 Caddy（`→ 127.0.0.1:3000`）与同一条隧道暴露，Grafana 容器补 `GF_SERVER_ROOT_URL` / `GF_SERVER_DOMAIN`，面板 `settings.grafana.url` 改成 https —— 首页 iframe 不再被混合内容拦截，`/d/…` 分享链接也指向公网域名。
+
+### 变更
+- 面板 `frame-src` 会跟随 `settings.grafana.url` 的源动态放行；关闭嵌入时回到 `frame-src 'self'`。
+- 新增 28 条界面词条。
+
+### 注意
+- Grafana 是**匿名只读**：同网段 / 公网任何人都能看这些图（看不到配置、改不了东西）。不想公开就关掉隧道里的 `grafana` 公共主机名，只保留局域网 `:3000`。
+
 ## v0.23.0
 
 把两处「数据都在、但要人手工搬」的地方接上了：看到谁在砸门就能直接封，看到哪个出口在吃流量也能直接读。

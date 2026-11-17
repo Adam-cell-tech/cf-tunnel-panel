@@ -683,6 +683,38 @@ const EN_V0230 = {
 };
 Object.assign(EN, EN_V0230);
 
+const EN_V0240 = {
+  "通知通道（可以同时配多个，各自独立启用）": "Notification channels (several can run side by side, each with its own switch)",
+  "名称": "Name",
+  "格式": "Format",
+  "地址": "Address",
+  "加签密钥": "Signing secret",
+  "启用": "Enabled",
+  "测试": "Test",
+  "删除": "Remove",
+  "清空": "Clear",
+  "将清空": "will clear",
+  "＋ 添加通道": "+ Add channel",
+  "还需要": "needed",
+  "有加签才需要": "only if signing is on",
+  "不需要": "not needed",
+  "已配置（留空不改）": "configured (leave blank to keep)",
+  "还没有通道 —— 点下面「添加通道」（飞书 / 钉钉 / Bark / 通用 Webhook 都行）": "No channels yet — use \"Add channel\" below (Feishu / DingTalk / Bark / generic webhook)",
+  "同一条通知会发到所有「启用」的通道；格式决定 payload 长相，填错地址保存时会被挡下。": "Every notification goes to all enabled channels; the format decides the payload and a mismatched address is rejected on save.",
+  "没有通道时不会发任何通知。": "With no channel configured nothing is sent.",
+  "填好地址后点「保存设置」才会生效": "Fill in the address, then press Save",
+  "已移除，记得保存": "Removed — remember to save",
+  "这条通道发送成功": "Test message delivered",
+  "发送失败，看通知记录里的原因": "Delivery failed — see the notification log",
+  "已发送": "Sent",
+  "失败，见「通知记录」": "Failed — see the notification log",
+  "清空所有通知通道？（关掉通知）": "Remove every notification channel (turn notifications off)?",
+  "集群角色": "Cluster role",
+  "业务请求": "Requests",
+  "出口状态": "Exit status"
+};
+Object.assign(EN, EN_V0240);
+
 const EN_PAGES = {
   '加签密钥（可选）': 'Signing secret (optional)',
   '机器人安全设置里勾了「加签」才需要；只勾「自定义关键词」就留空': 'Only needed when the bot has signing enabled; leave empty if you use a keyword instead',

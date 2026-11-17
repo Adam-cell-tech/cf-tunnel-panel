@@ -35,6 +35,9 @@ services:
       GF_SERVER_HTTP_ADDR: 0.0.0.0
       GF_SERVER_HTTP_PORT: "3000"
       GF_SECURITY_ALLOW_EMBEDDING: "true"
+      # 走公网域名时，Grafana 需要知道自己的外部地址（否则 /d/ 分享链接与重定向会指回 127.0.0.1）
+      GF_SERVER_ROOT_URL: "${GRAFANA_ROOT_URL:-http://192.168.1.55:3000}"
+      GF_SERVER_DOMAIN: "${GRAFANA_DOMAIN:-192.168.1.55}" 
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       GF_USERS_ALLOW_SIGN_UP: "false"

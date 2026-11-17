@@ -52,11 +52,68 @@ function signWith(secret, ts) {
   return crypto.createHmac('sha256', String(secret)).update(`${ts}\n${secret}`).digest('base64');
 }
 
+/**
+ * 通道列表：新格式 settings.notify.channels[]，老的单通道字段（url/format/secret）
+ * 在读取时虚拟成一条通道 —— 老配置不用迁移也能继续发。
+ */
+function channelList(includeDisabled = false) {
+  const n = state.settings.notify || {};
+  const arr = Array.isArray(n.channels) ? n.channels : [];
+  const list = arr
+    .filter((c) => c && typeof c === 'object' && String(c.url || '').trim())
+    .map((c, i) => ({
+      id: String(c.id || `c${i + 1}`),
+      name: String(c.name || `通道 ${i + 1}`).slice(0, 40),
+      format: String(c.format || 'generic'),
+      url: String(c.url || '').trim(),
+      secret: String(c.secret || ''),
+      enabled: c.enabled !== false,
+    }));
+  if (list.length) return includeDisabled ? list : list.filter((c) => c.enabled);
+  if (String(n.url || '').trim()) {
+    const legacy = [{ id: 'legacy', name: '默认通道', format: String(n.format || 'generic'), url: String(n.url).trim(), secret: String(n.secret || ''), enabled: true }];
+    return legacy;
+  }
+  return [];
+}
+
+/** 把一条通知真正发到一个通道（按 format 组装 payload / 加签） */
+async function sendOne(ch, title, text, event) {
+  const line = `${title}\n${text}`;
+  let url = ch.url;
+  let body = JSON.stringify({ title, text: line, event, ts: new Date().toISOString(), host: os.hostname() });
+  const headers = { 'Content-Type': 'application/json' };
+  if (ch.format === 'dingtalk') {
+    if (ch.secret) {
+      const ts = Date.now();
+      url += (url.includes('?') ? '&' : '?') + `timestamp=${ts}&sign=${encodeURIComponent(signWith(ch.secret, ts))}`;
+    }
+    body = JSON.stringify({ msgtype: 'text', text: { content: line } });
+  } else if (ch.format === 'feishu') {
+    const payload = { msg_type: 'text', content: { text: line } };
+    if (ch.secret) {
+      const ts = Math.floor(Date.now() / 1000);
+      payload.timestamp = String(ts);
+      payload.sign = signWith(ch.secret, ts);
+    }
+    body = JSON.stringify(payload);
+  } else if (ch.format === 'bark') {
+    url = url.replace(/\/+$/, '') + '/' + encodeURIComponent(title) + '/' + encodeURIComponent(text);
+    body = '{}';
+  }
+  const r = await fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(8000) });
+  return r;
+}
+
 async function notify(event, title, text, opts = {}) {
   const n = state.settings.notify || {};
-  if (!n.url) return false;
+  const channels = channelList();
+  if (!channels.length) return false;
   const ev = n.events || {};
   if (ev[event] === false && !opts.ignoreDisabled) return false;
+  // opts.channelId：只发指定通道（「测试」按钮用）
+  const targets = opts.channelId ? channels.filter((c) => c.id === opts.channelId) : channels;
+  if (!targets.length) return false;
   if (!opts.force) {
     if (inQuietHours(n.quietHours)) {
       log(`通知被静默时段拦下（${event}，当前静默 ${n.quietHours}）`, 'panel');
@@ -83,39 +140,20 @@ async function notify(event, title, text, opts = {}) {
   const tplText = applyTemplate(n.template && n.template.text, vars);
   if (tplTitle) title = tplTitle;
   if (tplText) text = /\{text\}/.test(String((n.template || {}).text || '')) ? tplText : `${tplText}\n${text}`;
-  else if (tplTitle) text = `${text}`;
-  const line = `${title}\n${text}`;
-  try {
-    let url = String(n.url).trim();
-    let body = JSON.stringify({ title, text: line, event, ts: new Date().toISOString(), host: os.hostname() });
-    const headers = { 'Content-Type': 'application/json' };
-    if (n.format === 'dingtalk') {
-      // 钉钉加签走 query：&timestamp=<ms>&sign=<base64>
-      if (n.secret) {
-        const ts = Date.now();
-        url += (url.includes('?') ? '&' : '?') + `timestamp=${ts}&sign=${encodeURIComponent(signWith(n.secret, ts))}`;
-      }
-      body = JSON.stringify({ msgtype: 'text', text: { content: line } });
-    } else if (n.format === 'feishu') {
-      // 飞书加签走 body：timestamp（秒）+ sign
-      const payload = { msg_type: 'text', content: { text: line } };
-      if (n.secret) {
-        const ts = Math.floor(Date.now() / 1000);
-        payload.timestamp = String(ts);
-        payload.sign = signWith(n.secret, ts);
-      }
-      body = JSON.stringify(payload);
+
+  let anyOk = false;
+  for (const ch of targets) {
+    try {
+      const r = await sendOne(ch, title, text, event);
+      log(`通知已发送（${event} → ${ch.name}）HTTP ${r.status}`, 'panel');
+      recordNotify(event, title, r.ok ? 'ok' : 'fail', `${ch.name} · HTTP ${r.status}`, text);
+      if (r.ok) anyOk = true;
+    } catch (e) {
+      log(`通知发送失败（${event} → ${ch.name}）：${e.message}`, 'panel');
+      recordNotify(event, title, 'fail', `${ch.name} · ${e.message}`, text);
     }
-    else if (n.format === 'bark') { url = url.replace(/\/+$/, '') + '/' + encodeURIComponent(title) + '/' + encodeURIComponent(text); body = '{}'; }
-    const r = await fetch(url, { method: 'POST', headers, body, signal: AbortSignal.timeout(8000) });
-    log(`通知已发送（${event}）HTTP ${r.status}`, 'panel');
-    recordNotify(event, title, r.ok ? 'ok' : 'fail', `HTTP ${r.status}`, text);
-    return r.ok;
-  } catch (e) {
-    log(`通知发送失败（${event}）：${e.message}`, 'panel');
-    recordNotify(event, title, 'fail', e.message, text);
-    return false;
   }
+  return anyOk;
 }
 
 // 出口状态/域名变化 → 通知（5 秒采样一次，不改动引擎）
@@ -123,4 +161,4 @@ const notifyHistory = [];     // 最近 50 条通知结果，面板里能看到�
 
 const lastNotify = new Map(); // event -> 上次发送时间
 
-module.exports = { applyTemplate, inQuietHours, notify, notifyHistory, recordNotify };
+module.exports = { applyTemplate, channelList, inQuietHours, notify, notifyHistory, recordNotify, sendOne, signWith };

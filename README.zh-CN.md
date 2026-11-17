@@ -41,6 +41,12 @@ Prometheus 已经同时抓 blue/green 两个槽位，Grafana 会自动导入 `do
 并开好匿名只读 + `allow_embedding`，所以首页「监控面板」的三个字段可以直接填（细节见
 `tools/monitoring/README.md`）。
 
+### v0.24.0 更新
+
+- **通知多通道**：`settings.notify.channels[]`（最多 8 条），每条独立 `name / format / url / secret / enabled`；一条通知发给所有启用的通道。设置页变成通道表，每行可单独测试 / 停用 / 删除，`POST /api/notify/test {channelId}` 只测一条。老的 `notify.url/format/secret` 读取时虚拟成「默认通道」，老配置不用迁移。
+- **Grafana 走 HTTPS**：`grafana.jianghugs.shop` 经 Caddy（`→ 127.0.0.1:3000`）与同一条隧道暴露，容器补 `GF_SERVER_ROOT_URL`/`GF_SERVER_DOMAIN`；首页 iframe 不再被混合内容拦，「/d/…」链接也指公网域名。
+- 注意：Grafana 是**匿名只读**，能访问该域名的人都能看图（看不到配置、改不了东西）。不想公开就在隧道里删掉这个公共主机名。
+
 ### v0.23.0 更新
 
 - **可疑访问一键封禁**：观测页「可疑访问（401/403）」每行来源 IP 后面加了「封禁 / 解封」，直接写进 `security.ipDeny` 并立刻下发 Caddy（`POST /api/security/deny|allow`）。内网/环回地址会提示「可能把你自己挡在外面」，支持 CIDR，上限 200 条。

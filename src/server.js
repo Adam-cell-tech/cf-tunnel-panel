@@ -712,10 +712,42 @@ async function handler(req, res) {
         // 加签密钥：空 = 保留旧值；要清空传 clearSecret: true
         const secretGiven = String(n.secret || '').trim();
         const secret = n.clearSecret === true ? '' : (secretGiven || state.settings.notify.secret || '');
+        // 多通道：给了 channels 就整体替换；每条按自己的 format 校验地址
+        const FORMATS = ['generic', 'dingtalk', 'feishu', 'bark'];
+        const SHAPES = {
+          dingtalk: /^https:\/\/oapi\.dingtalk\.com\/robot\/send/i,
+          feishu: /^https:\/\/(open\.feishu\.cn|open\.larksuite\.com)\/open-apis\/bot\/v2\/hook\//i,
+          bark: /^https?:\/\/[^/]+\/.+/i,
+        };
+        let channels = Array.isArray(prevN.channels) ? prevN.channels : [];
+        if (Array.isArray(n.channels)) {
+          const seen = new Set();
+          channels = n.channels.slice(0, 8).map((raw, i) => {
+            const c = raw && typeof raw === 'object' ? raw : {};
+            const id = String(c.id || `c${i + 1}`).replace(/[^\w.-]/g, '').slice(0, 24) || `c${i + 1}`;
+            if (seen.has(id)) throw new Error(`通知通道 id 重复：${id}`);
+            seen.add(id);
+            const cfmt = FORMATS.includes(c.format) ? c.format : 'generic';
+            const curl = String(c.url === undefined ? '' : c.url).trim().slice(0, 400);
+            if (curl && !/^https?:\/\//i.test(curl)) throw new Error(`通道「${c.name || id}」的地址必须以 http:// 或 https:// 开头`);
+            if (curl && SHAPES[cfmt] && !SHAPES[cfmt].test(curl)) {
+              throw new Error(`通道「${c.name || id}」的地址和「${cfmt}」格式不匹配`);
+            }
+            // 密钥：不传 = 保留旧值（前端拿到的是 hasSecret），clearSecret 才清
+            const prevC = (prevN.channels || []).find((x) => String(x.id) === id) || {};
+            const csecret = c.clearSecret === true ? ''
+              : (String(c.secret || '').trim() || String(prevC.secret || ''));
+            return {
+              id, name: String(c.name || `通道 ${i + 1}`).slice(0, 40),
+              format: cfmt, url: curl, secret: csecret, enabled: c.enabled !== false,
+            };
+          });
+        }
         state.settings.notify = {
           url,
           format: fmt,
           secret,
+          channels,
           events: n.events && typeof n.events === 'object'
             ? {
               tunnelUp: n.events.tunnelUp !== false,
@@ -1252,8 +1284,17 @@ async function handler(req, res) {
   }
 
   if (p === '/api/notify/test' && req.method === 'POST') {
-    const okSent = await notify('test', '面板通知测试', `${state.tunnels.length} 个出口，${state.routes.length} 条规则`);
-    return sendJson(res, 200, { ok: okSent, configured: !!state.settings.notify.url });
+    let channelId = '';
+    try { const b = await readBody(req); channelId = String(b.channelId || ''); } catch { /* 无 body 就发全部 */ }
+    const channels = _notify.channelList();
+    const okSent = await notify('test', '面板通知测试', `${state.tunnels.length} 个出口，${state.routes.length} 条规则`,
+      { force: true, ignoreDisabled: true, channelId });
+    return sendJson(res, 200, {
+      ok: okSent,
+      configured: channels.length > 0,
+      channels: channels.map((c) => ({ id: c.id, name: c.name, format: c.format })),
+      channelId: channelId || 'all',
+    });
   }
 
   // ---- 一次性分享链接

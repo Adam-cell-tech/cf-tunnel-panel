@@ -51,21 +51,16 @@
   <div id="sec-notify" class="card">
     <div class="hd"><h2>掉线通知</h2><div class="sub">出口掉线 / 换域名 / Caddy 下发失败时推一条</div></div>
     <div class="bd stack">
-      <div class="form-grid">
-        <div class="field"><label id="notifyUrlLabel">Webhook 地址</label><input id="notifyUrl" placeholder="https://…" /></div>
-        <div class="field"><label>格式</label>
-          <select id="notifyFormat">
-            <option value="generic">通用 JSON</option>
-            <option value="dingtalk">钉钉机器人</option>
-            <option value="feishu">飞书机器人</option>
-            <option value="bark">Bark（iOS）</option>
-          </select>
-        </div>
+      <div class="sub" style="font-weight:600">通知通道（可以同时配多个，各自独立启用）</div>
+      <div class="tbl-wrap">
+        <table class="stackable" id="chanTable">
+          <thead><tr><th>名称</th><th>格式</th><th>地址</th><th>加签密钥</th><th class="nowrap">启用</th><th class="nowrap">操作</th></tr></thead>
+          <tbody id="chanBody"></tbody>
+        </table>
       </div>
-      <div class="form-grid hidden" id="notifySecretWrap">
-        <div class="field"><label id="notifySecretLabel">加签密钥（可选）</label><input id="notifySecret" type="password" placeholder="SEC 开头的密钥，留空不改" />
-          <div class="sub" id="notifySecretHint">机器人安全设置里勾了「加签」才需要；只勾「自定义关键词」就留空</div></div>
-        <div class="field"><label>操作</label><button class="sm ghost" id="btnSecretClear">清空已存密钥</button></div>
+      <div class="row">
+        <button class="sm ghost" id="btnChanAdd">＋ 添加通道</button>
+        <span class="muted" id="chanMsg"></span>
       </div>
       <div class="hint" id="notifyHint"></div>
       <div class="form-grid">

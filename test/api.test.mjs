@@ -938,6 +938,33 @@ try {
   const afterState = (await j('/api/state')).d.state.settings.security.ipDeny || '';
   ok('一键封禁：测试后黑名单已还原', afterState === before, JSON.stringify(afterState).slice(0, 60));
 
+  // 通知多通道
+  const chSave = await j('/api/settings', { method: 'POST', body: { notify: { channels: [
+    { id: 'qa1', name: 'QA 通道一', format: 'generic', url: 'http://127.0.0.1:9/hook' },
+    { id: 'qa2', name: 'QA 通道二（停用）', format: 'generic', url: 'http://127.0.0.1:9/off', enabled: false },
+  ] } } });
+  ok('通知通道：保存两条', chSave.status === 200 && (chSave.d.settings.notify.channels || []).length === 2, String((chSave.d.settings.notify.channels || []).length));
+  const chList = chSave.d.settings.notify.channels || [];
+  ok('通知通道：脱敏后只有 hasUrl/hasSecret', chList.every((c) => 'hasUrl' in c && 'hasSecret' in c && !('url' in c) && !('secret' in c)), '');
+  ok('通知通道：停用状态被保留', chList.some((c) => c.id === 'qa2' && c.enabled === false), '');
+  const chBad = await j('/api/settings', { method: 'POST', body: { notify: { channels: [{ id: 'x1', name: '钉钉', format: 'dingtalk', url: 'http://127.0.0.1:9/x' }] } } });
+  ok('通知通道：格式与地址不匹配被拒', chBad.status === 400, String(chBad.status));
+  const chDup = await j('/api/settings', { method: 'POST', body: { notify: { channels: [{ id: 'd1', url: 'http://127.0.0.1:9/a' }, { id: 'd1', url: 'http://127.0.0.1:9/b' }] } } });
+  ok('通知通道：id 重复被拒', chDup.status === 400, String(chDup.status));
+  const nTest = await j('/api/notify/test', { method: 'POST', body: { channelId: 'qa1' } });
+  ok('通知测试：按通道发送会回通道清单', nTest.status === 200 && Array.isArray(nTest.d.channels) && nTest.d.channelId === 'qa1', String(nTest.d.channels && nTest.d.channels.length));
+  const nTestBad = await j('/api/notify/test', { method: 'POST', body: { channelId: '不存在的通道' } });
+  ok('通知测试：不存在的通道返回 ok:false', nTestBad.status === 200 && nTestBad.d.ok === false, '');
+  // 还原成测试前的那条通道（否则会把 QA 通道留在生产里）
+  await j('/api/settings', { method: 'POST', body: { notify: { channels: [{ id: 'a1', name: '本地接收端', format: 'generic', url: 'http://127.0.0.1:8098/hook' }, { id: 'b2', name: '备用通道（停用）', format: 'generic', url: 'http://127.0.0.1:8098/off', enabled: false }] } } });
+
+  // Grafana 嵌入：设置 https 地址后 CSP 要放行它
+  const gSave = await j('/api/settings', { method: 'POST', body: { grafana: { enabled: true, url: 'https://grafana.jianghugs.shop', dashboard: 'cfp-main/a650163', theme: 'dark', panels: [{ panelId: 1, title: '集群角色', h: 200 }] } } });
+  ok('Grafana：https 地址被接受', gSave.status === 200 && gSave.d.settings.grafana.url === 'https://grafana.jianghugs.shop', '');
+  const page = await rawFetch(B + '/', { headers: { Authorization: 'Basic ' + Buffer.from('admin:' + PASS, 'utf8').toString('base64') } });
+  const csp = page.headers.get('content-security-policy') || '';
+  ok('Grafana：CSP 放行了这个源', /frame-src[^;]*https:\/\/grafana\.jianghugs\.shop/.test(csp), csp.slice(0, 60));
+
   const ts = await j('/api/tunnels/stats?hours=24');
   ok('出口流量：返回每个出口一行', ts.status === 200 && Array.isArray(ts.d.tunnels) && ts.d.tunnels.length > 0, String((ts.d.tunnels || []).length));
   ok('出口流量：字段齐全', (ts.d.tunnels || []).every((t) => 'id' in t && 'count' in t && 'err5' in t && 'p95' in t && 'host' in t), '');

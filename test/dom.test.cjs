@@ -303,8 +303,14 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('设置: 有登录会话表', !!doc.querySelector('#sessTable'), '');
     chk('设置: 有踢掉其它设备按钮', !!doc.querySelector('#btnSessKickOthers'), '');
     chk('设置: 通知有格式专属提示区', !!doc.querySelector('#notifyHint'), '');
-    chk('设置: 有加签密钥字段（切换格式显示）', !!doc.querySelector('#notifySecretWrap') && !!doc.querySelector('#notifySecret'), '');
-    chk('设置: 有清空密钥按钮', !!doc.querySelector('#btnSecretClear'), '');
+    chk('设置: 每个通道有密钥输入框', !!doc.querySelector('#chanBody [data-k="secret"]'), '');
+    {
+      const secretRows = [...doc.querySelectorAll('#chanBody tr[data-cid]')]
+        .filter((r) => /已配置/.test(((r.querySelector('[data-k="secret"]') || {}).placeholder) || ''));
+      chk('设置: 已存密钥的通道有清空按钮',
+        secretRows.length === 0 || secretRows.every((r) => !!r.querySelector('[data-clear="1"]')),
+        'hasSecretRows=' + secretRows.length);
+    }
     chk('设置: 有退出全部设备按钮', !!doc.querySelector('#btnSessRevokeAll'), '');
     chk('设置: 通知里有「会话换 IP」开关', !!doc.querySelector('#evSessionIp'), '');
 
@@ -392,6 +398,22 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     const { dom, doc } = await open('/rules', 1600);
     const dup = doc.querySelector('#ruleList [data-act="dup"]');
     chk('规则: 每条规则有复制按钮', !!dup, dup ? dup.getAttribute('title') : '没有规则时跳过');
+    dom.window.close();
+  }
+
+  {
+    const { dom, doc } = await open('/settings', 2000);
+    chk('通知通道: 表格存在', !!doc.querySelector('#chanBody'), '');
+    chk('通知通道: 有添加按钮', !!doc.querySelector('#btnChanAdd'), '');
+    const rows = doc.querySelectorAll('#chanBody tr[data-cid]');
+    chk('通知通道: 渲染出已有通道', rows.length > 0, 'rows=' + rows.length);
+    dom.window.close();
+  }
+  {
+    const { dom, doc } = await open('/', 2500);
+    chk('Grafana: 首页有图表面板卡', !!doc.querySelector('#grafanaCard'), '');
+    const f = doc.querySelector('#grafanaCard iframe');
+    chk('Grafana: 嵌入了 https 图表', !!f && /grafana\.jianghugs\.shop/.test(f.getAttribute('src') || ''), f ? (f.getAttribute('src') || '').slice(0, 60) : '（未开启嵌入时跳过）');
     dom.window.close();
   }
 

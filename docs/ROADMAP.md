@@ -13,6 +13,19 @@
 | 预置 | 数据源 uid `prom-main`、仪表盘 uid `cfp-main`（slug `a650163`）、匿名只读、`allow_embedding` | 匿名 `/d-solo/cfp-main/a650163?panelId=7` 200 |
 | 面板侧 | `settings.grafana` 指向 `http://192.168.1.55:3000`，panelId 1/7/9 | 首页 CSP 含该源、`#grafanaCard` 出现 |
 
+## ✅ v0.24.0 — 多通道通知 + 监控上 HTTPS
+
+| 项 | 做了什么 | 实测 |
+| --- | --- | --- |
+| 通道数据模型 | `settings.notify.channels[]`（≤8），老字段读取时虚拟成「默认通道」，`migrateState()` 落成 `channels[0]` | 老配置未迁移仍可发送 |
+| 发送链 | `channelList()` → `sendOne()` 逐条发，`recordNotify` 记通道名 | 启用通道 `ok:true`、停用通道不发送（sink 只收到 1 条） |
+| 校验 | 每条按自己的 format 校验地址；id 重复 400；密钥空=保留、`clearSecret` 清空 | 钉钉地址填普通 URL → 400 |
+| 设置页 | 通道表：名称/格式/地址/密钥/启用/测试/删除 + 添加通道 | DOM 断言表格与已有通道行 |
+| Grafana HTTPS | Caddy 路由 `grafana.jianghugs.shop → :3000` + 隧道公共主机名 + `GF_SERVER_ROOT_URL` | 公网 `/api/health` 200、`/d/…` 200、`/d-solo` 200 |
+| CSP | `frame-src` 跟随 `settings.grafana.url` 的源 | 页面头 `frame-src 'self' https://grafana.jianghugs.shop` |
+
+测试：API **292** / DOM **133**。
+
 ## ✅ v0.23.0 — 从「看见」到「动手」
 
 | 项 | 做了什么 | 实测 |
