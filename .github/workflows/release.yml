@@ -81,7 +81,7 @@ jobs:
           body = ''
           try:
               text = open('CHANGELOG.md', encoding='utf-8').read()
-              m = re.search(r'^##\s+v?' + re.escape(ver) + r'\s*$(.*?)(?=^##\s|\Z)', text, re.S | re.M)
+              m = re.search(r'^##\s+v?' + re.escape(ver) + r'\b[^\n]*$(.*?)(?=^##\s|\Z)', text, re.S | re.M)
               if m:
                   body = m.group(1).strip()
           except OSError:

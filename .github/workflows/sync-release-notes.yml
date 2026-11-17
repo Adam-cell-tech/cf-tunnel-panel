@@ -1,0 +1,24 @@
+name: sync-release-notes
+
+# 把 CHANGELOG.md 里每个版本的段落同步成对应 Release 的正文。
+# 历史 tag 是后来补的，当时的 workflow 还不会建 Release（或正文退化），这个 job 负责抹平。
+on:
+  push:
+    paths:
+      - CHANGELOG.md
+      - tools/sync-release-notes.py
+      - .github/workflows/sync-release-notes.yml
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write          # 改 Release 正文 / 删 tag 需要
+    steps:
+      - uses: actions/checkout@v4
+      - name: 同步 Release 正文
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: python3 tools/sync-release-notes.py
