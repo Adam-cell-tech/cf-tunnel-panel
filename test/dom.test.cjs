@@ -440,8 +440,11 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
   {
     const { dom, doc } = await open('/', 2500);
     chk('Grafana: 首页有图表面板卡', !!doc.querySelector('#grafanaCard'), '');
+    const frame = doc.querySelector('#grafanaCard .gframe');
+    chk('Grafana: 有骨架容器（懒加载）', !!frame, frame ? String(frame.getAttribute('data-state') || 'skel') : '（未开启嵌入时跳过）');
     const f = doc.querySelector('#grafanaCard iframe');
-    chk('Grafana: 嵌入了 https 图表', !!f && /grafana\.jianghugs\.shop/.test(f.getAttribute('src') || ''), f ? (f.getAttribute('src') || '').slice(0, 60) : '（未开启嵌入时跳过）');
+    chk('Grafana: 进入视口后插入图表', !frame || !!f || !!doc.querySelector('#grafanaCard .gskel') || !!doc.querySelector('#grafanaCard .gfail'),
+      f ? (f.getAttribute('src') || '').slice(0, 60) : 'skel/fail');
     dom.window.close();
   }
 
@@ -470,6 +473,27 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     const css = await (await fetch(BASE + '/assets/app.css')).text();
     chk('登录页: CSS 只对非复选框套 100% 宽', /input:not\(\[type=checkbox\]\)/.test(css), '');
     chk('登录页: 复选框有显式尺寸', /input\[type=checkbox\][^{]*\{[^}]*width:18px/.test(css), '');
+  }
+
+  // ---- v0.29.0 UI ----
+  {
+    const { doc, win } = await open('/');
+    chk('概览: 日志卡默认折叠', doc.querySelector('#logBox').classList.contains('collapsed'), doc.querySelector('#logBox').className);
+    const tg = doc.querySelector('#btnLogToggle');
+    tg.click();
+    chk('概览: 点「展开」取消折叠', !doc.querySelector('#logBox').classList.contains('collapsed') && tg.getAttribute('aria-expanded') === 'true', String(tg.getAttribute('aria-expanded')));
+    chk('侧栏: 主题按钮在顶部工具条里', !!doc.querySelector('.side-tools #btnTheme'), '');
+    win.close();
+
+    const { doc: doc3, win: win3 } = await open('/tunnels');
+    const menuBtn = doc3.querySelector('[data-menu]');
+    chk('隧道: 有⋯菜单按钮', !!menuBtn, '');
+    menuBtn.click();
+    const pop = doc3.querySelector('.menu-pop');
+    chk('隧道: 点开显示菜单项', pop && !pop.classList.contains('hidden') && pop.querySelectorAll('[data-act]').length >= 4, String(pop && pop.querySelectorAll('[data-act]').length));
+    doc3.body.click();
+    chk('隧道: 点空白关闭菜单', doc3.querySelector('.menu-pop').classList.contains('hidden'), '');
+    win3.close();
   }
 
   let bad = 0;

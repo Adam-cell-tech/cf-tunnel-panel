@@ -2133,6 +2133,7 @@ const onReq = (req, res) => {
         try { countPanelReq(res.statusCode, path0); } catch {}
       }
       if (skip) return;
+      if (String(req.headers['x-cfp-test'] || '') === '1') return;   // 测试流量不写审计
       const mutating = req.method !== 'GET' && req.method !== 'HEAD';
       const failed = res.statusCode >= 400 && path0.startsWith('/api');
       if (!mutating && !failed) return;
@@ -2141,6 +2142,7 @@ const onReq = (req, res) => {
         method: req.method, path: path0, status: res.statusCode, ms: Date.now() - t0,
         action: res.statusCode < 400 ? actionOf(req.method, path0) : `${req.method} ${path0}（失败）`,
         ok: res.statusCode < 400,
+        mutating: _audit.isMutation(req.method, path0),
       });
     } catch { /* 记账失败不影响请求 */ }
   });

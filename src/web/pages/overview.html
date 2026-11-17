@@ -89,8 +89,13 @@
   <div class="hint warn hidden" id="warmBar"></div>
 
   <div class="card flush">
-    <div class="hd"><h2>最近日志</h2><div class="sub">实时推送，最多保留 1500 行</div><div class="right"><a class="sm" href="/observe">全部 →</a></div></div>
-    <pre class="log" id="logBox"></pre>
+    <div class="hd"><h2>最近日志</h2><div class="sub">实时推送，最新 6 行（展开后最多 1500 行）</div>
+      <div class="right">
+        <button class="btn mini" type="button" id="btnLogToggle" aria-expanded="false">展开</button>
+        <a class="sm" href="/observe">全部 →</a>
+      </div>
+    </div>
+    <pre class="log collapsed" id="logBox" aria-live="polite"></pre>
   </div>
 
   <div class="card">

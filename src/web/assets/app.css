@@ -241,7 +241,8 @@ pre.log .l-system{color:#a0a8b4}
 
 /* ---------------- 窄屏：导航变顶部横向 ---------------- */
 @media (max-width:900px){
-  .shell{grid-template-columns:1fr}
+  /* 关键：1fr 的隐式 min-width 是 auto，会被最宽的子元素（如侧栏底部那一行按钮）撑开整页 */
+  .shell{grid-template-columns:minmax(0,1fr)}
   .side{position:static;height:auto;border-right:none;border-bottom:1px solid var(--line)}
   .nav{flex-direction:row;overflow-x:auto;padding:4px 8px 10px;gap:4px}
   .nav .grp{display:none}
@@ -452,3 +453,63 @@ body[data-readonly="1"] .btn.primary[disabled] { cursor: not-allowed; }
 
 /* 监控页：已静默的告警行淡化 */
 .muted-row td{opacity:.62}
+
+/* ---- 图表摘要 / 图例（v0.29.0：摘要移到图下方，配色统一蓝=正常、红=错误） ---- */
+.chart-sum{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;font-variant-numeric:tabular-nums}
+.chart-sum b{font-weight:600}
+.chart-legend{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.chart-note{margin-top:6px;font-size:11.5px;color:var(--dim);line-height:1.65;font-variant-numeric:tabular-nums}
+
+/* ---- Grafana 嵌入：骨架屏 + 失败态（不再留白板） ---- */
+.gpanel{margin:0 0 10px}
+.gtitle{font-size:12px;color:var(--dim);margin:0 0 4px}
+.gframe{position:relative;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel2)}
+.gskel{position:absolute;inset:0;display:grid;place-items:center;font-size:12px;color:var(--dim);
+  background:linear-gradient(100deg,var(--panel2) 30%,var(--line) 45%,var(--panel2) 60%) 0 0/300% 100%;
+  animation:gshimmer 1.4s ease-in-out infinite}
+@keyframes gshimmer{0%{background-position:120% 0}100%{background-position:-20% 0}}
+.gfail{position:absolute;inset:0;display:flex;flex-direction:column;gap:7px;align-items:center;justify-content:center;
+  text-align:center;padding:12px;font-size:12px;color:var(--dim);line-height:1.6}
+.gfail b{color:var(--fg);font-size:13px}
+
+/* ---- 日志：默认折叠 6 行、级别色点、时间戳弱化 ---- */
+pre.log{font-size:12px;line-height:1.62}
+pre.log.collapsed{max-height:126px;overflow:hidden}
+pre.log span{display:block;white-space:pre-wrap;word-break:break-word}
+pre.log time{color:#7c8798;font-variant-numeric:tabular-nums}
+pre.log .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:middle;background:#6b7280}
+pre.log .lv-err .dot{background:var(--err)}
+pre.log .lv-warn .dot{background:var(--warn)}
+pre.log .lv-inf .dot{background:var(--acc)}
+
+/* ---- 窄屏（v0.29.0）：导航点击区、表格横向滚动、主按钮吸顶 ---- */
+@media (max-width:720px){
+  .side .nav a{padding:11px 12px;border-radius:9px;min-height:44px;display:flex;align-items:center}
+  .side .nav a.active{background:var(--acc-soft);color:var(--acc);font-weight:600}
+  .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .mobile-sticky{position:sticky;top:0;z-index:4;background:var(--bg);padding:6px 0}
+  .card>.hd{flex-wrap:wrap;gap:6px}
+  /* 窄屏不允许整页横向滚动：宽内容自己滚 */
+  html,body{overflow-x:hidden}
+  .shell,.main,.content,.card,.bd,.hd,.row,.grid2,.grid3,.grid4,.tbl-wrap{min-width:0;max-width:100%}
+  .tbl-wrap{overflow-x:auto}
+  .topbar{flex-wrap:wrap;gap:8px}
+  .topbar .tools{margin-left:0;flex-wrap:wrap}
+  .side-foot{flex-wrap:wrap;gap:8px}
+  img,svg,iframe,pre.log{max-width:100%}
+}
+
+/* ---- 「⋯」溢出菜单（出口卡片右上角） ---- */
+.menu{position:relative;display:inline-block}
+.menu-pop{position:absolute;right:0;top:calc(100% + 6px);min-width:158px;z-index:30;
+  background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px;
+  box-shadow:0 14px 34px rgba(0,0,0,.3);display:flex;flex-direction:column;gap:2px}
+.menu-pop button{border:0;background:transparent;color:var(--fg);text-align:left;
+  padding:8px 10px;border-radius:7px;font-size:12.5px;cursor:pointer}
+.menu-pop button:hover{background:var(--panel2)}
+.menu-pop button.danger{color:var(--err)}
+
+/* 侧栏顶部工具条（主题/命令面板/语言）：原来在底部，用户找不到 */
+.side-tools{display:flex;gap:6px;padding:0 12px 10px}
+.side-tools .btn{flex:0 0 auto}
+@media (max-width:900px){.side-tools{padding:0 12px}}

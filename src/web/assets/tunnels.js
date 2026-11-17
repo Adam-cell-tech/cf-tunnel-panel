@@ -4,14 +4,14 @@
 
 
 function fmtDur(sec) {
-  const s2 = Math.max(0, Math.round(sec));
-  const d = Math.floor(s2 / 86400);
-  const h = Math.floor((s2 % 86400) / 3600);
-  const m = Math.floor((s2 % 3600) / 60);
-  if (d) return `${d} 天 ${h} 小时`;
-  if (h) return `${h} 小时 ${m} 分`;
-  if (m) return `${m} 分 ${s2 % 60} 秒`;
-  return `${s2} 秒`;
+  const n = Math.max(0, Math.floor(Number(sec) || 0));
+  if (n < 60) return `${n} 秒`;
+  const m = Math.floor(n / 60);
+  if (m < 60) return `${m} 分 ${n % 60} 秒`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} 小时 ${m % 60} 分`;
+  const d = Math.floor(h / 24);
+  return `${d} 天 ${h % 24} 小时`;
 }
 let ST = null;
 let openedOnce = {};
@@ -30,17 +30,23 @@ function exitCard(t, d) {
       <h2>${esc(t.name || t.id)}</h2>
       <span class="tag">${isNamed ? '命名隧道' : '快速隧道'}</span>
       <span data-live="pill">${statusPill(rt.status)}</span>
-      <span class="tag">${scoped} 条专属规则</span>
+      <span class="tag" title="绑定到这条出口的规则数（其他规则全局生效）">${scoped} 条仅限此出口</span>
       ${metricsWarn}
       ${tokenWarn}
       ${hostWarn}
       <div class="right">
-        <button class="sm ghost" data-act="start">启动</button>
-        <button class="sm ghost" data-act="stop">停止</button>
-        <button class="sm ghost" data-act="restart">重启</button>
-        <button class="sm ghost" data-act="qr">二维码</button>
-        <button class="sm ghost" data-act="dup">复制</button>
-        <button class="sm danger" data-act="del">删除</button>
+        <button class="sm ghost" data-act="restart" title="重启这条隧道（命名隧道域名不变）">重启</button>
+        <div class="menu">
+          <button class="sm ghost" data-menu="1" aria-haspopup="true" aria-expanded="false" title="更多操作">⋯</button>
+          <div class="menu-pop hidden">
+            <button type="button" data-act="start">启动</button>
+            <button type="button" data-act="stop">停止</button>
+            <button type="button" data-act="qr">二维码</button>
+            <button type="button" data-act="copy">复制地址</button>
+            <button type="button" data-act="dup">复制成新出口</button>
+          </div>
+        </div>
+        <button class="sm danger" data-act="del" title="删除这条出口（会第二次确认）">删除</button>
       </div>
     </div>
     <div class="bd stack">
@@ -100,7 +106,7 @@ function liveRow(t, d) {
     errText ? `<span class="tag err" title="${esc(rt.lastError || '')}">${esc(errText)}</span>` : '',
     rt.pid ? `<span class="tag">pid ${rt.pid}</span>` : '',
     rt.uptimeSec ? `<span class="tag" title="本次运行时长">已运行 ${fmtDur(rt.uptimeSec)}</span>` : '',
-    (!rt.fatal && rt.reconnects) ? `<span class="tag warn" title="启动后异常退出重连的次数">重连 ${rt.reconnects}</span>` : '',
+    (!rt.fatal && rt.reconnects) ? `<span class="tag warn" title="启动后 cloudflared 异常退出并自动重连的次数；持续增长说明网络或 token 有问题">重连 ×${rt.reconnects}</span>` : '',
   ].join('');
   return (url
     ? `<a class="mono" href="${esc(url)}" target="_blank" rel="noreferrer">${esc(url)}</a><button class="sm ghost" data-act="copy">复制</button>`
@@ -313,10 +319,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
   $('#tunnelList').addEventListener('click', (e) => {
+    const mb = e.target.closest('[data-menu]');
+    if (mb) {
+      const wrap = mb.closest('.menu');
+      const pop = wrap && wrap.querySelector('.menu-pop');
+      const open = pop && !pop.classList.contains('hidden');
+      document.querySelectorAll('#tunnelList .menu-pop').forEach((x) => x.classList.add('hidden'));
+      document.querySelectorAll('#tunnelList [data-menu]').forEach((x) => x.setAttribute('aria-expanded', 'false'));
+      if (pop && !open) { pop.classList.remove('hidden'); mb.setAttribute('aria-expanded', 'true'); }
+      e.stopPropagation();
+      return;
+    }
     const b = e.target.closest('[data-act]');
     if (!b) return;
     const card = b.closest('[data-id]');
+    const pop = b.closest('.menu-pop');
+    if (pop) { pop.classList.add('hidden'); const tg = card && card.querySelector('[data-menu]'); if (tg) tg.setAttribute('aria-expanded', 'false'); }
     act(card, b.dataset.act);
+  });
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('.menu')) return;
+    document.querySelectorAll('#tunnelList .menu-pop').forEach((x) => x.classList.add('hidden'));
+    document.querySelectorAll('#tunnelList [data-menu]').forEach((x) => x.setAttribute('aria-expanded', 'false'));
   });
 
   refresh();

@@ -27,6 +27,15 @@ Prometheus already scrapes both blue/green slots, and Grafana auto-imports the d
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
 
+### v0.29.0 highlights
+
+- Grafana panels load lazily with a skeleton and an explicit failure state (reason + retry + open in new tab), instead of a blank card.
+- Audit "changes" now counts only mutating requests; test traffic (`x-cfp-test: 1`) is never written to the audit log.
+- CSP allows Cloudflare's injected analytics beacon again.
+- Human-readable durations (`2 小时 5 分`, not `2 时 5 秒`), log panel collapsed by default with level dots, exit actions moved into a `⋯` menu.
+- Mobile: fixed whole-page horizontal overflow (grid `minmax(0,1fr)` bug); theme/language/palette moved to the top of the sidebar.
+
+
 ## What's new in v0.28.4
 
 Fixes a regression introduced in v0.28.3: the checkbox rendered as a full-width blue bar with its label squeezed into one character per line.

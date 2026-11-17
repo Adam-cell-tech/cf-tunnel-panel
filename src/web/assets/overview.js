@@ -27,7 +27,7 @@ function paintRules(d) {
   const rows = list.slice(0, 6).map((r) => `<tr>
       <td class="mono">${esc(r.path || '/')}</td>
       <td class="mono muted">${esc(r.upstream || '')}</td>
-      <td class="nowrap">${r.tunnelId ? `<span class="tag acc">专属</span>` : '<span class="tag">全局</span>'}</td>
+      <td class="nowrap">${r.tunnelId ? '<span class="tag acc" title="只在绑定的那个出口上生效">仅限单出口</span>' : '<span class="tag" title="所有出口都生效">全局</span>'}</td>
     </tr>`).join('');
   const c = d.runtime.caddy || {};
   const shadowed = c.shadowed || [];
@@ -52,7 +52,7 @@ async function paintStats(d) {
 
   const routes = d.state.routes || [];
   $('#statRules').textContent = (d.runtime.caddy && d.runtime.caddy.routeCount) || 0;
-  $('#statRulesX').textContent = `配置里 ${routes.length} 条，${routes.filter((r) => r.tunnelId).length} 条专属`;
+  $('#statRulesX').textContent = `共 ${routes.length} 条规则，其中 ${routes.filter((r) => r.tunnelId).length} 条仅限单出口`;
 
   const ok = caddyOk(d);
   const c = (d.runtime.caddy) || {};
@@ -138,12 +138,12 @@ function drawTrend(buckets) {
   ], max);
   const total = buckets.reduce((a, b) => a + b.total, 0);
   const err = buckets.reduce((a, b) => a + b.err, 0);
-  box.innerHTML = `<div class="row" style="gap:8px;margin-bottom:8px;flex-wrap:wrap">
-      <span class="tag">合计 ${total} 次</span>
-      <span class="tag err">错误 ${err} 次（${total ? Math.round((err / total) * 100) : 0}%）</span>
-      <span class="tag">峰值 ${Math.max(0, ...buckets.map((b) => b.total))}/小时</span>
-    </div>
-    ${c.svg}${c.labels}`;
+  box.innerHTML = `${c.svg}${c.labels}
+    <div class="chart-sum">
+      <span class="tag">合计 <b>${total}</b> 次</span>
+      <span class="tag ${err ? 'err' : ''}">错误 <b>${err}</b> 次${total ? `（${Math.round((err / total) * 100)}%）` : ''}</span>
+      <span class="tag">峰值 <b>${Math.max(0, ...buckets.map((b) => b.total))}</b>/小时</span>
+    </div>`;
 }
 
 function drawHist(points) {
@@ -168,17 +168,17 @@ function drawHist(points) {
   const minUp = Math.min(...points.map((p) => Number(p.running) || 0));
   const last = points[points.length - 1];
   const keys = points.map((p) => p.t);
-  box.innerHTML = `<div class="row" style="gap:8px;margin-bottom:8px;flex-wrap:wrap">
-      <span class="tag ok">当前 ${last.running} / ${last.total} 在线</span>
-      <span class="tag">区间最低 ${minUp}</span>
-      <span class="tag">${points.length} 个采样点</span>
-    </div>
-    <svg class="chart" viewBox="0 0 100 ${CH}" preserveAspectRatio="none" role="img" aria-label="出口在线数历史">
+  box.innerHTML = `<svg class="chart" viewBox="0 0 100 ${CH}" preserveAspectRatio="none" role="img" aria-label="出口在线数历史">
       ${gridLines()}
       <polygon points="${area}" fill="var(--acc)" opacity="0.16"></polygon>
       <polyline points="${pts}" fill="none" stroke="var(--acc)" stroke-width="1.4" vector-effect="non-scaling-stroke" stroke-linejoin="round"></polyline>
       ${points.map((p, i) => `<circle cx="${(i * step).toFixed(2)}" cy="${y(p.running).toFixed(2)}" r="1.1" fill="var(--acc)"><title>${new Date(p.t).getHours()}:00 · ${p.running}/${p.total} 在线</title></circle>`).join('')}
-    </svg>${chartLabels(keys.filter((_, i) => i % Math.max(1, Math.ceil(points.length / 6)) === 0))}`;
+    </svg>${chartLabels(keys.filter((_, i) => i % Math.max(1, Math.ceil(points.length / 6)) === 0))}
+    <div class="chart-sum">
+      <span class="tag ok">当前 <b>${last.running}</b> / ${last.total} 在线</span>
+      <span class="tag">区间最低 <b>${minUp}</b></span>
+      <span class="tag">${points.length} 个采样点</span>
+    </div>`;
 }
 
 function drawAudit(buckets) {
@@ -189,18 +189,18 @@ function drawAudit(buckets) {
   const max = Math.max(1, ...buckets.map((b) => b.total)) * 1.08;
   const keys = buckets.map((b) => b.t);
   const c = barsSvg(keys, [
-    { values: buckets.map((b) => b.total), color: 'var(--warn)', opacity: 0.85, name: '合计', unit: ' 次改动' },
+    { values: buckets.map((b) => b.total), color: 'var(--acc)', opacity: 0.85, name: '合计', unit: ' 次改动' },
     { values: buckets.map((b) => b.err), color: 'var(--err)', opacity: 0.95, name: '失败' },
   ], max);
   const total = buckets.reduce((a, b) => a + b.total, 0);
   const err = buckets.reduce((a, b) => a + b.err, 0);
-  box.innerHTML = `<div class="row" style="gap:8px;margin-bottom:8px;flex-wrap:wrap">
-      <span class="tag">合计 ${total} 次改动</span>
-      <span class="tag ${err ? 'err' : ''}">失败 ${err} 次</span>
+  box.innerHTML = `${c.svg}${c.labels}
+    <div class="chart-sum">
+      <span class="tag">合计 <b>${total}</b> 次改动</span>
+      <span class="tag ${err ? 'err' : ''}">失败 <b>${err}</b> 次</span>
       <span class="tag">${total === 0 ? '这段时间没人动过' : '峰值 ' + Math.max(0, ...buckets.map((b) => b.total)) + '/小时'}</span>
       <a class="sm" href="/observe">看明细 →</a>
-    </div>
-    ${c.svg}${c.labels}`;
+    </div>`;
 }
 
 // 按规则堆叠柱状图：一眼看出哪个服务在吃流量
@@ -236,9 +236,9 @@ function drawPaths(groups, hours, unmatched) {
       ? `<a class="tag jump" href="/rules?focus=${encodeURIComponent(g.id)}" title="${tip}" style="border-left:3px solid ${color}">${label} →</a>`
       : `<span class="tag" style="border-left:3px solid ${color}">${label}</span>`;
   }).join('');
-  box.innerHTML = `<div class="row" style="gap:6px;margin-bottom:8px;flex-wrap:wrap">${legend}</div>
-    ${c.svg}${c.labels}
-    <div class="sub" style="margin-top:4px">最近 ${hours} 小时；另有 ${(unmatched && unmatched.total) || 0} 次没命中任何规则（健康检查、未知路径）${(unmatched && unmatched.err) ? `，其中 5xx ${unmatched.err} 次` : ''}</div>`;
+  box.innerHTML = `${c.svg}${c.labels}
+    <div class="chart-legend">${legend}</div>
+    <div class="chart-note">最近 ${hours} 小时；另有 <b>${(unmatched && unmatched.total) || 0}</b> 次没命中任何规则（健康检查、未知路径）${(unmatched && unmatched.err) ? `，其中 5xx <b>${unmatched.err}</b> 次` : ''}</div>`;
 }
 
 // 部署提醒：容器里跑的代码指纹变了、但还没预过热 → 提示去点一下
@@ -291,11 +291,20 @@ async function paintCharts() {
   }
 }
 
+function logLevel(line) {
+  const t = String(line || '');
+  if (/\bERR\b|error|fail|panic|refused|timeout/iu.test(t)) return ['err', 'ERR'];
+  if (/\bWRN\b|warn/iu.test(t)) return ['warn', 'WRN'];
+  if (/\bINF\b|info/iu.test(t)) return ['inf', 'INF'];
+  return ['dbg', '···'];
+}
 function appendLog(rec) {
   if (!logEl) return;
   const span = document.createElement('span');
-  span.className = 'l-' + (rec.source || 'panel');
-  span.textContent = `${new Date(rec.t || rec.at).toLocaleTimeString('zh-CN', { hour12: false })} [${rec.source}] ${rec.line}\n`;
+  const [lv, lvText] = logLevel(rec.line);
+  span.className = 'l-' + (rec.source || 'panel') + ' lv-' + lv;
+  const ts = new Date(rec.t || rec.at).toLocaleTimeString('zh-CN', { hour12: false });
+  span.innerHTML = `<i class="dot" title="${lvText}"></i><time>${ts}</time> ${esc(rec.line)}\n`;
   logEl.appendChild(span);
   logCount++;
   if (logEl.childNodes.length > 400) logEl.removeChild(logEl.firstChild);
@@ -350,13 +359,44 @@ function paintGrafana(d) {
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   if (mixed) { box.innerHTML = ''; return; }
-  box.innerHTML = (g.panels || []).map((p) => `
-    <div style="margin:0 0 10px">
-      ${p.title ? `<div class="sub" style="margin:0 0 4px">${esc(p.title)}</div>` : ''}
-      <iframe src="${esc(grafanaUrl(g, p))}" title="${esc(p.title || ('Grafana panel ' + p.panelId))}"
-              style="width:100%;height:${Number(p.h) || 220}px;border:1px solid var(--line);border-radius:8px;background:transparent"
-              loading="lazy" referrerpolicy="no-referrer"></iframe>
+  box.innerHTML = (g.panels || []).map((p, i) => `
+    <div class="gpanel">
+      ${p.title ? `<div class="gtitle">${esc(p.title)}</div>` : ''}
+      <div class="gframe" data-i="${i}" style="height:${Number(p.h) || 220}px">
+        <div class="gskel"><span>正在连接 Grafana…</span></div>
+      </div>
     </div>`).join('');
+  // 懒加载：滚到可视区才开始拉 iframe；12 秒没 load 就当失败，给「重试」按钮，别留白板
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => { if (e.isIntersecting) { loadGFrame(e.target, g, i => (g.panels || [])[i]); io.unobserve(e.target); } });
+  }, { rootMargin: '120px' });
+  box.querySelectorAll('.gframe').forEach((el) => io.observe(el));
+}
+
+function loadGFrame(el, g, getPanel) {
+  const p = getPanel(Number(el.dataset.i)) || {};
+  el.dataset.state = 'loading';
+  el.innerHTML = '<div class="gskel"><span>正在连接 Grafana…</span></div>';
+  const url = grafanaUrl(g, p) + '&_=' + Date.now();
+  const f = document.createElement('iframe');
+  f.src = url;
+  f.title = p.title || ('Grafana panel ' + p.panelId);
+  f.setAttribute('referrerpolicy', 'no-referrer');
+  f.style.cssText = 'width:100%;height:100%;border:0;background:transparent;display:block';
+  const done = (ok) => {
+    if (el.dataset.state === 'done') return;
+    el.dataset.state = ok ? 'done' : 'error';
+    if (!ok) {
+      el.innerHTML = '<div class="gfail"><b>这块图没加载出来</b><span>可能是 Grafana 没启动、被浏览器拦了混合内容，或网络断了。</span>'
+        + '<button class="btn mini" type="button" data-retry="1">重试</button>'
+        + `<a class="sm" href="${esc(url.replace(/&_=\d+$/, ''))}" target="_blank" rel="noopener">在新窗口打开 →</a></div>`;
+      el.querySelector('[data-retry]').addEventListener('click', () => loadGFrame(el, g, getPanel));
+    }
+  };
+  f.addEventListener('load', () => done(true));
+  f.addEventListener('error', () => done(false));
+  setTimeout(() => { if (el.dataset.state !== 'done') done(false); }, 12000);
+  el.appendChild(f);
 }
 
 async function refresh() {
@@ -377,6 +417,13 @@ async function refresh() {
 
 document.addEventListener('DOMContentLoaded', () => {
   logEl = $('#logBox');
+  const lt = $('#btnLogToggle');
+  if (lt) lt.addEventListener('click', () => {
+    const collapsed = logEl.classList.toggle('collapsed');
+    lt.textContent = collapsed ? '展开' : '收起';
+    lt.setAttribute('aria-expanded', String(!collapsed));
+    if (!collapsed) logEl.scrollTop = logEl.scrollHeight;
+  });
   $('#btnRefresh').addEventListener('click', refresh);
   $('#trendHours').addEventListener('change', paintCharts);
   const ah = $('#auditHours');

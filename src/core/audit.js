@@ -32,6 +32,30 @@ let seq = 0;
 let lastPrune = 0;
 
 /** 本地日期 YYYY-MM-DD（审计是给人看的，用本地时区更自然） */
+// 只有真正改变状态/安全的请求才算「变更」：登录、/api/match、/api/rules/test、/api/curl
+// 这类只读探测虽然用 POST，但不应污染「每小时改动了多少次」的统计。
+const MUTATING = [
+  /^\/api\/settings$/,
+  /^\/api\/routes$/,
+  /^\/api\/tunnels?(\/|$)/,
+  /^\/api\/shares(\/|$)/,
+  /^\/api\/config\/(apply|snapshot)$/,
+  /^\/api\/(panel-auth|viewer|operator)$/,
+  /^\/api\/totp\//,
+  /^\/api\/import$/,
+  /^\/api\/backups\/restore$/,
+  /^\/api\/security\/(deny|allow)$/,
+  /^\/api\/cf\/(tunnels|dns|cache)(\/|$)/,
+  /^\/api\/monitor\/(mute|unmute)$/,
+  /^\/api\/notify\/resend$/,
+  /^\/api\/sessions\/revoke/,
+];
+function isMutation(method, path) {
+  if (method === 'GET' || method === 'HEAD') return false;
+  const p = String(path || '').split('?')[0];
+  return MUTATING.some((re) => re.test(p));
+}
+
 function dayKey(ts = Date.now()) {
   const d = new Date(ts);
   const p = (n) => String(n).padStart(2, '0');
@@ -138,6 +162,9 @@ function record(entry = {}) {
     action: String(entry.action || '').slice(0, 80),
     target: String(entry.target || '').slice(0, 200),
     ok: entry.ok !== false,
+    mutating: entry.mutating !== undefined
+      ? !!entry.mutating
+      : isMutation(String(entry.method || ''), String(entry.path || '')),
   };
   // 同一次请求可能被「显式记账」和「收尾兜底」各记一条：兜底那条的 action 是「POST /api/xxx」形式，
   // 若前一条同 method+path+status 且间隔 <1s、action 是人话，就丢弃这条兜底记录，避免审计里成对出现。
@@ -247,6 +274,8 @@ function byHour(hours = 12) {
   if (!rows.length) rows = buffer.slice();
   for (const r of rows) {
     if (!r || !r.at || r.at < from) continue;
+    const mut = r.mutating !== undefined ? !!r.mutating : isMutation(r.method, r.path);
+    if (!mut) continue;                        // 只读探测与登录不算「改动」
     const d = new Date(r.at);
     d.setMinutes(0, 0, 0);
     const b = index.get(d.getTime());
@@ -293,6 +322,6 @@ function stats() {
 migrateLegacy();
 ensureDir();
 
-module.exports = { record, list, stats, byHour, actionOf, days, AUDIT_MAX, AUDIT_DIR, KEEP_DAYS };
+module.exports = { record, list, stats, byHour, actionOf, days, isMutation, AUDIT_MAX, AUDIT_DIR, KEEP_DAYS };
 /** 兼容旧调用：AUDIT_FILE 现在指向「今天」的分日文件 */
 Object.defineProperty(module.exports, 'AUDIT_FILE', { enumerable: true, get: () => fileFor() });

@@ -14,7 +14,7 @@ const basic = 'Basic ' + Buffer.from(`${USER}:${PASS}`).toString('base64');
 const rawFetch = globalThis.fetch;
 globalThis.fetch = (u, o = {}) => {
   const href = String(u);
-  if (href.startsWith(B)) o = { ...o, headers: { ...(o.headers || {}), Authorization: basic } };
+  if (href.startsWith(B)) o = { ...o, headers: { ...(o.headers || {}), Authorization: basic, 'x-cfp-test': '1' } };
   return rawFetch(u, o);
 };
 
@@ -36,7 +36,7 @@ async function restoreRoutes() {
   try {
     const r = await fetch(`${B}/api/routes`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: basic },
+      headers: { 'Content-Type': 'application/json', Authorization: basic, 'x-cfp-test': '1' },
       body: JSON.stringify({ routes: _snapRoutes }),
     });
     console.log(r.ok ? '\n已还原测试前的规则' : `\n还原规则失败: HTTP ${r.status}`);
@@ -46,7 +46,7 @@ process.on('exit', () => { /* 同步无法 await，改用 beforeExit 已处理 *
 process.on('SIGINT', () => { restoreRoutes().finally(() => process.exit(130)); });
 const ok = (n, c, x = '') => { c ? pass++ : fail++; console.log(`${c ? 'PASS' : 'FAIL'}  ${n}${x ? '  [' + x + ']' : ''}`); };
 const j = async (p, o = {}) => {
-  const r = await fetch(B + p, { headers: o.body ? { 'Content-Type': 'application/json' } : {}, ...o, body: o.body ? JSON.stringify(o.body) : undefined });
+  const r = await fetch(B + p, { headers: { ...(o.body ? { 'Content-Type': 'application/json' } : {}), 'x-cfp-test': '1' }, ...o, body: o.body ? JSON.stringify(o.body) : undefined });
   const t = await r.text();
   let d; try { d = JSON.parse(t); } catch { d = { raw: t }; }
   return { status: r.status, d, headers: r.headers };
@@ -1029,6 +1029,24 @@ try {
   const sRulesMon = fs.readFileSync('tools/monitoring/prometheus/alerts.yml', 'utf8');
   ok('告警规则：监控栈副本已同步', sRulesMon === sRules, String(sRulesMon.length) + '/' + String(sRules.length));
 }
+
+  // ---- v0.29.0：审计口径 / CSP / 概览日志折叠 / 出口菜单 / 时长文案 / 窄屏栅格 ----
+  const v29a = await j('/api/audit?limit=50');
+  ok('审计：行带 mutating 标记', Array.isArray(v29a.d.rows) && v29a.d.rows.every((r) => typeof r.mutating === 'boolean'), String((v29a.d.rows || []).length));
+  const v29t = await j('/api/audit/trend?hours=3');
+  ok('审计趋势：只统计变更（桶字段齐全）', Array.isArray(v29t.d.buckets) && v29t.d.buckets.length === 3
+    && v29t.d.buckets.every((b) => ['t', 'total', 'ok', 'err'].every((k) => k in b)), JSON.stringify((v29t.d.buckets || []).slice(0, 2)));
+  const v29l = await fetch(B + '/login');
+  const v29csp = String(v29l.headers.get('content-security-policy') || '');
+  ok('CSP：放行 Cloudflare 统计脚本', /static\.cloudflareinsights\.com/.test(v29csp), v29csp.slice(0, 60));
+  const v29css = await (await fetch(B + '/assets/app.css')).text();
+  ok('窄屏：栅格用 minmax(0,1fr) 防撑宽', /grid-template-columns:minmax\(0,1fr\)/.test(v29css), '');
+  const v29tj = await (await fetch(B + '/assets/tunnels.js')).text();
+  ok('出口卡：动作收进⋯菜单', /data-menu/.test(v29tj) && /menu-pop/.test(v29tj), '');
+  ok('时长文案：小时/分而不是「时」', /小时 \$\{/.test(v29tj) && !/\$\{h\} 时/.test(v29tj), '');
+  const v29ov = await (await fetch(B + '/')).text();
+  ok('概览：日志卡默认折叠有按钮', /id="btnLogToggle"/.test(v29ov) && /class="log collapsed"/.test(v29ov), '');
+  ok('侧栏：主题/语言/命令面板移到顶部', /class="side-tools"/.test(v29ov), '');
 
 await restoreRoutes();
 

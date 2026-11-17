@@ -52,14 +52,16 @@ function pageShell(active, body, lang = 'zh') {
 <div class="shell">
   <aside class="side" aria-label="侧边导航">
     <div class="brand"><span class="logo" aria-hidden="true">CF</span><div><div class="nm">${title}</div><div class="ver">v${VERSION}</div></div></div>
+    <div class="side-tools">
+      <button class="sm ghost" id="btnTheme" title="切换深色 / 浅色" aria-label="切换深色或浅色主题">🌙</button>
+      <button class="sm ghost" id="btnPalette" title="命令面板（Ctrl+K）" aria-label="打开命令面板">⌘K</button>
+      <button class="sm ghost" id="btnLang" title="${i18n.t(lang, '切换语言')}" aria-label="${i18n.t(lang, '切换语言')}">${lang === 'en' ? '中文' : 'EN'}</button>
+    </div>
     <nav class="nav" aria-label="页面导航">${nav}</nav>
     <div class="side-foot">
       <div class="row"><span class="dot" id="healthDot" aria-hidden="true"></span><span class="muted" id="healthText" role="status">${i18n.t(lang, '检测中…')}</span></div>
       <div class="row"><span class="tag warn hidden" id="unsaved" title="有改动还没保存">未保存</span>
       <span class="tag hidden" id="roleTag" aria-live="polite"></span>
-      <button class="sm ghost" id="btnTheme" title="切换深色 / 浅色" aria-label="切换深色或浅色主题">🌙</button>
-      <button class="sm ghost" id="btnPalette" title="命令面板（Ctrl+K）" aria-label="打开命令面板">⌘K</button>
-      <button class="sm ghost" id="btnLang" title="${i18n.t(lang, '切换语言')}" aria-label="${i18n.t(lang, '切换语言')}">${lang === 'en' ? '中文' : 'EN'}</button>
       <button class="sm ghost" id="btnLogout" title="${i18n.t(lang, '退出登录')}" aria-label="${i18n.t(lang, '退出登录')}">${i18n.t(lang, '退出')}</button></div>
       <div class="muted" style="font-size:11px">© <span id="year"></span> cf-tunnel-panel</div>
     </div>
@@ -168,7 +170,7 @@ function serveText(req, res, body, type, cache = 'no-cache', extra = {}) {
         frameSrc += ` ${u.protocol}//${u.host}`;
       }
     } catch { /* 配置坏了就退化成只允许 self */ }
-    headers['Content-Security-Policy'] = `default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-src ${frameSrc}; base-uri 'none'; form-action 'self'`;
+    headers['Content-Security-Policy'] = `default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' https://static.cloudflareinsights.com; connect-src 'self' https://cloudflareinsights.com; frame-src ${frameSrc}; base-uri 'none'; form-action 'self'`;
   }
   if (req.headers['if-none-match'] === etag) {
     res.writeHead(304, headers);
