@@ -2,6 +2,28 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.28.0
+
+告警终于能"闭环"了：**Prometheus 判断 → Alertmanager 路由 → 面板转成你配的钉钉/飞书/bark 通知**，而且点得动。
+
+### 新增
+- **监控页可点**：告警行现在能点——带 `labels.id` 的（如 `TunnelDown`）跳 `/tunnels?focus=<id>` 并高亮那张出口卡；抓取目标里的面板槽位会加「面板」标签。`/api/monitor/status` 的 `alerts[]` 增加了 `labels`（只保留 `id/name/mode/instance/job/status/severity`）。
+- **单出口错误率告警** `ExitErrorRateHigh`：`(cf_exit_errors_5m / cf_exit_requests_5m > 0.1) and cf_exit_requests_5m >= 20`，`for: 10m`。同一出口「抓不到」时由 `TunnelDown` 抑制，不重复报。
+- **Alertmanager 接入**（`tools/monitoring`）：新增 `prom/alertmanager:v0.28.0` 容器（`127.0.0.1:9093`）+ `alertmanager/alertmanager.yml`，Prometheus 侧 `alerting.alertmanagers` 指向它；告警统一转给面板的新回调接口。
+- **面板告警回调** `POST /api/alerts/hook`：接收 Alertmanager 的 webhook，拼成人话（`[正在告警] AlertName · 出口 X · warning` + summary）后走你配的通知通道；`firing`/`resolved` 都转发（`send_resolved: true`）。令牌用 `?token=` 或 `x-cfp-token` 头，首次访问会自动生成，管理员可在「设置 → 监控嵌入 → 告警回调令牌」查看/复制。
+- 新增 `GET /api/alerts/hook-token`（管理员）：返回令牌与推荐回调地址。
+- 新增路由规则（面板自带的那条之外）：「面板本机入口（127.0.0.1:8080）」——同机服务（Alertmanager、你自己的脚本）统一走 Caddy，切主后依然能打进来。
+- 测试：API **309**（+6：令牌可取、错令牌 403、正确令牌接收、告警带 labels、规则含 ExitErrorRateHigh、监控栈副本同步）、DOM **139**（+2）。
+
+### 实测（本机全链路）
+1. `curl -XPOST 127.0.0.1:9093/api/v2/alerts` 塞一条 `DemoAlert`；
+2. 20 秒后 Alertmanager POST 到 `http://127.0.0.1:8080/api/alerts/hook?token=…`（走 Caddy → 在线槽位）；
+3. 面板审计出现 `alertmanager | 接收外部告警回调 | 1 响 / 0 恢复`，通知记录出现 `promAlert | skipped | 没有启用任何通知通道`（当前没配通道，属预期）。
+
+### 两个坑（写下来省你时间）
+- **Alertmanager 0.28 的 `http_config` 不支持 `headers`**：写 `headers: {x-cfp-token: …}` 会 `field headers not found in type config.plain` 直接起不来。改成把令牌拼进 URL 的 `?token=`。
+- 回调地址别写死某个槽位端口（8090/8095 会换），写 `127.0.0.1:8080` 让 Caddy 挑在线的那个。
+
 ## v0.27.0
 
 Grafana 那张缺失的图补上了：**按出口看谁在吃流量**。

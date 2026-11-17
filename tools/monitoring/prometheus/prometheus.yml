@@ -13,3 +13,9 @@ scrape_configs:
     static_configs:
       - targets: ['127.0.0.1:8090', '127.0.0.1:8095']
     # 停着的那一色会 down，用 instance 标签区分即可（PanelDown 告警里已说明）
+
+# 告警交给 Alertmanager 路由；Alertmanager 再把 webhook 打回面板（见 alertmanager.yml）
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['127.0.0.1:9093']

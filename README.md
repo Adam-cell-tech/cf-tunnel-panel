@@ -27,6 +27,19 @@ Prometheus already scrapes both blue/green slots, and Grafana auto-imports the d
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
 
+## What's new in v0.28.0
+
+Alerts finally close the loop: **Prometheus detects → Alertmanager routes → the panel turns it into your DingTalk / Feishu / Bark message** — and every alert row is clickable.
+
+- **Clickable monitor page** — alert rows with `labels.id` link to `/tunnels?focus=<id>` (the exit card scrolls into view and flashes); panel scrape targets get a "panel" tag. `/api/monitor/status` now ships `labels` per alert.
+- **Per-exit error-rate rule** `ExitErrorRateHigh`: `(cf_exit_errors_5m / cf_exit_requests_5m > 0.1) and cf_exit_requests_5m >= 20`, `for: 10m`, inhibited by `TunnelDown` for the same exit.
+- **Alertmanager** in `tools/monitoring` (`prom/alertmanager:v0.28.0`, `127.0.0.1:9093`); Prometheus points at it, and it forwards everything to the panel.
+- **Panel webhook** `POST /api/alerts/hook`: turns Alertmanager payloads into human text and pushes them through your notification channels (both firing and resolved). Token via `?token=` or `x-cfp-token`; generated on first use and visible to admins under *Settings → Monitoring*.
+- New `GET /api/alerts/hook-token` (admin) and a `127.0.0.1:8080` Caddy route so same-host services always reach whichever slot is live.
+- Tests: API **309**, DOM **139**.
+
+Gotcha worth knowing: Alertmanager 0.28 rejects `http_config.headers` (`field headers not found in type config.plain`) — put the token in the URL query instead.
+
 ## What's new in v0.27.0
 
 - **Per-exit traffic metrics** — `/metrics` now also emits `cf_exit_requests_5m{id,name,mode}` and `cf_exit_errors_5m{...}`: a 5-minute rolling count per tunnel exit, derived from the access log (reads at most 1 MB), so Grafana can show *which exit is actually serving traffic*.

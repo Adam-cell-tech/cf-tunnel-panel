@@ -92,3 +92,63 @@ groups:
 2. 面板侧：设置 → 监控嵌入，填 `http://<grafana>:3000`、仪表盘 `uid/slug`（地址栏 `/d/` 后面那段）、
    要显示的 `panelId`（Grafana 里 View panel → Inspect → Panel JSON 的 `id`）。
 3. 页面 CSP 的 `frame-src` 会自动只放行这一个源；关掉嵌入即回收。
+
+## Alertmanager：让告警真的发出去
+
+面板自己只能"看"告警，不会主动发；真正的通知链是 **Prometheus → Alertmanager → 面板 → 你的通道**。
+
+### 起容器
+
+```bash
+cd tools/monitoring
+docker compose up -d alertmanager     # prom/alertmanager:v0.28.0，监听 127.0.0.1:9093
+curl -s 127.0.0.1:9093/-/ready        # OK
+```
+
+Prometheus 侧已配好（`prometheus/prometheus.yml`）：
+
+```yaml
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['127.0.0.1:9093']
+```
+
+改完 `prometheus.yml` 或规则文件要 `docker restart cfp-prometheus`（这个容器没开 `--web.enable-lifecycle`，`/-/reload` 不生效）。
+
+### 把令牌告诉 Alertmanager
+
+1. 面板 → 设置 → 监控嵌入 → **告警回调令牌** → 复制；
+2. 写进 `tools/monitoring/alertmanager/alertmanager.yml`：
+
+```yaml
+receivers:
+  - name: panel
+    webhook_configs:
+      - url: 'http://127.0.0.1:8080/api/alerts/hook?token=<令牌>'
+        send_resolved: true
+```
+
+- **别写 `headers:`**：Alertmanager 0.28 的 `http_config` 不认 `headers`，会 `field headers not found in type config.plain` 直接起不来，所以令牌走查询参数。
+- **地址写 `127.0.0.1:8080`（Caddy）**，不要写 8090/8095 —— 那是槽位端口，滚动升级会换。
+
+### 验证
+
+```bash
+# 塞一条测试告警进 Alertmanager
+curl -XPOST 127.0.0.1:9093/api/v2/alerts -H 'Content-Type: application/json' -d "[{
+  \"labels\":{\"alertname\":\"DemoAlert\",\"severity\":\"warning\",\"name\":\"演示出口\"},
+  \"annotations\":{\"summary\":\"端到端测试\"}
+}]"
+# 等 group_wait（20s），然后看面板审计
+curl -s -u admin:*** 127.0.0.1:8080/api/audit?limit=3
+```
+
+审计里应出现 `alertmanager | 接收外部告警回调 | 1 响 / 0 恢复`；通知记录里对应一条 `promAlert`（没配通道时状态是 `skipped`，不是失败）。
+
+### 静默：面板侧 vs Alertmanager 侧
+
+| 做法 | 效果 | 用什么 |
+| --- | --- | --- |
+| 面板监控页「静默 1 小时」 | 只是本页不显示，Prometheus 照常记录、通知照发 | 临时不想看见某条 |
+| Alertmanager silence | 连通知都不产生 | 计划维护窗口 |

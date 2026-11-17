@@ -128,6 +128,17 @@ groups:
             公网暴露的面板被扫是常态。看「可疑访问（401/403）」卡片，
             必要时开 TOTP、收紧口令、或在 Cloudflare 侧加 WAF 规则/速率限制。
 
+      - alert: ExitErrorRateHigh
+        expr: (cf_exit_errors_5m / cf_exit_requests_5m > 0.1) and cf_exit_requests_5m >= 20
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: '出口「{{ $labels.name }}」错误率超过 10%'
+          description: |
+            最近 5 分钟该出口请求 {{ $labels.name }} 的错误占比超过 10%（至少 20 个请求才判定）。
+            去隧道页看「出口流量」，或到观测页按状态码过滤确认是 4xx 还是 5xx。
+
       - alert: NotifyFailing
         expr: sum(increase(cf_notify_total{status="fail"}[30m])) > 2
         for: 5m

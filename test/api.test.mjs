@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import http from 'node:http';
 
 const B = process.env.PANEL_URL || 'http://127.0.0.1:8090';
@@ -1006,6 +1007,27 @@ try {
   ok('出口流量：字段齐全', (ts.d.tunnels || []).every((t) => 'id' in t && 'count' in t && 'err5' in t && 'p95' in t && 'host' in t), '');
   const tsBad = await j('/api/tunnels/stats?hours=abc');
   ok('出口流量：hours 非法时用默认值', tsBad.status === 200 && tsBad.d.hours > 0, 'hours=' + tsBad.d.hours);
+
+  // ---- v0.28.0：告警回调令牌 + 出口错误率规则 ----
+  const sTok = await j('/api/alerts/hook-token');
+  ok('告警回调：管理员能取到令牌', sTok.status === 200 && /^[0-9a-f]{32}$/.test(String(sTok.d.token || '')), String(sTok.d.token || '').slice(0, 6));
+  const sWrong = await fetch(B + '/api/alerts/hook?token=deadbeef', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'firing', alerts: [] })
+  });
+  ok('告警回调：错令牌被拒', sWrong.status === 403, String(sWrong.status));
+  const sGood = await fetch(B + '/api/alerts/hook?token=' + sTok.d.token, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status: 'firing', alerts: [{ status: 'firing', labels: { alertname: 'ApiTestAlert', severity: 'warning', name: '测试出口' }, annotations: { summary: '来自测试' } }] })
+  });
+  const sGoodBody = await sGood.json();
+  ok('告警回调：正确令牌接收成功', sGood.status === 200 && sGoodBody.ok === true && sGoodBody.firing === 1, JSON.stringify(sGoodBody).slice(0, 80));
+  const sMon = await j('/api/monitor/status');
+  ok('监控状态：告警带 labels', Array.isArray(sMon.d.alerts) && sMon.d.alerts.every((a) => a && typeof a.labels === 'object'), String((sMon.d.alerts || []).length));
+  const sRules = fs.readFileSync('docs/prometheus-alerts.yml', 'utf8');
+  ok('告警规则：含单出口错误率', /alert:\s*ExitErrorRateHigh/.test(sRules) && /cf_exit_errors_5m/.test(sRules), '');
+  const sRulesMon = fs.readFileSync('tools/monitoring/prometheus/alerts.yml', 'utf8');
+  ok('告警规则：监控栈副本已同步', sRulesMon === sRules, String(sRulesMon.length) + '/' + String(sRules.length));
 }
 
 await restoreRoutes();

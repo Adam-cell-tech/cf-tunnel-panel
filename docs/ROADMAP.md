@@ -5,6 +5,18 @@
 
 ---
 
+## ✅ v0.28.0 — 告警闭环（能点、能算、能发）
+
+| 项 | 做法 | 实测 |
+| --- | --- | --- |
+| 告警可点 | `/api/monitor/status` 的 `alerts[]` 带 `labels`（id/name/mode/instance/job/status/severity）；前端 `aLink()` → `/tunnels?focus=<id>`，`tunnels.js` 的 `focusExit()` 滚动 + `.flash` | 点 `TunnelDown` 能定位到出口卡 |
+| 单出口错误率 | `ExitErrorRateHigh` = `cf_exit_errors_5m / cf_exit_requests_5m > 0.1 and >= 20` for 10m；`TunnelDown` 抑制同 `name` | promtool `SUCCESS: 11 rules` |
+| Alertmanager | `prom/alertmanager:v0.28.0`（127.0.0.1:9093）+ `alertmanager.yml`（route→panel，group_wait 20s，critical 1h 重复，抑制规则） | `/-/ready` 200、`/api/v1/alertmanagers` 已发现 |
+| 面板回调 | `POST /api/alerts/hook`（令牌 `?token=`/`x-cfp-token`）→ `notify('promAlert')` + 审计；`GET /api/alerts/hook-token`（管理员） | 端到端：Alertmanager 投递 → 审计「接收外部告警回调 1 响 / 0 恢复」 |
+| 本机入口 | 新规则「面板本机入口（127.0.0.1:8080）」→ 面板槽位（Caddy 双上游），同机服务切主不中断 | `127.0.0.1:8080/healthz` 200 |
+| 坑 | Alertmanager 0.28 无 `http_config.headers`（`field headers not found in type config.plain`）→ 令牌走 URL 查询参数 | 起容器验证 |
+| 测试 | API 309（+6）、DOM 139（+2） | 全绿 |
+
 ### v0.21.0 附带：tools/monitoring 监控栈
 
 | 项 | 做法 | 实测 |

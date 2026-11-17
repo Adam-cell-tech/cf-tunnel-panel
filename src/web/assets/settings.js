@@ -143,6 +143,24 @@ const NOTIFY_FMT = {
   },
 };
 
+function bindHook() {
+  const btn = $('#btnHookToken');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    try {
+      const d = await api('/api/alerts/hook-token');
+      $('#alertHook').value = d.token;
+      $('#hookMsg').textContent = '本机回调地址：' + d.localUrl;
+    } catch (e) { toast(e.message, 'err'); }
+  });
+  const cp = $('#btnHookCopy');
+  if (cp) cp.addEventListener('click', () => {
+    const v = $('#alertHook').value;
+    if (!v) { toast('先点「生成 / 查看」', 'warn'); return; }
+    copyText(v);
+  });
+}
+
 function fillMonitoring() {
   const mon = (ST.state.settings || {}).monitoring || {};
   if ($('#monProm')) $('#monProm').value = mon.promUrl || '';
@@ -360,6 +378,7 @@ function bindSessions() {
       if (d.self) { location.href = '/login'; return; }
       toast('已踢掉');
       loadSessions();
+  bindHook();
     } catch (x) { toast(x.message, 'err'); }
   });
   const r = document.querySelector('#btnSessRefresh'); if (r) r.addEventListener('click', loadSessions);

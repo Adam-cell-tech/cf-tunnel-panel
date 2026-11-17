@@ -8,3 +8,4 @@ node_modules/
 test/.env
 tools/monitoring/grafana-data/
 tools/monitoring/prometheus-data/
+tools/monitoring/alertmanager-data/

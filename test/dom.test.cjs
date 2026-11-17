@@ -408,6 +408,8 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('监控: 侧栏有监控入口', !!doc.querySelector('.side .nav a[href="/monitor"]'), '');
     const alertRows = doc.querySelectorAll('#monAlertBody tbody tr').length;
     chk('监控: 告警区要么空态要么有行', !!doc.querySelector('#monAlertBody') && (alertRows === 0 || !!doc.querySelector('#monAlertBody [data-mute], #monAlertBody [data-unmute]')), 'rows=' + alertRows);
+    const jump = doc.querySelector('#monAlertBody a.jump, #monAlertBody span.tag');
+    chk('监控: 告警行带出口/面板标注', alertRows === 0 || !!jump, alertRows === 0 ? '没有告警时跳过' : (jump ? jump.textContent.trim() : '没有标注'));
     dom.window.close();
   }
   {
@@ -416,6 +418,7 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('通知通道: 有添加按钮', !!doc.querySelector('#btnChanAdd'), '');
     const rows = doc.querySelectorAll('#chanBody tr[data-cid]');
     chk('通知通道: 配置为空时不报错（有通道则渲染）', rows.length >= 0 && !!doc.querySelector('#chanBody').innerHTML, 'rows=' + rows.length);
+    chk('告警回调: 设置页有令牌按钮', !!doc.querySelector('#btnHookToken') && !!doc.querySelector('#alertHook'), '');
     dom.window.close();
   }
   {

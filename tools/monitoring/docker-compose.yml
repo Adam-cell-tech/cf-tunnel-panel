@@ -1,4 +1,4 @@
-# 监控栈：Prometheus + Grafana（只给面板首页嵌图用）
+# 监控栈：Prometheus + Grafana + Alertmanager（面板首页嵌图、告警转发给面板通知通道）
 #
 #   cd tools/monitoring && docker compose up -d
 #
@@ -49,4 +49,18 @@ services:
       - ./grafana-data:/var/lib/grafana
       - ./provisioning:/etc/grafana/provisioning:ro
       - ./dashboards:/var/lib/grafana/dashboards:ro
+    user: "${PUID:-1000}:${PGID:-1000}"
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    container_name: cfp-alertmanager
+    network_mode: host
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --web.listen-address=127.0.0.1:9093
+    volumes:
+      - ./alertmanager:/etc/alertmanager:ro
+      - ./alertmanager-data:/alertmanager
     user: "${PUID:-1000}:${PGID:-1000}"

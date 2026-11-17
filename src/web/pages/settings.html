@@ -244,6 +244,16 @@
   <div id="sec-code" class="card">
     <div class="hd"><h2>配置即代码</h2><div class="sub">状态 <span class="mono">state.json</span> 投影成一份声明式 JSON：导出、改、预览差异、整份应用</div></div>
     <div class="bd stack">
+      <div class="field"><label>告警回调令牌（Alertmanager → 面板）</label>
+        <div class="row" style="gap:8px;align-items:center">
+          <input id="alertHook" class="mono" readonly placeholder="点右侧按钮生成/查看" style="flex:1" />
+          <button class="sm ghost" id="btnHookToken" type="button">生成 / 查看</button>
+          <button class="sm ghost" id="btnHookCopy" type="button">复制</button>
+        </div>
+        <div class="sub">把 Prometheus 的告警路由到 Alertmanager 后，在 alertmanager.yml 里加
+          <span class="mono">webhook_configs: [{url: 'http://127.0.0.1:8090/api/alerts/hook', headers: {'x-cfp-token': 令牌}}]</span>
+          —— 面板收到后会按你配的通知通道转发（事件名 <span class="mono">promAlert</span>）。</div>
+        <div class="sub" id="hookMsg"></div></div>
       <div class="field"><label>Prometheus 地址（监控页用）</label><input id="monProm" placeholder="http://127.0.0.1:9090" />
         <div class="sub">面板会替你查 targets 与告警；留空 = 不查。<span class="mono">tools/monitoring</span> 里有一键起一套的 compose。</div></div>
 

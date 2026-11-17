@@ -253,6 +253,18 @@ async function loadExitStats() {
   }
 }
 
+// 从监控页的告警点过来时，定位到对应出口
+function focusExit() {
+  const id = new URLSearchParams(location.search).get('focus');
+  if (!id) return;
+  const el = document.querySelector(`#tunnelList [data-id="${id}"]`);
+  if (!el) { toast('这个出口不在当前列表里（可能刚被删掉）', 'warn'); return; }
+  if (el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  el.setAttribute('data-focused', '1');
+  el.classList.add('flash');
+  setTimeout(() => el.classList.remove('flash'), 1600);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   $('#btnStartAll').addEventListener('click', async () => {
     try { await api('/api/tunnels/start-all', { method: 'POST' }); toast('正在启动全部出口', 'ok'); setTimeout(() => refresh(true), 1500); }
@@ -308,6 +320,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   refresh();
+  focusExit();
   setInterval(() => refresh(false), 5000);
   loadExitStats();
   setInterval(() => { if (!document.hidden) loadExitStats(); }, 30000);

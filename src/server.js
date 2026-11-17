@@ -251,6 +251,37 @@ async function handler(req, res) {
     return;
   }
 
+  // ---------- Alertmanager 回调（用自己的令牌，不依赖面板登录）----------
+  if (p === '/api/alerts/hook' && req.method === 'POST') {
+    const body = await readBody(req);
+    const cur = state.settings.alerts || (state.settings.alerts = { mutes: [], hookToken: '' });
+    if (!cur.hookToken) {
+      const tok = crypto.randomBytes(16).toString('hex');
+      cur.hookToken = tok;
+      saveState('alert-hook-token');
+      return sendJson(res, 401, {
+        ok: false,
+        error: '第一次调用：已生成回调令牌。请用管理员登录面板，在「设置 → 监控嵌入 → 告警回调令牌」里复制，写进 alertmanager.yml 的 x-cfp-token 后再重试',
+      });
+    }
+    const given = String(req.headers['x-cfp-token'] || new URL(req.url, 'http://x').searchParams.get('token') || '');
+    if (given !== cur.hookToken) return sendJson(res, 403, { ok: false, error: '令牌不对（x-cfp-token）' });
+    try {
+      const list = Array.isArray(body.alerts) ? body.alerts : [];
+      const firing = list.filter((a) => (a.status || '') === 'firing');
+      const resolved = list.filter((a) => (a.status || '') === 'resolved');
+      const labelOf = (a, k) => String((a.labels && a.labels[k]) || '');
+      const line = (a, tag) => `[${tag}] ${labelOf(a, 'alertname')}${labelOf(a, 'name') ? ` · 出口 ${labelOf(a, 'name')}` : ''}${labelOf(a, 'severity') ? ` · ${labelOf(a, 'severity')}` : ''}\n${String((a.annotations && a.annotations.summary) || '').slice(0, 200)}`;
+      const title = firing.length ? `Prometheus 告警：${firing.length} 条在响` : resolved.length ? 'Prometheus 告警已恢复' : 'Prometheus 告警';
+      const text = [...firing.map((a) => line(a, '正在告警')), ...resolved.map((a) => line(a, '已恢复'))].join('\n\n').slice(0, 3000) || String(body.status || '');
+      await _notify.notify('promAlert', title, text, { force: true });
+      auditRecord({ action: '接收外部告警回调', target: `${firing.length} 响 / ${resolved.length} 恢复`, ip: clientIpOf(req), actor: 'alertmanager', method: req.method, path: p, status: 200, ms: 0 });
+      return sendJson(res, 200, { ok: true, firing: firing.length, resolved: resolved.length });
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: e.message });
+    }
+  }
+
   if (p.startsWith('/assets/') && (req.method === 'GET' || req.method === 'HEAD')) {
     const name = path.basename(p.slice('/assets/'.length));
     const file = path.join(ASSET_DIR, name);
@@ -489,6 +520,7 @@ async function handler(req, res) {
           name: (x.labels && x.labels.alertname) || '', state: x.state || '',
           severity: (x.labels && x.labels.severity) || '', summary: (x.annotations && x.annotations.summary) || '',
           activeAt: x.activeAt || '',
+          labels: Object.fromEntries(Object.entries(x.labels || {}).filter(([k]) => ['id', 'name', 'mode', 'instance', 'job', 'status', 'severity'].includes(k))),
         }));
       } catch (e) { alerts = []; }
       const down = targets.filter((t) => t.health !== 'up').length;
@@ -506,6 +538,23 @@ async function handler(req, res) {
     } catch (e) {
       return sendJson(res, 200, { ok: false, promUrl: base, error: `连不上 Prometheus：${e.message}`, mutes: activeMutes(), targets: [], alerts: [] });
     }
+  }
+
+  if (p === '/api/alerts/hook-token' && req.method === 'GET') {
+    if ((auth.role || 'admin') !== 'admin') return sendJson(res, 403, { ok: false, error: '只有管理员能查看回调令牌' });
+    const cur = state.settings.alerts || (state.settings.alerts = { mutes: [], hookToken: '' });
+    if (!cur.hookToken) {
+      cur.hookToken = crypto.randomBytes(16).toString('hex');
+      saveState('alert-hook-token');
+    }
+    const host = String(((state.tunnels || []).find((t) => t.mode === 'named' && t.publicHostname) || {}).publicHostname || '');
+    return sendJson(res, 200, {
+      ok: true,
+      token: cur.hookToken,
+      localUrl: `http://127.0.0.1:${PORT}/api/alerts/hook`,
+      hint: 'Alertmanager 跑在同一台机器上就用 localUrl；写在 alertmanager.yml 的 webhook_configs.url，并加 headers: {x-cfp-token: 令牌}',
+      publicHost: host,
+    });
   }
 
   if (p === '/api/monitor/mute' && req.method === 'POST') {

@@ -50,7 +50,26 @@
           src="${esc(grafanaUrl(g, p))}" loading="lazy" referrerpolicy="no-referrer"></iframe></div>`).join('');
   }
 
-  async function load() {
+// 告警行：如果标签里带出口 id，就链到隧道页并高亮那条出口
+function aLink(a) {
+  const id = (a.labels && a.labels.id) || '';
+  const nm = (a.labels && a.labels.name) || '';
+  if (!id) return nm ? ` <span class="tag">出口 ${esc(nm)}</span>` : '';
+  return ` <a class="tag jump" href="/tunnels?focus=${encodeURIComponent(id)}" title="跳到这个出口">出口 ${esc(nm || id)}</a>`;
+}
+
+// 抓取目标：面板槽位（8090/8095）标一下「面板」，其他原样显示
+function slotLink(instance) {
+  const m = /:(\d+)$/.exec(String(instance || ''));
+  const port = m ? Number(m[1]) : 0;
+  const panelPort = Number(location.port) || 80;
+  if (port && (port === panelPort || ((port === 8090 || port === 8095) && (/^(127\.0\.0\.1|localhost)$/.test(String(instance).replace(/:\d+$/, '')))))) {
+    return '<span class="tag">面板</span> ';
+  }
+  return '';
+}
+
+async function load() {
     const tb = $('#monTargetBody');
     const ab = $('#monAlertBody');
     try {
@@ -76,7 +95,7 @@
         ? `<div class="tbl-wrap"><table class="stackable"><thead><tr><th>任务</th><th>实例</th><th>状态</th><th>最近抓取</th><th>错误</th></tr></thead><tbody>${
           d.targets.map((t) => `<tr>
             <td class="mono" data-label="任务">${esc(t.job)}</td>
-            <td class="mono muted" data-label="实例">${esc(t.scrapeUrl || t.instance)}</td>
+            <td class="mono muted" data-label="实例">${slotLink(t.instance)}${esc(t.scrapeUrl || t.instance)}</td>
             <td data-label="状态">${badge(t.health)}</td>
             <td class="mono" data-label="最近抓取">${esc(ago(t.lastScrape))}</td>
             <td class="mono muted" data-label="错误">${esc(t.lastError || '—')}</td>
@@ -87,7 +106,7 @@
       ab.innerHTML = (d.alerts || []).length
         ? `<div class="tbl-wrap"><table class="stackable"><thead><tr><th>告警</th><th>状态</th><th>级别</th><th>开始</th><th>说明</th><th>操作</th></tr></thead><tbody>${
           d.alerts.map((a) => `<tr${a.muted ? ' class="muted-row"' : ''}>
-            <td data-label="告警"><b>${esc(a.name)}</b>${a.muted ? ` <span class="tag warn" title="静默到 ${esc(a.muteUntil || '')}">已静默</span>` : ''}</td>
+            <td data-label="告警"><b>${esc(a.name)}</b>${aLink(a)}${a.muted ? ` <span class="tag warn" title="静默到 ${esc(a.muteUntil || '')}">已静默</span>` : ''}</td>
             <td data-label="状态"><span class="tag ${a.state === 'firing' ? 'err' : 'warn'}">${a.state === 'firing' ? '正在告警' : '待定'}</span></td>
             <td class="muted" data-label="级别">${esc(a.severity || '—')}</td>
             <td class="mono" data-label="开始">${esc(ago(a.activeAt))}</td>

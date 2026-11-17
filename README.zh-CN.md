@@ -41,6 +41,17 @@ Prometheus 已经同时抓 blue/green 两个槽位，Grafana 会自动导入 `do
 并开好匿名只读 + `allow_embedding`，所以首页「监控面板」的三个字段可以直接填（细节见
 `tools/monitoring/README.md`）。
 
+### v0.28.0 更新
+
+告警闭环：**Prometheus 判断 → Alertmanager 路由 → 面板转成你配的通知**，每条告警都能点。
+
+- 监控页告警行可点（带 `labels.id` 的跳 `/tunnels?focus=<id>`，出口卡滚动到位并高亮）；抓取目标前面板槽位加「面板」标签。
+- 新增 `ExitErrorRateHigh`（单出口 5 分钟错误率 >10% 且请求 ≥20，持续 10 分钟）；同出口 `TunnelDown` 时抑制。
+- `tools/monitoring` 加 `prom/alertmanager:v0.28.0`（`127.0.0.1:9093`），Prometheus 已指向它。
+- 面板新增 `POST /api/alerts/hook` 接收 Alertmanager webhook（令牌 `?token=` / `x-cfp-token`，管理员可在设置页查看），firing 与 resolved 都转发到你的通知通道。
+- 新增「面板本机入口（127.0.0.1:8080）」规则：同机服务统一走 Caddy，切主不受影响。
+- 坑：Alertmanager 0.28 的 `http_config` 不支持 `headers`，令牌要拼进 URL。
+
 ### v0.27.0 更新
 
 - **按出口的流量指标**：`/metrics` 增加 `cf_exit_requests_5m{id,name,mode}` 与 `cf_exit_errors_5m{...}` —— 每个出口最近 5 分钟的请求数与错误数（滚动窗口，来自访问日志，最多读 1MB），Grafana 里终于能看出「哪个出口真在干活」。

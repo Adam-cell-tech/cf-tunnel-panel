@@ -1,0 +1,35 @@
+# Alertmanager：Prometheus 的告警路由中心
+# 这里只做「转给面板」——面板收到后按你配置的通知通道（钉钉/飞书/bark/通用 webhook）发出去。
+# 真正的静默也可以在这里做（silences），比面板侧静默更彻底：连通知都不会产生。
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: panel
+  group_by: ['alertname', 'name']
+  group_wait: 20s
+  group_interval: 2m
+  repeat_interval: 4h
+  routes:
+    # 严重告警缩短重复间隔
+    - matchers: ['severity="critical"']
+      receiver: panel
+      repeat_interval: 1h
+
+receivers:
+  - name: panel
+    webhook_configs:
+      # 令牌在面板「设置 → 监控嵌入 → 告警回调令牌」里生成，已拼在下面的 ?token= 里
+      # （Alertmanager 0.28 的 http_config 不支持 headers 字段，所以走查询参数）
+      # 走 127.0.0.1:8080（Caddy）而不是某个槽位端口，这样切主后仍然可用
+      - url: 'http://127.0.0.1:8080/api/alerts/hook?token=1ce4da5d5d5093d229ca5038e9501f02'
+        send_resolved: true
+        http_config:
+          follow_redirects: true
+        max_alerts: 20
+
+inhibit_rules:
+  # 同一出口已经「抓不到」时，就别再报它的错误率
+  - source_matchers: ['alertname="TunnelDown"']
+    target_matchers: ['alertname=~"ExitErrorRateHigh|ProxyErrorRateHigh"']
+    equal: ['name']
