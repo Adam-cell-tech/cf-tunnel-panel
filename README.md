@@ -230,7 +230,7 @@ rules), `./caddy.bootstrap.json` (initial Caddy config, replaced at runtime).
 ### 3.2 Start
 
 ```bash
-git clone https://github.com/Adam-cell-tech/cf-tunnel-panel.git
+git clone https://github.com/jianghugs/cf-tunnel-panel.git
 cd cf-tunnel-panel
 mkdir -p data/caddy-logs
 docker compose up -d --build

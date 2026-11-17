@@ -104,7 +104,7 @@ function loginPage({ next = '/', error = '', lang = 'zh' } = {}) {
       <li><span class="ico" aria-hidden="true">⤳</span><div><b>${t('规则分流')}</b><em>${t('一条隧道挂多个服务：路径分流、基础认证、IP 白名单')}</em></div></li>
       <li><span class="ico" aria-hidden="true">◫</span><div><b>${t('看得见')}</b><em>${t('访问统计、审计日志、Prometheus 指标与告警')}</em></div></li>
     </ul>
-    <p class="foot">${t('开源 MIT')} · github.com/Adam-cell-tech/cf-tunnel-panel</p>
+    <p class="foot">${t('开源 MIT')} · <a href="https://github.com/jianghugs/cf-tunnel-panel" target="_blank" rel="noopener">github.com/jianghugs/cf-tunnel-panel</a></p>
   </aside>
   <main class="login-card">
     <div class="login-tools">
