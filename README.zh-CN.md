@@ -41,6 +41,11 @@ Prometheus 已经同时抓 blue/green 两个槽位，Grafana 会自动导入 `do
 并开好匿名只读 + `allow_embedding`，所以首页「监控面板」的三个字段可以直接填（细节见
 `tools/monitoring/README.md`）。
 
+### v0.23.0 更新
+
+- **可疑访问一键封禁**：观测页「可疑访问（401/403）」每行来源 IP 后面加了「封禁 / 解封」，直接写进 `security.ipDeny` 并立刻下发 Caddy（`POST /api/security/deny|allow`）。内网/环回地址会提示「可能把你自己挡在外面」，支持 CIDR，上限 200 条。
+- **出口流量（按域名）**：隧道页新增一张表，把访问日志的 Host 归属到具体出口 —— 请求数 / 5xx / 4xx / p95 / 流量，窗口 1/6/24/72 小时（`GET /api/tunnels/stats?hours=`）。不属于任何出口的主机名单独汇总。
+
 ### v0.22.0 更新
 
 - **界面知道你的角色了**：`/api/state` 下发 `role` 与 `canWrite`，顶栏显示「只读账号 / 运维账号」标签，写按钮一开始就禁用，不再等你点下去才 403。

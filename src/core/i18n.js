@@ -656,6 +656,33 @@ const EN_V0220 = {
 };
 Object.assign(EN, EN_V0220);
 
+const EN_V0221 = {
+  "封禁": "Block",
+  "解封": "Unblock",
+  "已封禁": "blocked",
+  "操作": "Action"
+};
+Object.assign(EN, EN_V0221);
+
+const EN_V0230 = {
+  "出口流量（按域名）": "Traffic by exit (host)",
+  "多条隧道跑不同域名时，看谁在吃流量、谁在报错": "When several tunnels serve different domains: who gets the traffic, who errors",
+  "统计时间窗口": "Statistics window",
+  "最近 1 小时": "Last hour",
+  "最近 6 小时": "Last 6 hours",
+  "最近 24 小时": "Last 24 hours",
+  "最近 72 小时": "Last 72 hours",
+  "正在读取访问日志…": "Reading the access log…",
+  "出口": "Exit",
+  "域名": "Domain",
+  "请求": "Requests",
+  "流量": "Traffic",
+  "（还没有公网域名）": "(no public domain yet)",
+  "还没有出口": "No exits yet",
+  "按域名统计（来自访问日志的 Host）": "Grouped by host from the access log"
+};
+Object.assign(EN, EN_V0230);
+
 const EN_PAGES = {
   '加签密钥（可选）': 'Signing secret (optional)',
   '机器人安全设置里勾了「加签」才需要；只勾「自定义关键词」就留空': 'Only needed when the bot has signing enabled; leave empty if you use a keyword instead',

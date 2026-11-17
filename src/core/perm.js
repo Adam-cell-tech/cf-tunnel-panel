@@ -18,6 +18,7 @@ const OPERATOR_WRITE = [
   /^\/api\/shares(\/|$)/,
   /^\/api\/curl$/,
   /^\/api\/ws-test$/,
+  /^\/api\/security\/(deny|allow)$/,
   /^\/api\/rules\/test$/,
   /^\/api\/match$/,
   /^\/api\/bench\/local$/,

@@ -409,6 +409,59 @@ async function handler(req, res) {
     }
   }
 
+  // 按出口聚合：多条隧道跑不同域名时，看谁在吃流量、谁在报错
+  if (p === '/api/tunnels/stats' && req.method === 'GET') {
+    const url2 = new URL(req.url, 'http://x');
+    const hours = Math.min(Math.max(Number(url2.searchParams.get('hours')) || 24, 0.1), 168);
+    const d = readAccess(4000, { since: Date.now() - hours * 3600 * 1000, maxBytes: 4 * 1024 * 1024 });
+    const rows = (d && d.rows) || [];
+    const hostOf = (t) => {
+      const u = publicUrlOf(t) || '';
+      const m = /^https?:\/\/([^/:]+)/i.exec(u);
+      return m ? m[1].toLowerCase() : '';
+    };
+    const buckets = new Map(); // host -> {count, ok, err4, err5, bytes, durs: []}
+    const other = { count: 0, hosts: new Map() };
+    const known = new Map();
+    for (const t of state.tunnels) {
+      const h = hostOf(t);
+      if (h) known.set(h, t.id);
+    }
+    for (const r of rows) {
+      const host = String(r.host || '').toLowerCase();
+      if (!host) continue;
+      if (!known.has(host)) {
+        other.count += 1;
+        other.hosts.set(host, (other.hosts.get(host) || 0) + 1);
+        continue;
+      }
+      const b = buckets.get(host) || { count: 0, ok: 0, err4: 0, err5: 0, bytes: 0, durs: [] };
+      b.count += 1;
+      const st = Number(r.status) || 0;
+      if (st >= 500) b.err5 += 1; else if (st >= 400) b.err4 += 1; else b.ok += 1;
+      b.bytes += Number(r.size) || 0;
+      if (r.durMs) b.durs.push(r.durMs);
+      buckets.set(host, b);
+    }
+    const p95 = (arr) => {
+      if (!arr.length) return 0;
+      const a = arr.slice().sort((x, y) => x - y);
+      return a[Math.min(a.length - 1, Math.floor(a.length * 0.95))];
+    };
+    const tunnels = state.tunnels.map((t) => {
+      const host = hostOf(t);
+      const b = (host && buckets.get(host)) || { count: 0, ok: 0, err4: 0, err5: 0, bytes: 0, durs: [] };
+      return {
+        id: t.id, name: t.name, mode: t.mode, host,
+        count: b.count, ok: b.ok, err4: b.err4, err5: b.err5,
+        bytes: b.bytes, p95: p95(b.durs),
+      };
+    });
+    const others = [...other.hosts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8)
+      .map(([host, count]) => ({ host, count }));
+    return sendJson(res, 200, { ok: true, hours, sampled: rows.length, tunnels, other: { count: other.count, hosts: others }, note: (d && d.note) || '' });
+  }
+
   // 按规则聚合访问日志：谁在被访问、谁在报错、哪条慢
   if (p === '/api/routes/stats' && req.method === 'GET') {
     const url = new URL(req.url, 'http://x');
@@ -488,6 +541,55 @@ async function handler(req, res) {
     });
     res.end(body);
     return true;
+  }
+
+  // 一键封禁：把「可疑访问」里看到的 IP 直接写进 security.ipDeny
+  // （在此之前，两个信息都在，但要人去设置页手抄一遍）
+  if ((p === '/api/security/deny' || p === '/api/security/allow') && req.method === 'POST') {
+    const denyMode = p.endsWith('/deny');
+    try {
+      const body = await readBody(req);
+      const raw = String(body.ip || '').trim();
+      if (!raw || raw.length > 64 || !/^[0-9a-fA-F:.\/]+$/.test(raw)) {
+        return sendJson(res, 400, { ok: false, error: 'IP 格式不对（要写成 1.2.3.4 或 2001:db8::1）' });
+      }
+      let entry = raw;
+      if (!raw.includes('/')) {
+        const v = net.isIP(raw);
+        if (!v) return sendJson(res, 400, { ok: false, error: `不是一个合法 IP：${raw}` });
+        entry = v === 6 ? `${raw}/128` : `${raw}/32`;
+      } else {
+        const [addr, mask] = raw.split('/');
+        const v = net.isIP(addr);
+        const m = Number(mask);
+        if (!v || !Number.isInteger(m) || m < 0 || m > (v === 6 ? 128 : 32)) {
+          return sendJson(res, 400, { ok: false, error: 'CIDR 不合法，例如 203.0.113.0/24' });
+        }
+      }
+      const cur = String((state.settings.security && state.settings.security.ipDeny) || '');
+      let list = cur.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean);
+      if (denyMode) {
+        if (list.includes(entry)) return sendJson(res, 200, { ok: true, added: false, entry, ipDeny: list.join('\n') });
+        if (list.length >= 200) return sendJson(res, 400, { ok: false, error: '黑名单最多 200 条，先清掉一些' });
+        list.push(entry);
+      } else {
+        if (!list.includes(entry)) return sendJson(res, 200, { ok: true, removed: false, entry, ipDeny: list.join('\n') });
+        list = list.filter((x) => x !== entry);
+      }
+      state.settings.security.ipDeny = list.join('\n');
+      saveState(denyMode ? 'ip-deny' : 'ip-allow');
+      pushCaddy();
+      auditRecord({ action: denyMode ? '封禁来源 IP' : '解封来源 IP', target: entry, ok: true });
+      const warning = /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$)/.test(entry.split('/')[0])
+        ? '这是内网/本机地址：如果你正从内网访问面板，封掉会把自己挡在外面'
+        : '';
+      return sendJson(res, 200, {
+        ok: true, added: denyMode, removed: !denyMode, entry, warning,
+        ipDeny: state.settings.security.ipDeny, count: list.length,
+      });
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: e.message });
+    }
   }
 
   if (p === '/api/security/attempts' && req.method === 'GET') {

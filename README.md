@@ -7,7 +7,7 @@
 > changes, no open ports**. Multiple tunnels can run at the same time (quick + named, or several
 > accounts and domains).
 
-- Version: **v0.22.0**
+- Version: **v0.23.0**
 - Works with: NAS, self-hosted sites, Home Assistant, Jellyfin, Gitea, Immich, qBittorrent… any HTTP service
 - Stack: `node:http` backend (zero dependencies), hand-written frontend (no build step), `Caddy` for routing,
   `cloudflared` for the tunnel — one `docker compose up` and you are done
@@ -26,6 +26,11 @@ cd tools/monitoring && docker compose up -d     # Grafana on :3000, Prometheus o
 Prometheus already scrapes both blue/green slots, and Grafana auto-imports the dashboard from
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
+
+## What's new in v0.23.0
+
+- **Block an IP straight from the security panel.** Every row in "Suspicious access (401/403)" now has a Block / Unblock button that writes to `security.ipDeny` and pushes Caddy immediately (`POST /api/security/deny|allow`). Loopback/private ranges get an extra warning ("this may lock you out"), CIDR is accepted (`/32`, `/128`, `/24`), capped at 200 entries.
+- **Traffic per exit.** The tunnels page gains a table that attributes access-log hosts to individual exits — requests, 5xx, 4xx, p95 and bytes, over a 1/6/24/72 hour window (`GET /api/tunnels/stats?hours=`). Hostnames that belong to no exit are summarised underneath.
 
 ## What's new in v0.22.0
 

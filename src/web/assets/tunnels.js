@@ -215,6 +215,44 @@ async function refresh(force) {
   }
 }
 
+
+/* 出口级流量：访问日志里的 Host 归属到具体出口（命名隧道按 publicHostname，快速按当前域名） */
+function fmtBytes(n) {
+  const v = Number(n) || 0;
+  if (v < 1024) return v + ' B';
+  if (v < 1024 * 1024) return (v / 1024).toFixed(1) + ' KB';
+  if (v < 1024 * 1024 * 1024) return (v / 1024 / 1024).toFixed(1) + ' MB';
+  return (v / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+}
+
+async function loadExitStats() {
+  const box = $('#exitStatsBody');
+  if (!box) return;
+  const hours = Number(($('#exitStatsHours') || {}).value || 24);
+  try {
+    const d = await api(`/api/tunnels/stats?hours=${hours}`);
+    const rows = (d.tunnels || []).map((t) => `<tr>
+      <td data-label="出口"><b>${esc(t.name)}</b> <span class="tag">${t.mode === 'named' ? '命名' : '快速'}</span></td>
+      <td class="mono muted" data-label="域名">${esc(t.host || '（还没有公网域名）')}</td>
+      <td class="mono" data-label="请求">${t.count}</td>
+      <td class="mono ${t.err5 ? 'err-hint' : ''}" data-label="5xx">${t.err5}</td>
+      <td class="mono" data-label="4xx">${t.err4}</td>
+      <td class="mono" data-label="p95">${t.p95 ? t.p95 + 'ms' : '—'}</td>
+      <td class="mono muted" data-label="流量">${fmtBytes(t.bytes)}</td>
+    </tr>`).join('');
+    const others = (d.other && d.other.hosts) || [];
+    const otherRow = others.length
+      ? `<div class="hint" style="margin-top:8px">另外 ${d.other.count} 条请求打在不属于任何出口的域名上（例如 Cloudflare 后台手工加的其它主机名）：${others.map((x) => `<span class="mono">${esc(x.host)} ×${x.count}</span>`).join('、')}</div>`
+      : '';
+    box.innerHTML = `<div class="tbl-wrap"><table class="stackable">
+      <thead><tr><th>出口</th><th>域名</th><th>请求</th><th>5xx</th><th>4xx</th><th>p95</th><th>流量</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="7" class="empty">还没有出口</td></tr>'}</tbody>
+    </table></div>${otherRow}`;
+  } catch (e) {
+    box.innerHTML = `<div class="hint warn">读取失败：${esc(e.message)}</div>`;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   $('#btnStartAll').addEventListener('click', async () => {
     try { await api('/api/tunnels/start-all', { method: 'POST' }); toast('正在启动全部出口', 'ok'); setTimeout(() => refresh(true), 1500); }
@@ -271,5 +309,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   refresh();
   setInterval(() => refresh(false), 5000);
+  loadExitStats();
+  setInterval(() => { if (!document.hidden) loadExitStats(); }, 30000);
+  if ($('#btnExitStats')) $('#btnExitStats').addEventListener('click', () => loadExitStats().catch((e) => toast(e.message, 'err')));
+  if ($('#exitStatsHours')) $('#exitStatsHours').addEventListener('change', () => loadExitStats().catch((e) => toast(e.message, 'err')));
 });
 })();

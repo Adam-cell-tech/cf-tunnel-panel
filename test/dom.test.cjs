@@ -395,6 +395,21 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     dom.window.close();
   }
 
+  {
+    const { dom, doc } = await open('/tunnels', 2000);
+    chk('出口流量: 卡片存在', !!doc.querySelector('#exitStatsCard'), '');
+    const body = doc.querySelector('#exitStatsBody');
+    chk('出口流量: 表格渲染出来了', !!body && /<table/.test(body.innerHTML), body ? body.innerHTML.slice(0, 40) : '');
+    chk('出口流量: 有 5xx 列', !!body && /5xx/.test(body.innerHTML), '');
+    dom.window.close();
+  }
+  {
+    const { dom, doc } = await open('/observe', 1800);
+    const btn = doc.querySelector('#secBody [data-deny]');
+    chk('可疑访问: 每个 IP 有封禁按钮', !!btn, btn ? btn.getAttribute('data-deny') : '（当前没有可疑访问时跳过）');
+    dom.window.close();
+  }
+
   let bad = 0;
   for (const [ok, name, extra] of results) {
     if (!ok) bad++;

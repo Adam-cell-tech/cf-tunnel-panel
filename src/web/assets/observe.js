@@ -249,6 +249,14 @@ async function loadSecurity() {
   const hours = Number($('#secHours').value || 24);
   try {
     const d = await api(`/api/security/attempts?hours=${hours}`);
+    // 黑名单从状态里取：这样表格能直接显示「已封禁 / 封禁」
+    let denyList = [];
+    try {
+      const st = await loadState(true);
+      const raw = ((st.state.settings || {}).security || {}).ipDeny || '';
+      denyList = String(raw).split(/[,\s]+/).map((x) => x.trim()).filter(Boolean);
+    } catch { /* 状态拿不到就只显示封禁按钮 */ }
+    const isDenied = (ip) => denyList.some((c) => c === ip || c === ip + '/32' || c === ip + '/128');
     $('#secMsg').textContent = d.available
       ? `窗口内共 ${d.total} 次被拒${d.last ? '，最后一次 ' + d.last.slice(11, 19) : ''}`
       : (d.note || '');
@@ -264,12 +272,16 @@ async function loadSecurity() {
       <td class="mono err-hint" data-label="被拒次数">${r.count}</td>
       <td class="mono muted" data-label="主要来源">${esc((r.ips || []).map((x) => x.ip + ' ×' + x.count).join('，'))}</td>
     </tr>`).join('');
-    const ipRows = (d.byIp || []).map((x) => `<tr>
-      <td class="mono" data-label="来源 IP">${esc(x.ip)}</td>
+    const ipRows = (d.byIp || []).map((x) => {
+      const off = isDenied(x.ip);
+      return `<tr>
+      <td class="mono" data-label="来源 IP">${esc(x.ip)} ${off ? '<span class="tag err">已封禁</span>' : ''}</td>
       <td class="mono err-hint" data-label="被拒次数">${x.count}</td>
       <td class="mono muted" data-label="打的规则">${esc((x.rules || []).join('、') || '未命中规则')}</td>
       <td class="mono muted" data-label="最后">${esc((x.last || '').slice(11, 19))}</td>
-    </tr>`).join('');
+      <td class="nowrap" data-label="操作"><button class="sm ${off ? 'ghost' : 'danger'}" data-deny="${esc(x.ip)}" data-off="${off ? '1' : ''}">${off ? '解封' : '封禁'}</button></td>
+    </tr>`;
+    }).join('');
     box.innerHTML = `
       <div class="row" style="padding:10px 12px;gap:8px;border-bottom:1px solid var(--line);flex-wrap:wrap">
         <span class="tag err">共 ${d.total} 次</span>
@@ -280,13 +292,34 @@ async function loadSecurity() {
         <tbody>${ruleRows || '<tr><td colspan="4" class="empty">没有命中规则的拒绝</td></tr>'}</tbody>
       </table></div>
       <div class="tbl-wrap"><table class="stackable">
-        <thead><tr><th>来源 IP</th><th>被拒次数</th><th>打的规则</th><th>最后</th></tr></thead>
+        <thead><tr><th>来源 IP</th><th>被拒次数</th><th>打的规则</th><th>最后</th><th class="nowrap">操作</th></tr></thead>
         <tbody>${ipRows}</tbody>
       </table></div>`;
   } catch (e) {
     box.innerHTML = `<div class="hint warn">读取失败：${esc(e.message)}</div>`;
   }
 }
+
+// 一键封禁：把「可疑访问」里看到的 IP 直接写进 security.ipDeny，再顺带刷新
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest && e.target.closest('[data-deny]');
+  if (!b) return;
+  e.preventDefault();
+  const ip = b.dataset.deny;
+  const off = b.dataset.off === '1';
+  if (!off && !confirm(`把 ${ip} 加进 IP 黑名单？\n\n之后来自这个地址的请求会被 Caddy 直接回 403。`)) return;
+  b.disabled = true;
+  try {
+    const d = await api('/api/security/' + (off ? 'allow' : 'deny'), { method: 'POST', body: { ip } });
+    if (d.warning) toast(d.warning, 'warn', 9000);
+    else toast(off ? `已解封 ${ip}` : `已封禁 ${ip}`, 'ok');
+    await loadState(true);
+    await loadSecurity();
+  } catch (err) {
+    toast(err.message, 'err');
+    b.disabled = false;
+  }
+});
 
   loadAuditDays().then(() => loadAudit()).catch(() => {});
   const syncCsv = () => {

@@ -16,6 +16,20 @@
 
   <div id="tunnelList" class="stack"></div>
 
+  <div class="card flush" id="exitStatsCard">
+    <div class="hd"><h2>出口流量（按域名）</h2><div class="sub">多条隧道跑不同域名时，看谁在吃流量、谁在报错</div>
+      <div class="right">
+        <select id="exitStatsHours" aria-label="统计时间窗口">
+          <option value="1">最近 1 小时</option>
+          <option value="6">最近 6 小时</option>
+          <option value="24" selected>最近 24 小时</option>
+          <option value="72">最近 72 小时</option>
+        </select>
+        <button class="sm ghost" id="btnExitStats">刷新</button>
+      </div></div>
+    <div class="bd" id="exitStatsBody"><div class="empty">正在读取访问日志…</div></div>
+  </div>
+
   <div class="card" id="newCard">
     <div class="hd"><h2>新建出口</h2><div class="sub">快速隧道零配置；命名隧道要先在 Cloudflare 建隧道拿 token</div></div>
     <div class="bd stack">

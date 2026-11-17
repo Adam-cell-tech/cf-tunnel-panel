@@ -13,6 +13,18 @@
 | 预置 | 数据源 uid `prom-main`、仪表盘 uid `cfp-main`（slug `a650163`）、匿名只读、`allow_embedding` | 匿名 `/d-solo/cfp-main/a650163?panelId=7` 200 |
 | 面板侧 | `settings.grafana` 指向 `http://192.168.1.55:3000`，panelId 1/7/9 | 首页 CSP 含该源、`#grafanaCard` 出现 |
 
+## ✅ v0.23.0 — 从「看见」到「动手」
+
+| 项 | 做了什么 | 实测 |
+| --- | --- | --- |
+| 一键封禁 | 可疑访问每行「封禁/解封」→ `POST /api/security/deny|allow` → 写 `security.ipDeny` + 立刻下发 Caddy | 封禁后配置首条即 `remote_ip.ranges=[203.0.113.77/32]` + 403；重复封禁不重复加；解封后空 |
+| 非法输入 | 非 IP、非法 CIDR、超过 200 条 | 400 + 人话原因 |
+| 角色 | operator 也能封禁/解封 | perm 白名单新增两条 |
+| 出口流量 | `GET /api/tunnels/stats?hours=`，按访问日志 Host 归属出口 | 主出口 20 请求 / 4xx 2 / p95 13ms / 56KB；其它主机名单独汇总 |
+| 界面 | 隧道页「出口流量（按域名）」卡，1/6/24/72 小时 | DOM 断言表格与 5xx 列 |
+
+测试：API **283** / DOM **128**。
+
 ## ✅ v0.22.0 — 先告诉你能不能改
 
 | 项 | 做了什么 | 实测 |

@@ -921,6 +921,28 @@ try {
 
   const sec = await j('/api/security/attempts?hours=abc&limit=-1');
   ok('可疑访问参数非法时用安全默认值', sec.status === 200 && sec.d.hours > 0 && sec.d.hours <= 168, 'hours=' + sec.d.hours);
+
+  // 一键封禁 / 解封（会改真实黑名单，结尾必须还原）
+  const before = ((await j('/api/state')).d.state.settings.security || {}).ipDeny || '';
+  const deny = await j('/api/security/deny', { method: 'POST', body: { ip: '203.0.113.77' } });
+  ok('一键封禁：写入黑名单', deny.status === 200 && deny.d.added === true && /203\.0\.113\.77\/32/.test(deny.d.ipDeny || ''), String(deny.d.count));
+  const caddyCfg = await j('/api/caddy/config');
+  const ranges = JSON.stringify((caddyCfg.d.config || {}).apps || {});
+  ok('一键封禁：Caddy 配置里出现 403 规则', ranges.includes('203.0.113.77'), '');
+  const dup = await j('/api/security/deny', { method: 'POST', body: { ip: '203.0.113.77' } });
+  ok('一键封禁：重复封禁不重复添加', dup.status === 200 && dup.d.added === false, String(dup.d.count));
+  const allow = await j('/api/security/allow', { method: 'POST', body: { ip: '203.0.113.77' } });
+  ok('一键解封：从黑名单移除', allow.status === 200 && allow.d.removed === true && !/203\.0\.113\.77/.test(allow.d.ipDeny || ''), String(allow.d.count));
+  const badIp = await j('/api/security/deny', { method: 'POST', body: { ip: 'not-an-ip' } });
+  ok('一键封禁：非法 IP 被拒', badIp.status === 400, String(badIp.status));
+  const afterState = (await j('/api/state')).d.state.settings.security.ipDeny || '';
+  ok('一键封禁：测试后黑名单已还原', afterState === before, JSON.stringify(afterState).slice(0, 60));
+
+  const ts = await j('/api/tunnels/stats?hours=24');
+  ok('出口流量：返回每个出口一行', ts.status === 200 && Array.isArray(ts.d.tunnels) && ts.d.tunnels.length > 0, String((ts.d.tunnels || []).length));
+  ok('出口流量：字段齐全', (ts.d.tunnels || []).every((t) => 'id' in t && 'count' in t && 'err5' in t && 'p95' in t && 'host' in t), '');
+  const tsBad = await j('/api/tunnels/stats?hours=abc');
+  ok('出口流量：hours 非法时用默认值', tsBad.status === 200 && tsBad.d.hours > 0, 'hours=' + tsBad.d.hours);
 }
 
 await restoreRoutes();
