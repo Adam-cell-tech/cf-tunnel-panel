@@ -7,7 +7,7 @@
 > changes, no open ports**. Multiple tunnels can run at the same time (quick + named, or several
 > accounts and domains).
 
-- Version: **v0.21.0**
+- Version: **v0.22.0**
 - Works with: NAS, self-hosted sites, Home Assistant, Jellyfin, Gitea, Immich, qBittorrent… any HTTP service
 - Stack: `node:http` backend (zero dependencies), hand-written frontend (no build step), `Caddy` for routing,
   `cloudflared` for the tunnel — one `docker compose up` and you are done
@@ -26,6 +26,15 @@ cd tools/monitoring && docker compose up -d     # Grafana on :3000, Prometheus o
 Prometheus already scrapes both blue/green slots, and Grafana auto-imports the dashboard from
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
+
+## What's new in v0.22.0
+
+- **The UI now knows your role.** `/api/state` returns `role` and `canWrite`; the top bar shows a "read-only" / "operator" badge and write buttons are disabled up-front instead of failing with 403 after you click.
+- **Backups are downloadable.** `GET /api/backups/download?file=` — attachment, filename whitelisted, path traversal rejected.
+- **Access log CSV export.** The observability page gets an "Export CSV" link that follows the current filters (`/api/access.csv`, BOM + CRLF + Excel formula-injection guard).
+- **Duplicate a rule in one click.** The new button on each rule card clones it right below itself (new id, "copy" suffix), ready to edit and save.
+- **Grafana mixed-content warning.** When the panel is served over https and Grafana is http, the browser blocks the iframe — the card now says so and offers the two real ways out instead of showing blank frames.
+- The language button shows 中文 in English mode, and the dictionary lookup now normalises whitespace, which drops leftover Chinese on `/settings` from 8.0% to 0%.
 
 ## What's new in v0.21.0
 

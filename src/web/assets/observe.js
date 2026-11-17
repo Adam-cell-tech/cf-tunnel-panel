@@ -33,6 +33,13 @@ function filteredRows() {
   });
 }
 
+function syncAccessCsv(total) {
+  const a = $('#btnAccessCsv');
+  if (!a) return;
+  const n = Math.max(1, Math.min(2000, Number(total) || 200));
+  a.href = '/api/access.csv?limit=' + n;
+}
+
 function renderAccess() {
   const box = $('#accessBody');
   const s = summary || {};
@@ -43,6 +50,7 @@ function renderAccess() {
   if (page < 1) page = 1;
   const slice = list.slice((page - 1) * PER_PAGE, page * PER_PAGE);
   const filtering = !!($('#accStatus').value || ($('#accPath').value || '').trim() || rangeSec());
+  syncAccessCsv(list.length);
   const body = slice.map((r) => `<tr>
       <td class="mono" data-label="时间">${esc((r.ts || '').slice(11, 19))}</td>
       <td class="mono" data-label="方法">${esc(r.method)}</td>

@@ -80,7 +80,10 @@
   <div class="card flush hidden" id="grafanaCard">
     <div class="hd"><h2>监控面板</h2><div class="sub">从 Grafana 直接嵌进来的实时图</div>
       <div class="right"><a class="sm ghost" id="btnGrafanaOpen" target="_blank" rel="noopener noreferrer">在 Grafana 打开 ↗</a></div></div>
-    <div class="bd" id="grafanaBox"></div>
+    <div class="bd">
+      <div class="hint warn hidden" id="grafanaWarn" role="status"></div>
+      <div id="grafanaBox"></div>
+    </div>
   </div>
 
   <div class="hint warn hidden" id="warmBar"></div>

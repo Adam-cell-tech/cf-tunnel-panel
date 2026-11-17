@@ -2,6 +2,25 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.22.0
+
+按「角色 / 导出 / 英文」三条线索收的一轮尾巴，重点是让界面**先说清楚能不能改**，而不是点了才报错。
+
+### 新增
+- **角色下发**：`/api/state` 返回 `role` 与 `canWrite`；前端据此在顶栏显示「只读账号 / 运维账号」标签，主按钮禁用，点写操作直接提示，不再等 403 才知道。
+- **备份单份下载**：`GET /api/backups/download?file=`（附件下载，文件名白名单，拒绝路径穿越）。
+- **访问日志 CSV**：`GET /api/access.csv?limit=`，BOM + CRLF + Excel 公式注入防护；观测页「导出 CSV」跟随当前筛选条数。
+- **规则一键复制**：规则卡新增「复制」，插在当前规则后面（自动换 id、名字加「副本」），保存后生效。
+- **Grafana 混合内容提示**：https 页面里嵌 http 的 Grafana 会被浏览器拦截，卡片现在直接说明原因与两条出路，而不是显示两块白板。
+
+### 变更
+- 语言按钮在英文模式下显示「中文」（原来是个孤零零的「中」）。
+- 词典 lookup 增加「空白归一化」兜底：页面里带缩进的文本节点也能命中，英文模式残留中文从 `/settings` 8.0% 降到 0%。
+
+### 修复
+- `/api/audit` 的 `limit` 未夹紧（`?limit=99999` 能拉 370KB）→ 夹到 2000。
+- `/api/security/attempts` 的 `hours`/`limit` 未夹紧 → 夹到 0.1–168 小时、100–5000 条。
+
 ## v0.21.0 附：本机监控栈（tools/monitoring）
 
 - 新增 `tools/monitoring/`：Prometheus(v2.55.1) + Grafana(11.3.0) 的 compose，host 网络、

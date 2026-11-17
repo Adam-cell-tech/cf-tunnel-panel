@@ -222,13 +222,23 @@ function t(zh) {
   return num || zh;
 }
 
+// 词典以「原文」为键，但页面里的文本节点常带换行/多空格（HTML 缩进），
+// 直接查会漏。加一份「空白归一化」的索引做兜底。
+let DICT_NORM = null;
+function normKey(s) { return String(s || '').replace(/\s+/g, ' ').trim(); }
 function dictLookup(raw) {
-  const s = String(raw || '').trim();
+  const s = normKey(raw);
   if (!s) return null;
   if (DICT[s]) return DICT[s];
+  if (!DICT_NORM) {
+    DICT_NORM = Object.create(null);
+    for (const k of Object.keys(DICT)) DICT_NORM[normKey(k)] = DICT[k];
+  }
+  if (DICT_NORM[s]) return DICT_NORM[s];
   // 「🔄 刷新」「＋ 添加规则」这类带前缀符号的，剥掉符号再查
   const stripped = s.replace(/^[^\p{L}\p{N}]+/u, '').trim();
-  if (stripped && DICT[stripped]) return (s.slice(0, s.length - stripped.length) + DICT[stripped]);
+  const hit = DICT[stripped] || (DICT_NORM && DICT_NORM[stripped]);
+  if (stripped && hit) return (s.slice(0, s.length - stripped.length) + hit);
   const num = tNum(s);
   if (num) return num;
   if (stripped) {
@@ -410,6 +420,7 @@ async function loadState(force = false) {
   stateInflight = api('/api/state').then((d) => {
     window.ST = d;
     stateInflight = null;
+    applyRole(d);
     return d;
   }).catch((e) => {
     stateInflight = null;
@@ -417,6 +428,75 @@ async function loadState(force = false) {
   });
   return stateInflight;
 }
+/* ---------------- 角色感知 ----------------
+   以前只读账号要「点一下才 403」，看起来像坏了。现在 /api/state 会下发 role，
+   页面一进来就知道自己能不能改，写入口直接禁用并说明原因。 */
+const WRITE_IDS = new Set([
+  'btnSave', 'btnSaveSettings', 'btnAdd', 'btnCreate', 'btnAddRule', 'btnImport', 'btnDoImport',
+  'btnAddTunnel', 'btnPanelAuth', 'btnViewer', 'btnOper', 'btnTotpSetup', 'btnTotpEnable',
+  'btnTotpDisable', 'btnShareAdd', 'btnCfCreate', 'btnNewTunDo', 'btnHostAdd', 'btnCfgApply',
+  'btnCfgSnap', 'btnSessRevokeAll', 'btnSessKickOthers', 'btnCfSave', 'btnOperator',
+]);
+const WRITE_ACT = new Set(['del', 'start', 'stop', 'restart', 'save', 'dup', 'restore']);
+let CFP_ROLE = 'admin';
+let roWarned = false;
+
+function isWriteTarget(el) {
+  if (!el || !el.closest) return false;
+  const idEl = el.closest('[id]');
+  if (idEl && WRITE_IDS.has(idEl.id)) return true;
+  if (el.closest('[data-write="1"]')) return true;
+  const actEl = el.closest('[data-act]');
+  if (actEl && WRITE_ACT.has(actEl.dataset.act)) return true;
+  const btn = el.closest('button');
+  if (btn && btn.type === 'submit') return true;
+  return false;
+}
+
+function applyRole(d) {
+  const role = (d && d.role) || CFP_ROLE || 'admin';
+  CFP_ROLE = role;
+  document.body.dataset.role = role;
+  const ro = role === 'viewer' || (d && d.canWrite === false);
+  document.body.dataset.readonly = ro ? '1' : '';
+  const tag = $('#roleTag');
+  if (tag) {
+    tag.textContent = role === 'viewer' ? '只读账号' : role === 'operator' ? '运维账号' : '';
+    tag.classList.toggle('hidden', role === 'admin');
+    tag.classList.toggle('warn', role === 'viewer');
+  }
+  // 主按钮视觉上弱化（真正拦截在点击守卫里，动态生成的按钮也能盖住）
+  document.querySelectorAll('.btn.primary').forEach((b) => {
+    b.disabled = ro;
+    if (ro) b.title = '只读账号不能修改配置';
+  });
+}
+
+function markRoleHint() {
+  if (CFP_ROLE === 'admin') return;
+  const bar = document.getElementById('roBanner');
+  if (bar) return;
+  const el = document.createElement('div');
+  el.id = 'roBanner';
+  el.className = 'hint warn robar';
+  el.setAttribute('role', 'status');
+  el.innerHTML = CFP_ROLE === 'viewer'
+    ? '<b>只读账号</b>：可以看所有页面，改不了任何配置。需要改的话用管理员账号登录。'
+    : '<b>运维账号</b>：能管隧道、规则、分享，不能改安全设置与账号。';
+  document.body.prepend(el);
+}
+
+document.addEventListener('click', (e) => {
+  if (CFP_ROLE === 'admin') return;
+  if (!isWriteTarget(e.target)) return;
+  markRoleHint();
+  e.preventDefault();
+  e.stopPropagation();
+  if (!roWarned) { roWarned = true; toast('只读账号不能修改配置', 'warn'); }
+}, true);
+
+window.__cfpRole = () => CFP_ROLE;
+
 function rtOf(id, d = window.ST) {
   const list = (d && d.runtime && d.runtime.tunnels) || [];
   return list.find((x) => x.id === id) || { status: 'stopped', url: '' };
@@ -496,6 +576,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const y = $('#year');
   if (y) y.textContent = new Date().getFullYear();
   // 侧栏健康指示：每页都刷一次，失败静默
-  loadState().then(paintHealth).catch(() => {});
+  loadState().then((d) => { paintHealth(d); markRoleHint(); }).catch(() => {});
   setInterval(() => { loadState(true).then(paintHealth).catch(() => {}); }, 15000);
 });

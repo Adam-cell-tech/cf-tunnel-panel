@@ -343,7 +343,9 @@ async function handler(req, res) {
   }
   if (p === '/api/audit' && req.method === 'GET') {
     const date = url.searchParams.get('date') || '';
-    return sendJson(res, 200, { ...auditList({ limit: url.searchParams.get('limit'), q: url.searchParams.get('q') || '', date }), stats: auditStats(), days: auditDays() });
+    // limit 必须夹住：之前直接透传，一个 ?limit=99999 就能拉 300KB+
+    const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 200, 1), 2000);
+    return sendJson(res, 200, { ...auditList({ limit, q: url.searchParams.get('q') || '', date }), stats: auditStats(), days: auditDays() });
   }
 
   if (p === '/api/state' && req.method === 'GET') {
@@ -351,6 +353,9 @@ async function handler(req, res) {
     return sendJson(res, 200, {
       version: VERSION,
       mode: lease.isLeader() ? 'leader' : 'standby',
+      // 角色要下发：前端据此把「只读账号点一下才 403」变成「一开始就禁用」
+      role: auth.role || 'admin',
+      canWrite: (auth.role || 'admin') !== 'viewer' && lease.isLeader(),
       state: {
         settings: publicSettings(),
         tunnels: publicTunnels(),
@@ -486,8 +491,8 @@ async function handler(req, res) {
   }
 
   if (p === '/api/security/attempts' && req.method === 'GET') {
-    const hours = Number(url.searchParams.get('hours') || 24);
-    const limit = Number(url.searchParams.get('limit') || 3000);
+    const hours = Math.min(Math.max(Number(url.searchParams.get('hours')) || 24, 0.1), 168);
+    const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 3000, 100), 5000);
     return sendJson(res, 200, securityAttempts(hours, limit));
   }
 
@@ -502,6 +507,34 @@ async function handler(req, res) {
       return rule ? Object.assign({}, r, { rule: { id: rule.id, name: rule.name } }) : r;
     });
     return sendJson(res, 200, Object.assign({}, d, { rows }));
+  }
+
+  // 访问日志导出 CSV（和审计 CSV 同一套写法：BOM + CRLF + 公式注入防护）
+  if (p === '/api/access.csv' && req.method === 'GET') {
+    const limit = Math.max(1, Math.min(2000, Number(url.searchParams.get('limit') || 200)));
+    const rows = readAccess(limit).rows || [];
+    const cell = (v) => {
+      let t = String(v === undefined || v === null ? '' : v);
+      if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
+      return /["\n\r,]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+    };
+    const head = ['时间', '主机', '方法', '路径', '状态', '耗时ms', '字节', '来源IP'];
+    const lines = [head.join(',')];
+    for (const r of rows) {
+      lines.push([
+        new Date(r.at || Date.now()).toISOString(),
+        r.host || '', r.method || '', r.uri || '', r.status || '', r.durMs || 0, r.size || 0, r.ip || '',
+      ].map(cell).join(','));
+    }
+    const body = Buffer.from('\uFEFF' + lines.join('\r\n'), 'utf8');
+    res.writeHead(200, {
+      ...SEC_HEADERS,
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="access-${new Date().toISOString().slice(0, 10)}.csv"`,
+      'Cache-Control': 'no-store',
+      'Content-Length': body.length,
+    });
+    return res.end(body);
   }
 
   if (p === '/api/routes' && req.method === 'POST') {
@@ -1038,6 +1071,26 @@ async function handler(req, res) {
       return sendJson(res, 200, { ok: true, files });
     } catch {
       return sendJson(res, 200, { ok: true, files: [] });
+    }
+  }
+
+  // 备份单份下载（要把某份配置拿走看/存档时用）
+  if (p === '/api/backups/download' && req.method === 'GET') {
+    const name = String(url.searchParams.get('file') || '');
+    if (!/^[\w.\-]+\.json$/.test(name)) return sendJson(res, 400, { ok: false, error: '文件名不合法' });
+    const full = path.join(BACKUP_DIR, name);
+    try {
+      const body = fs.readFileSync(full);
+      res.writeHead(200, {
+        ...SEC_HEADERS,
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${name}"`,
+        'Cache-Control': 'no-store',
+        'Content-Length': body.length,
+      });
+      return res.end(body);
+    } catch {
+      return sendJson(res, 404, { ok: false, error: '没有这份备份（可能已被清理）' });
     }
   }
 

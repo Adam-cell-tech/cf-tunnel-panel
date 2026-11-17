@@ -892,6 +892,37 @@ try {
   ok('Grafana：关闭后配置仍保留（方便下次打开）', ((s2.d.state.settings.grafana || {}).dashboard) === 'cfp-main/cf-tunnel-panel', '');
 }
 
+
+// ---------------- v0.22.0：角色下发 / 访问日志 CSV / 备份下载 / 参数夹紧 ----------------
+{
+  const st = await j('/api/state');
+  ok('状态下发角色（前端才能禁用写入口）', st.d.role === 'admin' || st.d.role === 'operator' || st.d.role === 'viewer', String(st.d.role));
+  ok('状态下发 canWrite', typeof st.d.canWrite === 'boolean', String(st.d.canWrite));
+
+  const csvRes = await rawFetch(B + '/api/access.csv?limit=5', { headers: { Authorization: basic } });
+  const csvBuf = Buffer.from(await csvRes.arrayBuffer());
+  const csvText = csvBuf.toString('utf8');
+  ok('访问日志 CSV 200', csvRes.status === 200, String(csvRes.status));
+  ok('访问日志 CSV 带 BOM', csvBuf[0] === 0xef && csvBuf[1] === 0xbb && csvBuf[2] === 0xbf, csvBuf.slice(0, 3).toString('hex'));
+  ok('访问日志 CSV 表头正确', /时间,主机,方法,路径,状态,耗时ms,字节,来源IP/.test(csvText), csvText.slice(0, 60));
+  ok('访问日志 CSV 是附件下载', /attachment/.test(csvRes.headers.get('content-disposition') || ''), '');
+
+  const bf = ((await j('/api/backups')).d.files || [])[0];
+  const dl = await rawFetch(B + '/api/backups/download?file=' + encodeURIComponent(bf || 'x.json'), { headers: { Authorization: basic } });
+  ok('备份单份下载 200', dl.status === 200, String(dl.status));
+  ok('备份下载是附件且 JSON', /attachment/.test(dl.headers.get('content-disposition') || '') && /json/.test(dl.headers.get('content-type') || ''), dl.headers.get('content-type') || '');
+  const dlBad = await rawFetch(B + '/api/backups/download?file=../../etc/passwd', { headers: { Authorization: basic } });
+  ok('备份下载拒绝路径穿越', dlBad.status === 400, String(dlBad.status));
+  const dlMissing = await rawFetch(B + '/api/backups/download?file=nope-9999.json', { headers: { Authorization: basic } });
+  ok('备份下载不存在的文件 404', dlMissing.status === 404, String(dlMissing.status));
+
+  const aud = await j('/api/audit?limit=99999');
+  ok('审计 limit 被夹到 2000 以内', (aud.d.rows || []).length <= 2000, String((aud.d.rows || []).length));
+
+  const sec = await j('/api/security/attempts?hours=abc&limit=-1');
+  ok('可疑访问参数非法时用安全默认值', sec.status === 200 && sec.d.hours > 0 && sec.d.hours <= 168, 'hours=' + sec.d.hours);
+}
+
 await restoreRoutes();
 
 console.log(`\n${pass}/${pass + fail} 通过`);

@@ -29,6 +29,7 @@ function renderBackups() {
     const reason = m[2] || '';
     return `<tr><td class="mono" data-label="时间">${when(f)}</td><td data-label="原因"><span class="tag">${esc(REASON[reason] || reason || '保存')}</span></td>
       <td class="nowrap" data-label="操作"><button class="sm ghost" data-restore="${esc(f)}">回滚到这份</button>
+        <a class="btn sm ghost" href="/api/backups/download?file=${encodeURIComponent(f)}" download="${esc(f)}">下载</a>
         <button class="sm ghost" data-diff="${esc(f)}">对比当前</button></td></tr>`;
   }).join('')}</tbody></table></div>${pagerHtml(page, pages, backups.length)}`;
   bindPager(box, (p) => { page = p; renderBackups(); });

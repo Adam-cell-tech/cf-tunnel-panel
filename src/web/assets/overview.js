@@ -328,15 +328,28 @@ function paintGrafana(d) {
     return;
   }
   card.classList.remove('hidden');
+
+  // https 页面里嵌 http 的 Grafana：浏览器按「混合内容」直接拦掉，frame-src 放行也没用。
+  // 与其显示两块白板，不如说清原因。
+  const mixed = location.protocol === 'https:' && /^http:\/\//i.test(String(g.url));
+  const warn = $('#grafanaWarn');
+  if (warn) {
+    warn.classList.toggle('hidden', !mixed);
+    if (mixed) {
+      warn.innerHTML = '当前页面是 https，而 Grafana 地址是 <code>' + esc(g.url) + '</code>，浏览器会按混合内容拦截这类 iframe。'
+        + '想让公网也能看到图：给 Grafana 也配一个 https 域名；只看局域网的话用 <code>http://' + esc(location.hostname) + ':8090</code> 打开本面板即可。';
+    }
+  }
   const open = $('#btnGrafanaOpen');
   if (open) {
     const dash = String(g.dashboard).replace(/^\/+|\/+$/g, '').split('/');
     open.href = `${g.url.replace(/\/+$/, '')}/d/${encodeURIComponent(dash[0])}/${encodeURIComponent(dash[1] || dash[0])}`;
   }
   // 已渲染过同样的配置就不重建（iframe 重建会闪、也会重新拉一次 Grafana）
-  const key = JSON.stringify({ url: g.url, dash: g.dashboard, theme: g.theme, panels: g.panels });
+  const key = JSON.stringify({ url: g.url, dash: g.dashboard, theme: g.theme, panels: g.panels, mixed });
   if (box.dataset.key === key) return;
   box.dataset.key = key;
+  if (mixed) { box.innerHTML = ''; return; }
   box.innerHTML = (g.panels || []).map((p) => `
     <div style="margin:0 0 10px">
       ${p.title ? `<div class="sub" style="margin:0 0 4px">${esc(p.title)}</div>` : ''}

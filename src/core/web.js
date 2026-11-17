@@ -56,9 +56,10 @@ function pageShell(active, body, lang = 'zh') {
     <div class="side-foot">
       <div class="row"><span class="dot" id="healthDot" aria-hidden="true"></span><span class="muted" id="healthText" role="status">${i18n.t(lang, '检测中…')}</span></div>
       <div class="row"><span class="tag warn hidden" id="unsaved" title="有改动还没保存">未保存</span>
+      <span class="tag hidden" id="roleTag" aria-live="polite"></span>
       <button class="sm ghost" id="btnTheme" title="切换深色 / 浅色" aria-label="切换深色或浅色主题">🌙</button>
       <button class="sm ghost" id="btnPalette" title="命令面板（Ctrl+K）" aria-label="打开命令面板">⌘K</button>
-      <button class="sm ghost" id="btnLang" title="${i18n.t(lang, '切换语言')}" aria-label="${i18n.t(lang, '切换语言')}">${lang === 'en' ? '中' : 'EN'}</button>
+      <button class="sm ghost" id="btnLang" title="${i18n.t(lang, '切换语言')}" aria-label="${i18n.t(lang, '切换语言')}">${lang === 'en' ? '中文' : 'EN'}</button>
       <button class="sm ghost" id="btnLogout" title="${i18n.t(lang, '退出登录')}" aria-label="${i18n.t(lang, '退出登录')}">${i18n.t(lang, '退出')}</button></div>
       <div class="muted" style="font-size:11px">© <span id="year"></span> cf-tunnel-panel</div>
     </div>

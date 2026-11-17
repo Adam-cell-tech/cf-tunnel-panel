@@ -348,3 +348,8 @@ pre.log .l-system{color:#a0a8b4}
 .rule.dragging{ opacity:.55; }
 .rule.dropbefore{ box-shadow:0 -3px 0 0 var(--acc) inset; }
 .rule.dropafter{ box-shadow:0 3px 0 0 var(--acc) inset; }
+
+/* 只读 / 运维账号：主按钮弱化 + 顶栏标签 */
+#roleTag { font-weight: 700; }
+body[data-readonly="1"] .btn.primary { opacity: .55; }
+body[data-readonly="1"] .btn.primary[disabled] { cursor: not-allowed; }

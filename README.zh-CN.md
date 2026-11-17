@@ -41,6 +41,15 @@ Prometheus 已经同时抓 blue/green 两个槽位，Grafana 会自动导入 `do
 并开好匿名只读 + `allow_embedding`，所以首页「监控面板」的三个字段可以直接填（细节见
 `tools/monitoring/README.md`）。
 
+### v0.22.0 更新
+
+- **界面知道你的角色了**：`/api/state` 下发 `role` 与 `canWrite`，顶栏显示「只读账号 / 运维账号」标签，写按钮一开始就禁用，不再等你点下去才 403。
+- **备份可以单份下载**：`GET /api/backups/download?file=`（附件、文件名白名单、拒绝路径穿越）。
+- **访问日志导出 CSV**：观测页新增「导出 CSV」，跟随当前筛选条数（`/api/access.csv`，BOM + CRLF + Excel 公式注入防护）。
+- **规则一键复制**：规则卡新增「复制」，克隆到当前规则下方（自动换 id、名字加「副本」），改完保存即可。
+- **Grafana 混合内容提示**：面板走 https 而 Grafana 是 http 时，浏览器会拦掉 iframe —— 卡片现在直接说明原因和两条出路，不再显示两块白板。
+- 英文模式下语言按钮显示「中文」；词典查找加了空白归一化兜底，`/settings` 的英文残留从 8.0% 降到 0%。
+
 ### v0.21.0 更新
 
 - **首页「监控面板」卡**：设置 → 监控嵌入里填 Grafana 地址、仪表盘 `uid/slug`、最多 3 个 `panelId`

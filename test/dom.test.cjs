@@ -374,6 +374,27 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     dom.window.close();
   }
 
+  {
+    const { dom, doc, win } = await open('/', 1600);
+    chk('角色: 顶栏有角色标签', !!doc.querySelector('#roleTag'), '');
+    chk('角色: admin 时标签隐藏', doc.querySelector('#roleTag').classList.contains('hidden'), doc.body.dataset.role || '');
+    chk('角色: body 记录角色', (doc.body.dataset.role || '') === 'admin', doc.body.dataset.role || '');
+    chk('Grafana: 卡片里有混合内容提示位', !!doc.querySelector('#grafanaWarn'), '');
+    dom.window.close();
+  }
+  {
+    const { dom, doc } = await open('/observe', 1600);
+    const csv = doc.querySelector('#btnAccessCsv');
+    chk('观测: 有访问日志导出 CSV 入口', !!csv && /access\.csv/.test(csv.getAttribute('href') || ''), csv ? csv.getAttribute('href') : '');
+    dom.window.close();
+  }
+  {
+    const { dom, doc } = await open('/rules', 1600);
+    const dup = doc.querySelector('#ruleList [data-act="dup"]');
+    chk('规则: 每条规则有复制按钮', !!dup, dup ? dup.getAttribute('title') : '没有规则时跳过');
+    dom.window.close();
+  }
+
   let bad = 0;
   for (const [ok, name, extra] of results) {
     if (!ok) bad++;

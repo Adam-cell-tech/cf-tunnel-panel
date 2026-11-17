@@ -13,6 +13,20 @@
 | 预置 | 数据源 uid `prom-main`、仪表盘 uid `cfp-main`（slug `a650163`）、匿名只读、`allow_embedding` | 匿名 `/d-solo/cfp-main/a650163?panelId=7` 200 |
 | 面板侧 | `settings.grafana` 指向 `http://192.168.1.55:3000`，panelId 1/7/9 | 首页 CSP 含该源、`#grafanaCard` 出现 |
 
+## ✅ v0.22.0 — 先告诉你能不能改
+
+| 项 | 做了什么 | 实测 |
+| --- | --- | --- |
+| 角色下发 | `/api/state` 带 `role`/`canWrite`；顶栏徽标、主按钮禁用、点击守卫 | admin 无标签；viewer 一律拦下并提示 |
+| 备份下载 | `GET /api/backups/download?file=` | 200/400（穿越）/404（不存在） |
+| 访问日志 CSV | `GET /api/access.csv`，BOM + 公式注入防护 | 表头 8 列、`efbbbf` 开头、`attachment` |
+| 规则复制 | 规则卡「复制」插到下方 | DOM 测试命中 `[data-act="dup"]` |
+| Grafana 混合内容 | https 页面嵌 http → 卡片内提示，不渲染白板 | 卡片含 `#grafanaWarn` |
+| 词典兜底 | 空白归一化索引 | `/settings` 英文残留 8.0% → 0% |
+| 夹紧 | audit `limit` ≤2000；security `hours/limit` 有界 | `?limit=99999` 回 2000 行 |
+
+测试：API **274** / DOM **124** / e2e 32。
+
 ## ✅ v0.21.0 — Grafana 图嵌进首页
 
 | 项 | 做法 | 实测 |

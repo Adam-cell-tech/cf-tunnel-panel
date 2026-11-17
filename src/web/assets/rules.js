@@ -63,6 +63,7 @@ function ruleHtml(r, i) {
         <button class="sm ghost" data-act="up" title="上移">↑</button>
         <button class="sm ghost" data-act="down" title="下移">↓</button>
         <button class="sm ghost" data-act="test" title="测上游连通性">测</button>
+        <button class="sm ghost" data-act="dup" title="复制这条规则（插在它后面）">复制</button>
         <button class="sm ghost" data-act="exp" title="导出这条规则">导出</button>
         <button class="sm danger" data-act="del" title="删除">删</button>
       </div>
@@ -429,6 +430,20 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!swap) return;
       const tmp = rules[i]; rules[i] = rules[swap.idx]; rules[swap.idx] = tmp;
       markDirty(); render();
+      return;
+    }
+    if (action === 'dup') {
+      syncFromDom();
+      const src = rules[i];
+      if (!src) return;
+      const copy = {
+        ...JSON.parse(JSON.stringify(src)),
+        id: 'r' + Math.random().toString(36).slice(2, 8),
+        name: (src.name || '规则') + ' 副本',
+      };
+      rules.splice(i + 1, 0, copy);
+      markDirty(); render();
+      toast('已复制到下面一条（记得点保存生效）', 'ok');
       return;
     }
     if (action === 'exp') {
