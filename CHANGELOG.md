@@ -2,6 +2,11 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.29.6
+
+- `package.json` 补齐发布元数据：`description`、`license`、`repository`、`homepage`、`bugs`，全部指向改名后的 `github.com/jianghugs/cf-tunnel-panel`（旧 `Adam-cell-tech` 是**同一账号改名**，Secrets / 包命名空间 / Issue / Star 都原样保留，无需迁移）。
+- 全仓扫描确认无 `Adam-cell-tech` 残留；workflow 里的镜像地址统一用 `${{ github.repository }}`、Release 正文用 `$GITHUB_REPOSITORY`，所以以后账号再改名也不需要改代码。
+
 ## v0.29.5
 
 - 新增 `tools/release.sh`：一条命令完成发版 —— 升 `package.json` 版本 → 把 Release 说明插进 `CHANGELOG.md` 顶部 → 提交 → 打 `vX.Y.Z` tag → push；加 `--build` 还会构建镜像、打 tag、跑滚动升级，并校验 `/healthz` 的 `version` 与 `drift:false`。
