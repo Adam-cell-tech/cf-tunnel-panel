@@ -109,7 +109,7 @@ function loginPage({ next = '/', error = '', lang = 'zh' } = {}) {
       <button class="mini" type="button" id="btnLang" title="${t('切换语言')}">${lang === 'en' ? '中文' : 'EN'}</button>
       <button class="mini" type="button" id="btnTheme" title="${t('深浅色')}" aria-label="${t('深浅色')}">◐</button>
     </div>
-    <h1>${t('登录面板')}</h1>
+    <h1>${t('管理员登录')}</h1>
     <p class="sub">${t('输入管理员账号登录')}</p>
     <form id="loginForm" autocomplete="on" data-next="${safeNext}">
       <div class="cred">

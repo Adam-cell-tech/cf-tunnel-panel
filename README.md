@@ -27,6 +27,15 @@ Prometheus already scrapes both blue/green slots, and Grafana auto-imports the d
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
 
+## What's new in v0.28.4
+
+Fixes a regression introduced in v0.28.3: the checkbox rendered as a full-width blue bar with its label squeezed into one character per line.
+
+- **Root cause**: `.login-card input{width:100%}` has higher specificity than `.chk`, so the custom checkbox was stretched to 100% width; with `flex:none` it ate the whole row and pushed the `<span>` to a 1-character column.
+- Width is now scoped to `.login-card input:not([type=checkbox]):not([type=radio])`, plus explicit `width/height/flex:0 0 18px` on checkboxes as a second guard.
+- Title "登录面板" → "管理员登录" (the left pane already says Cloudflare panel), softer focus ring (`3px rgba(59,130,246,.15)`), and the GitHub footer is now a real link.
+- Verified with headless Chromium screenshots; tests: DOM **151**, API **309**.
+
 ## What's new in v0.28.3
 
 The login page, rebuilt around a seven-point review (the important one: **the checkbox label was being clipped**).

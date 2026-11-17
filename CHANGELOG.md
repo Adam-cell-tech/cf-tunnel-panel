@@ -2,6 +2,21 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.28.4
+
+修 v0.28.3 引入的复选框渲染 bug（用户截图：勾选框被拉成通栏蓝色长条、文案挤成竖排单字）。
+
+### 修复
+- **根因**：`.login-card input{width:100%}` 的特异度（0,1,1）高于 `.chk`（0,1,0），所以自绘勾选框也被拉成 100% 宽；`flex:none` 下它独占整行，`<span>` 被挤到 1 字宽逐字换行。
+- 把宽度规则收窄成 `.login-card input:not([type=checkbox]):not([type=radio]){width:100%}`，并给勾选框补 `.login-card input[type=checkbox]{width:18px;height:18px;flex:0 0 18px;min-width:18px;max-width:18px;box-sizing:border-box}` 双保险。
+
+### 改动
+- 标题「登录面板」→「管理员登录」（左侧已写「Cloudflare 隧道面板」，不再重复）。
+- 输入框聚焦描边调柔：`border-color:var(--acc)` + `box-shadow:0 0 0 3px rgba(59,130,246,.15)`，替换原来偏重的圆环。
+- 左侧页脚 GitHub 地址改成可点击 `<a target="_blank" rel="noopener">`，hover 变品牌色 + 下划线。
+- 视觉验证：用 `zenika/alpine-chrome` 跑无头 Chromium 截图确认（勾选框 18×18、文案单行、卡片高度自适应）。
+- 回归：DOM **151**（+3：CSS 含 `input:not([type=checkbox])` 作用域、勾选框有固定尺寸规则、登录页标题是「管理员登录」）、API **309**。
+
 ## v0.28.3
 
 登录页按 7 点评审重排（同一批反馈里最要紧的是「复选框文字被裁切」）。

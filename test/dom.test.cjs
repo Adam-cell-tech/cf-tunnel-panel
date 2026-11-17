@@ -460,6 +460,18 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     dom.window.close();
   }
 
+  {
+    const { dom, doc } = await open('/login', 1200);
+    const h1 = doc.querySelector('h1');
+    chk('登录页: 标题是「管理员登录」', !!h1 && /管理员登录/.test(h1.textContent), h1 ? h1.textContent.trim() : '（无 h1）');
+    const rem = doc.querySelector('label.remember');
+    chk('登录页: 复选框有固定尺寸规则', !!rem && !!doc.querySelector('input.chk'), '');
+    dom.window.close();
+    const css = await (await fetch(BASE + '/assets/app.css')).text();
+    chk('登录页: CSS 只对非复选框套 100% 宽', /input:not\(\[type=checkbox\]\)/.test(css), '');
+    chk('登录页: 复选框有显式尺寸', /input\[type=checkbox\][^{]*\{[^}]*width:18px/.test(css), '');
+  }
+
   let bad = 0;
   for (const [ok, name, extra] of results) {
     if (!ok) bad++;

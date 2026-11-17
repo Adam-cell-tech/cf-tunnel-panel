@@ -779,6 +779,11 @@ const EN_LOGIN = {
 Object.assign(EN, EN_LOGIN);
 
 // v0.28.3 登录页排版与错误态
+const EN_V0283 = {
+  '管理员登录': 'Admin sign-in',
+  '登录面板': 'Sign in',
+};
+Object.assign(EN, EN_V0283);
 const EN_LOGIN2 = {
   '输入管理员账号登录': 'Sign in with your admin account',
   '记住这台设备 30 天': 'Remember this device for 30 days',

@@ -41,6 +41,15 @@ Prometheus 已经同时抓 blue/green 两个槽位，Grafana 会自动导入 `do
 并开好匿名只读 + `allow_embedding`，所以首页「监控面板」的三个字段可以直接填（细节见
 `tools/monitoring/README.md`）。
 
+### v0.28.4 更新
+
+修 v0.28.3 引入的复选框渲染 bug（勾选框被拉成通栏蓝条、文案竖排单字）。
+
+- **根因**：`.login-card input{width:100%}` 特异度高于 `.chk`，自绘勾选框也被拉满；`flex:none` 下独占整行，`<span>` 被压到 1 字宽。
+- 宽度规则收窄为 `.login-card input:not([type=checkbox]):not([type=radio])`，并给勾选框固定 `18px` + `flex:0 0 18px` 双保险。
+- 标题改「管理员登录」、聚焦描边改柔（3px 15% 蓝）、GitHub 页脚改真链接、无头 Chromium 截图验证。
+- 测试：DOM **151**、API **309**。
+
 ### v0.28.3 更新
 
 登录页按 7 点评审重排（最要紧的是「复选框文字被裁切」）。
