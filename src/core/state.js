@@ -46,6 +46,7 @@ function defaultState() {
       // 需要 Grafana 侧 conf/grafana.ini 里 allow_embedding = true，并开启匿名只读（或允许第三方 cookie）
       // 外部监控：面板帮你查 Prometheus，不用再开一个标签页
       monitoring: { promUrl: 'http://127.0.0.1:9090' },
+      alerts: { mutes: [] },   // [{name, until, note}] 面板侧静默（不影响 Prometheus 记录）
       grafana: {
         enabled: false,
         url: '',                 // 例如 http://192.168.1.55:3000

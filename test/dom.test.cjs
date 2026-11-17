@@ -406,6 +406,8 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('监控: 页面有四张概览卡', doc.querySelectorAll('#monStats .stat').length === 4, String(doc.querySelectorAll('#monStats .stat').length));
     chk('监控: 渲染了抓取目标表或空态', !!doc.querySelector('#monTargetBody') && doc.querySelector('#monTargetBody').innerHTML.length > 20, '');
     chk('监控: 侧栏有监控入口', !!doc.querySelector('.side .nav a[href="/monitor"]'), '');
+    const alertRows = doc.querySelectorAll('#monAlertBody tbody tr').length;
+    chk('监控: 告警区要么空态要么有行', !!doc.querySelector('#monAlertBody') && (alertRows === 0 || !!doc.querySelector('#monAlertBody [data-mute], #monAlertBody [data-unmute]')), 'rows=' + alertRows);
     dom.window.close();
   }
   {

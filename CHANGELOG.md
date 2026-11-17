@@ -2,6 +2,25 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.26.1
+
+### 修复
+- **`NotifyFailing` 被手动「发测试」顶起来**：没配通道时 `notify()` 直接 `return false`，而测试接口把这次尝试记成 `fail`；跑几次测试就累计到阈值，监控页一直挂着告警。现在「没有启用任何通道 / 指定通道不存在」记为 `skipped`，并且 `cf_notify_total` **不统计 `event="test"`** —— 手动测试互不干扰运营告警。
+
+## v0.26.0
+
+监控页能「治」了：告警可以就地静默，页面上也看得出哪些被按掉了；`/monitor` 同时纳入真 Caddy 的 e2e。
+
+### 新增
+- **面板侧告警静默**：监控页每条告警后面多了「静默 1h」（可填 5–1440 分钟）与「解除」。静默写进 `settings.alerts.mutes[]`（`{name, until, note}`），`GET /api/monitor/status` 会给每条告警标 `muted` 并返回 `mutes` 列表，被静默的行淡化 + 显示「已静默」。
+  - 诚实边界：这是**面板侧**静默 —— 只影响这一页的提醒与视觉标记，Prometheus 仍照常评估、Alarmmanager/Alertmanager 仍照常通知。要真正掐断通知得在 Alertmanager 里做 silence。
+  - 接口：`POST /api/monitor/mute {name, minutes, note}`、`POST /api/monitor/unmute {name}`，都写审计（「静默告警」/「取消静默」）。
+- **e2e 覆盖监控页**：`test/e2e-caddy.mjs` 从 32 项扩到 **39 项**，新增「监控页可打开 / 有概览卡容器 / 状态接口结构 / mutes 数组 / 静默写入 / 出现在状态里 / 可解除」。
+
+### 变更
+- Prometheus 不可达时，`/api/monitor/status` 依然返回 `mutes`，所以页面在 Prometheus 挂掉时也能解除静默。
+- 新增 8 条界面词条。
+
 ## v0.25.0
 
 监控系统不再只是「文档里的一套 YAML」：面板里多了一个「监控」页，Prometheus 抓到了谁、谁在告警，一眼能看到。

@@ -41,6 +41,15 @@ Prometheus 已经同时抓 blue/green 两个槽位，Grafana 会自动导入 `do
 并开好匿名只读 + `allow_embedding`，所以首页「监控面板」的三个字段可以直接填（细节见
 `tools/monitoring/README.md`）。
 
+### v0.26.1 更新
+
+- **修复：手动「发测试」会把 `NotifyFailing` 顶起来**。没配通道时 `notify()` 直接返回，但测试接口把这次尝试记成 `fail`；点几次就积累到阈值，监控页一直挂着告警。现在「没有启用任何通道 / 指定通道不存在」记为 `skipped`，且 `cf_notify_total` 不统计 `event="test"` —— 手动测试不再干扰运营告警。
+
+### v0.26.0 更新
+
+- **面板里静默告警**：`/monitor` 每条告警后面有「静默 1h」（可填 5–1440 分钟）和「解除」。静默存在 `settings.alerts.mutes[]`，`/api/monitor/status` 会给每条告警标 `muted` 并返回生效中的 `mutes`，被静默的行淡化并显示「已静默」。注意这是**面板侧**静默：Prometheus 照常评估、Alertmanager 照常通知；要真掐通知得去 Alertmanager 配 silence。
+- **`/monitor` 进了真 Caddy 的 e2e**：断言数从 32 增到 39（页面可开、有概览卡、状态结构、mutes 数组、静默→可见→解除）。
+
 ### v0.25.0 更新
 
 - **新增「监控」页（`/monitor`）**：Prometheus 是否就绪、抓取目标（up/down、最近抓取、错误）、正在告警/待定的规则、以及三个内嵌 Grafana 面板，30 秒自动刷新。数据来自 `GET /api/monitor/status`，Prometheus 地址在「设置 → 监控嵌入」里填。

@@ -204,6 +204,23 @@ function rawGet(path, host, extra = '') {
   const back = await get('/e2strip/healthz');
   ok('清空黑名单后恢复 200', back.status === 200, String(back.status));
 }
+// 8.5) 监控页与静默接口（不依赖 Prometheus 是否在跑）
+{
+  const page = await fetch(B + '/monitor', { headers: { Authorization: basic } });
+  const html = await page.text();
+  ok('监控页可打开', page.status === 200, String(page.status));
+  ok('监控页有概览卡容器', html.includes('id="monStats"') && html.includes('/assets/monitor.js'), '');
+  const st = await j('/api/monitor/status');
+  ok('监控状态接口返回结构', st.status === 200 && typeof st.d.ok === 'boolean', String(st.d.ok));
+  ok('监控状态带 mutes 数组', Array.isArray(st.d.mutes), String((st.d.mutes || []).length));
+  const mute = await j('/api/monitor/mute', { method: 'POST', body: { name: 'E2eProbe', minutes: 10 } });
+  ok('静默：写入成功', mute.status === 200 && mute.d.ok === true, String(mute.d.until || ''));
+  const st2 = await j('/api/monitor/status');
+  ok('静默：出现在状态里', (st2.d.mutes || []).some((m) => m.name === 'E2eProbe'), '');
+  const un = await j('/api/monitor/unmute', { method: 'POST', body: { name: 'E2eProbe' } });
+  ok('静默：可解除', un.status === 200 && un.d.removed >= 1, String(un.d.removed));
+}
+
 // 9) 生成的配置本身
 {
   const cfg = await j('/api/caddy/config');

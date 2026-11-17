@@ -108,12 +108,19 @@ async function sendOne(ch, title, text, event) {
 async function notify(event, title, text, opts = {}) {
   const n = state.settings.notify || {};
   const channels = channelList();
-  if (!channels.length) return false;
+  // 没配通道 ≠ 发送失败：手点「测试」时更不该把失败计数顶上去（会误触发 NotifyFailing 告警）
+  if (!channels.length) {
+    recordNotify(event, title, 'skipped', '没有启用任何通知通道', text);
+    return false;
+  }
   const ev = n.events || {};
   if (ev[event] === false && !opts.ignoreDisabled) return false;
   // opts.channelId：只发指定通道（「测试」按钮用）
   const targets = opts.channelId ? channels.filter((c) => c.id === opts.channelId) : channels;
-  if (!targets.length) return false;
+  if (!targets.length) {
+    recordNotify(event, title, 'skipped', '指定的通道不存在或已停用', text);
+    return false;
+  }
   if (!opts.force) {
     if (inQuietHours(n.quietHours)) {
       log(`通知被静默时段拦下（${event}，当前静默 ${n.quietHours}）`, 'panel');

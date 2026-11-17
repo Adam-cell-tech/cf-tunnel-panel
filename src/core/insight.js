@@ -425,11 +425,14 @@ function metricsText() {
   lines.push('# HELP cf_history_samples 历史采样点总数（两台实例共享同一份文件）');
   lines.push('# TYPE cf_history_samples gauge');
   lines.push(`cf_history_samples ${hs.samples}`);
-  lines.push('# HELP cf_notify_total 通知发送结果统计（共享）');
+  lines.push('# HELP cf_notify_total 通知发送结果统计（共享，不含手动测试）');
   lines.push('# TYPE cf_notify_total counter');
   {
     const by = {};
-    for (const n of history.notifyList()) by[n.status || 'unknown'] = (by[n.status || 'unknown'] || 0) + 1;
+    for (const n of history.notifyList()) {
+      if (n.event === 'test') continue;   // 手动「发测试」不算运营故障，别把告警顶起来
+      by[n.status || 'unknown'] = (by[n.status || 'unknown'] || 0) + 1;
+    }
     for (const [k, v] of Object.entries(by)) lines.push(`cf_notify_total{status="${k}"} ${v}`);
     if (!Object.keys(by).length) lines.push('cf_notify_total{status="none"} 0');
   }

@@ -27,6 +27,15 @@ Prometheus already scrapes both blue/green slots, and Grafana auto-imports the d
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
 
+## What's new in v0.26.1
+
+- **Fixed: the manual *Send test* button could trip the `NotifyFailing` alert.** With no channel configured, `notify()` silently returned, but the test endpoint still recorded the attempt as `fail`; a few clicks accumulated past the threshold and left an alert on the Monitor page. No channel / unknown channel is now recorded as `skipped`, and `cf_notify_total` ignores `event="test"` so manual testing never disturbs operational alerts.
+
+## What's new in v0.26.0
+
+- **Silence alerts in the panel** — every alert on `/monitor` now has *Silence 1h* (5–1440 min) and *Un-silence*. Silences live in `settings.alerts.mutes[]`; `/api/monitor/status` marks each alert with `muted` and returns the active `mutes`, so silenced rows are dimmed and tagged. This is panel-side only: Prometheus keeps evaluating and Alertmanager keeps notifying — use an Alertmanager silence to actually stop notifications.
+- **`/monitor` is covered by the real-Caddy e2e** — the suite grew from 32 to 39 assertions (page opens, has the stats container, status shape, mutes array, mute → visible → unmute).
+
 ## What's new in v0.25.0
 
 - **New "Monitor" page (`/monitor`)** — Prometheus readiness, scrape targets (up/down + last scrape + last error), firing/pending alerts, and three embedded Grafana panels, all refreshing every 30s. Backed by `GET /api/monitor/status`; the Prometheus URL lives in Settings → *Monitoring*.

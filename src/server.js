@@ -412,8 +412,14 @@ async function handler(req, res) {
   // 监控页：面板替你去问 Prometheus（targets / 告警），省得再开一个标签页
   if (p === '/api/monitor/status' && req.method === 'GET') {
     const base = String((state.settings.monitoring || {}).promUrl || '').trim().replace(/\/+$/, '');
+    const activeMutes = () => {
+      const nowMs = Date.now();
+      return ((state.settings.alerts || {}).mutes || [])
+        .filter((m) => m && m.name && (!m.until || Date.parse(m.until) > nowMs))
+        .map((m) => ({ name: m.name, until: m.until || '', note: m.note || '' }));
+    };
     if (!/^https?:\/\/[^\s]+$/i.test(base)) {
-      return sendJson(res, 200, { ok: false, promUrl: base, error: '还没配 Prometheus 地址（设置 → 监控嵌入）' });
+      return sendJson(res, 200, { ok: false, promUrl: base, error: '还没配 Prometheus 地址（设置 → 监控嵌入）', mutes: activeMutes(), targets: [], alerts: [] });
     }
     const grab = async (pathname) => {
       const r = await fetch(base + pathname, { signal: AbortSignal.timeout(4000) });
@@ -441,9 +447,54 @@ async function handler(req, res) {
         }));
       } catch (e) { alerts = []; }
       const down = targets.filter((t) => t.health !== 'up').length;
-      return sendJson(res, 200, { ok: true, promUrl: base, ready, targets, alerts, summary: { total: targets.length, up: targets.length - down, down } });
+      // 面板侧静默：只影响本页显示，Prometheus/Alertmanager 侧仍照常记录与通知
+      const nowMs = Date.now();
+      const mutes = ((state.settings.alerts || {}).mutes || [])
+        .filter((m) => m && m.name && (!m.until || Date.parse(m.until) > nowMs));
+      const muteMap = new Map(mutes.map((m) => [m.name, m]));
+      alerts = alerts.map((a) => ({ ...a, muted: muteMap.has(a.name), muteUntil: (muteMap.get(a.name) || {}).until || '' }));
+      return sendJson(res, 200, {
+        ok: true, promUrl: base, ready, targets, alerts,
+        summary: { total: targets.length, up: targets.length - down, down, muted: alerts.filter((a) => a.muted).length },
+        mutes: mutes.map((m) => ({ name: m.name, until: m.until || '', note: m.note || '' })),
+      });
     } catch (e) {
-      return sendJson(res, 200, { ok: false, promUrl: base, error: `连不上 Prometheus：${e.message}` });
+      return sendJson(res, 200, { ok: false, promUrl: base, error: `连不上 Prometheus：${e.message}`, mutes: activeMutes(), targets: [], alerts: [] });
+    }
+  }
+
+  if (p === '/api/monitor/mute' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const name = String(body.name || '').trim();
+      if (!/^[A-Za-z][A-Za-z0-9_]{1,60}$/.test(name)) return sendJson(res, 400, { ok: false, error: '告警名字不合法' });
+      const minutes = Math.min(Math.max(Number(body.minutes) || 60, 5), 24 * 60);
+      const until = new Date(Date.now() + minutes * 60000).toISOString();
+      const note = String(body.note || '').slice(0, 200);
+      const cur = state.settings.alerts || (state.settings.alerts = { mutes: [] });
+      cur.mutes = (cur.mutes || []).filter((m) => m && m.name !== name);
+      cur.mutes.push({ name, until, note });
+      saveState('alert-mute');
+      auditRecord({ action: '静默告警', target: `${name} 至 ${until}`, ip: clientIpOf(req), actor: auth.who, method: req.method, path: p, status: 200, ms: 0 });
+      return sendJson(res, 200, { ok: true, name, until, minutes });
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: e.message });
+    }
+  }
+
+  if (p === '/api/monitor/unmute' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const name = String(body.name || '').trim();
+      const cur = state.settings.alerts || (state.settings.alerts = { mutes: [] });
+      const before = (cur.mutes || []).length;
+      cur.mutes = (cur.mutes || []).filter((m) => m && m.name !== name);
+      const removed = before - cur.mutes.length;
+      saveState('alert-unmute');
+      auditRecord({ action: '取消静默', target: name || '(全部)', ip: clientIpOf(req), actor: auth.who, method: req.method, path: p, status: 200, ms: 0 });
+      return sendJson(res, 200, { ok: true, removed });
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: e.message });
     }
   }
 

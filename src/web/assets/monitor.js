@@ -83,15 +83,20 @@
           </tr>`).join('')}</tbody></table></div>`
         : '<div class="empty">没有抓取目标</div>';
 
+      const mutedCount = (d.alerts || []).filter((a) => a.muted).length;
       ab.innerHTML = (d.alerts || []).length
-        ? `<div class="tbl-wrap"><table class="stackable"><thead><tr><th>告警</th><th>状态</th><th>级别</th><th>开始</th><th>说明</th></tr></thead><tbody>${
-          d.alerts.map((a) => `<tr>
-            <td data-label="告警"><b>${esc(a.name)}</b></td>
+        ? `<div class="tbl-wrap"><table class="stackable"><thead><tr><th>告警</th><th>状态</th><th>级别</th><th>开始</th><th>说明</th><th>操作</th></tr></thead><tbody>${
+          d.alerts.map((a) => `<tr${a.muted ? ' class="muted-row"' : ''}>
+            <td data-label="告警"><b>${esc(a.name)}</b>${a.muted ? ` <span class="tag warn" title="静默到 ${esc(a.muteUntil || '')}">已静默</span>` : ''}</td>
             <td data-label="状态"><span class="tag ${a.state === 'firing' ? 'err' : 'warn'}">${a.state === 'firing' ? '正在告警' : '待定'}</span></td>
             <td class="muted" data-label="级别">${esc(a.severity || '—')}</td>
             <td class="mono" data-label="开始">${esc(ago(a.activeAt))}</td>
             <td class="muted" data-label="说明">${esc(a.summary || '—')}</td>
-          </tr>`).join('')}</tbody></table></div>`
+            <td data-label="操作">${a.muted
+              ? `<button class="sm ghost" data-unmute="${esc(a.name)}">解除</button>`
+              : `<button class="sm ghost" data-mute="${esc(a.name)}">静默 1h</button>`}</td>
+          </tr>`).join('')}</tbody></table></div>${
+            mutedCount ? `<div class="sub" style="margin-top:6px">已静默 ${mutedCount} 条：只影响本页提醒，Prometheus 侧照常记录与评估。</div>` : ''}`
         : '<div class="empty">当前没有告警 —— 这是好事</div>';
     } catch (e) {
       tb.innerHTML = `<div class="hint err">${esc(e.message)}</div>`;
@@ -107,6 +112,26 @@
   document.addEventListener('DOMContentLoaded', () => {
     load().catch((e) => toast(e.message, 'err'));
     if ($('#btnMonRefresh')) $('#btnMonRefresh').addEventListener('click', () => load().catch((e) => toast(e.message, 'err')));
+
+    const abx = $('#monAlertBody');
+    if (abx) abx.addEventListener('click', async (e) => {
+      const m = e.target.closest('[data-mute]');
+      const u = e.target.closest('[data-unmute]');
+      if (!m && !u) return;
+      const name = (m || u).getAttribute('data-mute') || (m || u).getAttribute('data-unmute');
+      try {
+        if (m) {
+          const minutes = Number(window.prompt('静默多久（分钟，5–1440）？', '60') || 0);
+          if (!minutes) return;
+          await api('/api/monitor/mute', { method: 'POST', body: { name, minutes } });
+          toast('已静默 ' + name + '（' + minutes + ' 分钟）');
+        } else {
+          await api('/api/monitor/unmute', { method: 'POST', body: { name } });
+          toast('已取消静默 ' + name);
+        }
+        await load();
+      } catch (err) { toast(err.message, 'err'); }
+    });
     setInterval(() => { if (!document.hidden) load().catch(() => {}); }, 30000);
   });
 })();

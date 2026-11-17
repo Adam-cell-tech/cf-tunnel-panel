@@ -982,6 +982,16 @@ try {
   ok('监控：非法 Prometheus 地址被拒', monBad.status === 400, String(monBad.status));
   await j('/api/settings', { method: 'POST', body: { monitoring: { promUrl: 'http://127.0.0.1:9090' } } });
 
+  // 告警静默（面板侧）
+  const mute = await j('/api/monitor/mute', { method: 'POST', body: { name: 'PanelDown', minutes: 45 } });
+  ok('告警静默：保存成功', mute.status === 200 && mute.d.ok === true && !!mute.d.until, String(mute.d.until || ''));
+  const mon2 = await j('/api/monitor/status');
+  ok('告警静默：状态里带 mutes', Array.isArray(mon2.d.mutes) && mon2.d.mutes.some((m) => m.name === 'PanelDown'), String((mon2.d.mutes || []).length));
+  const muteBad = await j('/api/monitor/mute', { method: 'POST', body: { name: 'bad name!' } });
+  ok('告警静默：非法名字被拒', muteBad.status === 400, String(muteBad.status));
+  const unmute = await j('/api/monitor/unmute', { method: 'POST', body: { name: 'PanelDown' } });
+  ok('告警静默：可以解除', unmute.status === 200 && unmute.d.removed >= 1, String(unmute.d.removed));
+
   const ts = await j('/api/tunnels/stats?hours=24');
   ok('出口流量：返回每个出口一行', ts.status === 200 && Array.isArray(ts.d.tunnels) && ts.d.tunnels.length > 0, String((ts.d.tunnels || []).length));
   ok('出口流量：字段齐全', (ts.d.tunnels || []).every((t) => 'id' in t && 'count' in t && 'err5' in t && 'p95' in t && 'host' in t), '');

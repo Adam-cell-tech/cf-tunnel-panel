@@ -13,6 +13,25 @@
 | 预置 | 数据源 uid `prom-main`、仪表盘 uid `cfp-main`（slug `a650163`）、匿名只读、`allow_embedding` | 匿名 `/d-solo/cfp-main/a650163?panelId=7` 200 |
 | 面板侧 | `settings.grafana` 指向 `http://192.168.1.55:3000`，panelId 1/7/9 | 首页 CSP 含该源、`#grafanaCard` 出现 |
 
+## ✅ v0.26.1 — 手动测试不再误触发告警
+
+| 项 | 做法 | 实测 |
+| --- | --- | --- |
+| 无通道不再记 fail | `notify()` 两处早退改 `recordNotify(..., 'skipped', …)`（无通道 / 指定通道不存在） | 发测试 → 记录 `test skipped` |
+| 指标排除测试事件 | `cf_notify_total` 跳过 `event === 'test'` | `/metrics` 只剩 `ok 3` / `skipped 5`，无 `fail` |
+| 验证 | 300 API + 137 DOM 全绿 | — |
+
+## ✅ v0.26.0 — 监控页能「治」了
+
+| 项 | 做法 | 实测 |
+| --- | --- | --- |
+| 告警静默 | `settings.alerts.mutes[]` + `POST /api/monitor/mute|unmute`，`/api/monitor/status` 标 `muted` 并回 `mutes` | mute 30 分钟 → `until` 正确；status 里出现；unmute `removed:1` |
+| 静默可见 | 监控页告警表加「操作」列，静默行淡化 + 「已静默」标签，底部提示「只影响本页」 | DOM 137 项通过 |
+| e2e 覆盖 | `test/e2e-caddy.mjs` 新增 7 条监控页/静默断言 | 隔离环境 **39/39** |
+| 审计 | 静默/解除都写审计（「静默告警」/「取消静默」） | 观测页可见 |
+
+边界：不会真的掐断通知（那需要 Alertmanager silence）；Provider 不可达时仍能解除静默。
+
 ## ✅ v0.25.0 — 监控系统接进面板
 
 | 项 | 做法 | 实测 |
