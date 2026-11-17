@@ -111,25 +111,24 @@ function loginPage({ next = '/', error = '', lang = 'zh' } = {}) {
       <button class="mini" type="button" id="btnTheme" title="${t('深浅色')}" aria-label="${t('深浅色')}">◐</button>
     </div>
     <h1>${t('登录面板')}</h1>
-    <p class="sub">${t('用面板账号登录。默认账号 admin，密码在首次部署时设置。')}</p>
     <form id="loginForm" autocomplete="on" data-next="${safeNext}">
       <div class="field">
         <label for="u">${t('用户名')}</label>
-        <input id="u" name="username" autocomplete="username" required autofocus placeholder="admin">
+        <input id="u" name="username" autocomplete="username" required autofocus>
       </div>
       <div class="field">
         <label for="p">${t('密码')}</label>
         <div class="pwd">
-          <input id="p" name="password" type="password" autocomplete="current-password" required placeholder="••••••••">
+          <input id="p" name="password" type="password" autocomplete="current-password" required>
           <button class="eye" type="button" id="btnReveal" aria-label="${t('显示密码')}" title="${t('显示密码')}">👁</button>
         </div>
       </div>
       <div class="field hidden" id="tWrap">
         <label for="t">${t('二次验证码')}</label>
-        <input id="t" name="otp" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="9">
+        <input id="t" name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="9">
         <div class="muted" style="font-size:12px;margin-top:4px">${t('输入验证器 App 里的 6 位数字；也可以用恢复码（XXXX-XXXX）')}</div>
       </div>
-      <label class="chk" style="margin:2px 0 10px;font-size:13px"><input type="checkbox" id="rem" checked> ${t('记住这台设备（30 天）')}</label>
+      <label class="inline login-rem"><input class="chk" type="checkbox" id="rem" checked> <span>${t('记住这台设备（30 天）')}</span></label>
       <div class="hint err hidden" id="err">${error ? error : ''}</div>
       <button class="primary" type="submit" style="width:100%;margin-top:6px">${t('登录')}</button>
     </form>

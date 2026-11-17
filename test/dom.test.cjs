@@ -330,6 +330,9 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('登录页: 双栏布局（品牌区 + 表单区）', !!doc.querySelector('.login-wrap .login-hero') && !!doc.querySelector('.login-wrap .login-card'), '');
     chk('登录页: 有密码显隐/主题/语言三个按钮', !!doc.querySelector('#btnReveal') && !!doc.querySelector('#btnTheme') && !!doc.querySelector('#btnLang'), '');
     chk('登录页: 品牌区有三条卖点', doc.querySelectorAll('.login-hero .feat li').length === 3, String(doc.querySelectorAll('.login-hero .feat li').length));
+    const uEl = doc.querySelector('#u'); const pEl = doc.querySelector('#p');
+    chk('登录页: 用户名/密码没有预填占位值', !uEl.getAttribute('placeholder') && !pEl.getAttribute('placeholder') && !uEl.value && !pEl.value, '');
+    chk('登录页: 记住设备是 label 包 input（不再挤压布局）', !!doc.querySelector('label.login-rem > input#rem'), '');
     chk('登录页: 引用了 /boot.js', !!doc.querySelector('script[src^="/boot.js"]'), '');
     chk('登录页: 不出现侧边导航', !doc.querySelector('.side .nav'), '');
     chk('登录页: 无脚本错误', errors.length === 0, errors.join(' | ').slice(0, 160));

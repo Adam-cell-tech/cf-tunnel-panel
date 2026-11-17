@@ -27,6 +27,15 @@ Prometheus already scrapes both blue/green slots, and Grafana auto-imports the d
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
 
+## What's new in v0.28.2
+
+Sign-in page polish, mostly removing things that shouldn't be there.
+
+- Dropped the "sign in with your panel account, default user is admin…" line — a hint that reads like a credential leak.
+- No placeholder text anywhere: the username used to show `admin`, the password `••••••••`, the OTP field `123456`. All gone, so nothing looks pre-filled.
+- Fixed the "remember this device" row: the wrapping `<label>` had picked up `.chk` (a 15×15 rule meant for the `<input>`), which collapsed the row and jammed it against the password field and the button. Now `label.inline` + `<input class="chk">`, with 14/16px breathing room.
+- Tests: DOM **144**.
+
 ## What's new in v0.28.1
 
 The sign-in screen is now a proper two-column page instead of a lonely card.

@@ -357,6 +357,12 @@ pre.log .l-system{color:#a0a8b4}
 .pwd .eye:hover{color:var(--fg);background:var(--bg2)}
 .pwd .eye[aria-pressed="true"]{color:var(--acc)}
 
+/* 字段间距：别让复选框贴着密码框底边 */
+.login-card .field{margin-bottom:14px}
+.login-card .login-rem{margin:2px 0 16px;font-size:13px}
+.login-card .login-rem .chk{flex:none}
+.login-card button[type="submit"]{margin-top:0}
+
 @media (max-width:860px){
   .login-wrap{grid-template-columns:1fr;max-width:420px}
   .login-hero{display:none}
