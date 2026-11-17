@@ -27,6 +27,15 @@ Prometheus already scrapes both blue/green slots, and Grafana auto-imports the d
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
 
+## What's new in v0.28.1
+
+The sign-in screen is now a proper two-column page instead of a lonely card.
+
+- **Left**: gradient brand panel with three selling points (multiple exits / path routing / observability) plus version and repo link; hidden below 860px so the form stays centered.
+- **Right**: title, one-line hint, placeholders, and three small buttons — language (中/EN), light/dark, and password reveal (👁 with `aria-pressed`).
+- The TOTP step now expands automatically, locks the filled credentials, relabels the button to "Next", and selects the code on error. All strings are in the dictionary, so English mode has no mixed language.
+- Tests: DOM **142**.
+
 ## What's new in v0.28.0
 
 Alerts finally close the loop: **Prometheus detects → Alertmanager routes → the panel turns it into your DingTalk / Feishu / Bark message** — and every alert row is clickable.

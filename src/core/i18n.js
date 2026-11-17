@@ -755,6 +755,29 @@ const EN_V0250 = {
 };
 Object.assign(EN, EN_V0250);
 
+// v0.28.0 登录页改版
+const EN_LOGIN = {
+  '把家里的服务，安全地放到公网': 'Put your home services online, safely',
+  '多出口': 'Multiple exits',
+  '快速隧道与命名隧道可以同时跑，换域名不用改配置': 'Quick and named tunnels run side by side — changing a hostname needs no config edits',
+  '规则分流': 'Path-based routing',
+  '一条隧道挂多个服务：路径分流、基础认证、IP 白名单': 'One tunnel, many services: path routing, basic auth, IP allow-lists',
+  '看得见': 'Observability',
+  '访问统计、审计日志、Prometheus 指标与告警': 'Access stats, audit log, Prometheus metrics and alerts',
+  '开源 MIT': 'Open source, MIT',
+
+  '切换语言': 'Switch language',
+  '深浅色': 'Light / dark',
+  '用面板账号登录。默认账号 admin，密码在首次部署时设置。': 'Sign in with your panel account. The default user is admin; set the password on first deploy.',
+  '显示密码': 'Show password',
+  '隐藏密码': 'Hide password',
+  '登录中…': 'Signing in…',
+  '下一步': 'Next',
+  '登录失败': 'Sign-in failed',
+  '网络错误：': 'Network error: ',
+};
+Object.assign(EN, EN_LOGIN);
+
 const EN_PAGES = {
   '加签密钥（可选）': 'Signing secret (optional)',
   '机器人安全设置里勾了「加签」才需要；只勾「自定义关键词」就留空': 'Only needed when the bot has signing enabled; leave empty if you use a keyword instead',

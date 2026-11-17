@@ -305,11 +305,63 @@ pre.log .l-system{color:#a0a8b4}
 }
 
 /* 登录页：不套外壳，居中一张卡 */
-.login-body{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-.login-card{width:100%;max-width:360px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px}
-.login-card .brand{display:flex;gap:10px;align-items:center}
-.login-card h1{font-weight:600}
+/* ---- 登录页 ---- */
+.login-body{
+  min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px 20px;
+  background:
+    radial-gradient(900px 420px at 12% -10%, rgba(56,189,248,.16), transparent 62%),
+    radial-gradient(760px 380px at 92% 8%, rgba(139,92,246,.16), transparent 60%),
+    var(--bg);
+}
+.login-wrap{
+  width:100%;max-width:980px;display:grid;grid-template-columns:1fr 408px;
+  background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden;
+  box-shadow:0 28px 70px rgba(0,0,0,.32);
+}
+.login-hero{
+  padding:34px 32px 26px;display:flex;flex-direction:column;gap:20px;
+  background:linear-gradient(158deg, rgba(56,189,248,.12), rgba(139,92,246,.14) 46%, transparent 82%);
+  border-right:1px solid var(--line);
+}
+.login-hero .brand{padding:0;display:flex;gap:11px;align-items:center}
+.login-hero h2{margin:6px 0 0;font-size:23px;line-height:1.35;font-weight:650;letter-spacing:-.01em}
+.login-hero .feat{list-style:none;margin:4px 0 0;padding:0;display:flex;flex-direction:column;gap:14px}
+.login-hero .feat li{display:flex;gap:11px;align-items:flex-start}
+.login-hero .feat .ico{
+  width:26px;height:26px;flex:none;border-radius:8px;display:grid;place-items:center;font-size:13px;
+  background:rgba(120,180,255,.14);color:var(--acc);border:1px solid rgba(120,180,255,.22)
+}
+.login-hero .feat b{display:block;font-size:13.5px;font-weight:640}
+.login-hero .feat em{display:block;font-style:normal;font-size:12.5px;color:var(--dim);line-height:1.55;margin-top:2px}
+.login-hero .foot{margin:auto 0 0;font-size:11.5px;color:var(--dim)}
+
+.login-card{
+  width:auto;max-width:none;border:0;border-radius:0;background:transparent;
+  padding:30px 30px 26px;display:flex;flex-direction:column;
+}
+.login-tools{display:flex;gap:6px;justify-content:flex-end;margin:-6px -4px 2px}
+.login-tools .mini{font-size:11.5px;padding:3px 9px;line-height:1.5}
+.login-card h1{font-weight:650;font-size:20px;margin:2px 0 6px}
+.login-card .sub{margin:0 0 18px;font-size:12.5px;color:var(--dim);line-height:1.6}
 .login-card input{width:100%}
+.login-card .tips{margin:16px 0 0;font-size:11.5px;color:var(--dim);line-height:1.6}
+
+/* 密码框 + 小眼睛 */
+.pwd{position:relative}
+.pwd input{padding-right:38px!important}
+.pwd .eye{
+  position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  width:26px;height:26px;padding:0;border:0;border-radius:6px;background:transparent;
+  color:var(--dim);cursor:pointer;font-size:13px;line-height:1
+}
+.pwd .eye:hover{color:var(--fg);background:var(--bg2)}
+.pwd .eye[aria-pressed="true"]{color:var(--acc)}
+
+@media (max-width:860px){
+  .login-wrap{grid-template-columns:1fr;max-width:420px}
+  .login-hero{display:none}
+  .login-card{padding:26px 22px 22px}
+}
 
 /* 设置页的分区导航：卡片太多，滚动时始终能点 */
 .subnav{position:sticky;top:0;z-index:20;display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px;margin:-4px 0 2px;

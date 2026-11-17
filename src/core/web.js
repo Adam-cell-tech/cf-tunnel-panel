@@ -79,27 +79,63 @@ ${body}
 function loginPage({ next = '/', error = '', lang = 'zh' } = {}) {
   const title = (state.settings && state.settings.panelTitle) || 'Cloudflare 隧道面板';
   const safeNext = String(next || '/').startsWith('/') ? String(next || '/') : '/';
+  const t = (k) => i18n.t(lang, k);
+  const other = lang === 'en' ? 'zh' : 'en';
   return `<!doctype html>
 <html lang="${lang === 'en' ? 'en' : 'zh-CN'}" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${i18n.t(lang, '登录')} · ${title}</title>
+<title>${t('登录')} · ${title}</title>
 <link rel="stylesheet" href="${AV('app.css')}">
 <link rel="icon" href="/badge.svg" type="image/svg+xml">
 </head>
 <body class="login-body">
-<form class="login-card" id="loginForm" autocomplete="on" data-next="${safeNext}">
-  <div class="brand" style="padding:0 0 14px"><span class="logo" aria-hidden="true">CF</span><div><div class="nm">${title}</div><div class="ver">v${VERSION}</div></div></div>
-  <h1 style="font-size:18px;margin:0 0 12px">${i18n.t(lang, '登录面板')}</h1>
-  <div class="field"><label for="u">${i18n.t(lang, '用户名')}</label><input id="u" name="username" autocomplete="username" required autofocus></div>
-  <div class="field"><label for="p">${i18n.t(lang, '密码')}</label><input id="p" name="password" type="password" autocomplete="current-password" required></div>
-  <div class="field hidden" id="tWrap"><label for="t">${i18n.t(lang, '二次验证码')}</label><input id="t" name="otp" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="9"><div class="muted" style="font-size:12px;margin-top:4px">${i18n.t(lang, '输入验证器 App 里的 6 位数字；也可以用恢复码（XXXX-XXXX）')}</div></div>
-  <label class="chk" style="margin:2px 0 8px;font-size:13px"><input type="checkbox" id="rem" checked> ${i18n.t(lang, '记住这台设备（30 天）')}</label>
-  <div class="hint err hidden" id="err">${error ? error : ''}</div>
-  <button class="primary" type="submit" style="width:100%;margin-top:10px">${i18n.t(lang, '登录')}</button>
-  <p class="muted" style="font-size:12px;margin:12px 0 0">登录后 7 天内免登录；在「设置 → 登录会话」里可以查看并踢掉其它设备。</p>
-</form>
+<div class="login-wrap">
+  <aside class="login-hero">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">CF</span>
+      <div><div class="nm">${title}</div><div class="ver">v${VERSION}</div></div>
+    </div>
+    <h2>${t('把家里的服务，安全地放到公网')}</h2>
+    <ul class="feat">
+      <li><span class="ico" aria-hidden="true">◧</span><div><b>${t('多出口')}</b><em>${t('快速隧道与命名隧道可以同时跑，换域名不用改配置')}</em></div></li>
+      <li><span class="ico" aria-hidden="true">⤳</span><div><b>${t('规则分流')}</b><em>${t('一条隧道挂多个服务：路径分流、基础认证、IP 白名单')}</em></div></li>
+      <li><span class="ico" aria-hidden="true">◫</span><div><b>${t('看得见')}</b><em>${t('访问统计、审计日志、Prometheus 指标与告警')}</em></div></li>
+    </ul>
+    <p class="foot">${t('开源 MIT')} · github.com/Adam-cell-tech/cf-tunnel-panel</p>
+  </aside>
+  <main class="login-card">
+    <div class="login-tools">
+      <button class="mini" type="button" id="btnLang" title="${t('切换语言')}">${lang === 'en' ? '中文' : 'EN'}</button>
+      <button class="mini" type="button" id="btnTheme" title="${t('深浅色')}" aria-label="${t('深浅色')}">◐</button>
+    </div>
+    <h1>${t('登录面板')}</h1>
+    <p class="sub">${t('用面板账号登录。默认账号 admin，密码在首次部署时设置。')}</p>
+    <form id="loginForm" autocomplete="on" data-next="${safeNext}">
+      <div class="field">
+        <label for="u">${t('用户名')}</label>
+        <input id="u" name="username" autocomplete="username" required autofocus placeholder="admin">
+      </div>
+      <div class="field">
+        <label for="p">${t('密码')}</label>
+        <div class="pwd">
+          <input id="p" name="password" type="password" autocomplete="current-password" required placeholder="••••••••">
+          <button class="eye" type="button" id="btnReveal" aria-label="${t('显示密码')}" title="${t('显示密码')}">👁</button>
+        </div>
+      </div>
+      <div class="field hidden" id="tWrap">
+        <label for="t">${t('二次验证码')}</label>
+        <input id="t" name="otp" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="9">
+        <div class="muted" style="font-size:12px;margin-top:4px">${t('输入验证器 App 里的 6 位数字；也可以用恢复码（XXXX-XXXX）')}</div>
+      </div>
+      <label class="chk" style="margin:2px 0 10px;font-size:13px"><input type="checkbox" id="rem" checked> ${t('记住这台设备（30 天）')}</label>
+      <div class="hint err hidden" id="err">${error ? error : ''}</div>
+      <button class="primary" type="submit" style="width:100%;margin-top:6px">${t('登录')}</button>
+    </form>
+    <p class="tips">${t('登录后 7 天内免登录；在「设置 → 登录会话」里可以查看并踢掉其它设备。')}</p>
+  </main>
+</div>
 <script src="/boot.js?v=${ASSET_V}"></script>
 <script src="${AV('login.js')}"></script>
 </body>

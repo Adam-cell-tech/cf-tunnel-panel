@@ -327,6 +327,9 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('登录页: 没有内联脚本（CSP 会拦）', doc.querySelectorAll('script:not([src])').length === 0, String(doc.querySelectorAll('script:not([src])').length));
     chk('登录页: 引用了外部 login.js', !!doc.querySelector('script[src*="login.js"]'), '');
     chk('登录页: 表单带 data-next', !!(doc.querySelector('#loginForm') && doc.querySelector('#loginForm').getAttribute('data-next')), '');
+    chk('登录页: 双栏布局（品牌区 + 表单区）', !!doc.querySelector('.login-wrap .login-hero') && !!doc.querySelector('.login-wrap .login-card'), '');
+    chk('登录页: 有密码显隐/主题/语言三个按钮', !!doc.querySelector('#btnReveal') && !!doc.querySelector('#btnTheme') && !!doc.querySelector('#btnLang'), '');
+    chk('登录页: 品牌区有三条卖点', doc.querySelectorAll('.login-hero .feat li').length === 3, String(doc.querySelectorAll('.login-hero .feat li').length));
     chk('登录页: 引用了 /boot.js', !!doc.querySelector('script[src^="/boot.js"]'), '');
     chk('登录页: 不出现侧边导航', !doc.querySelector('.side .nav'), '');
     chk('登录页: 无脚本错误', errors.length === 0, errors.join(' | ').slice(0, 160));
