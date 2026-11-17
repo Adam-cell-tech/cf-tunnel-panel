@@ -27,6 +27,12 @@ Prometheus already scrapes both blue/green slots, and Grafana auto-imports the d
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
 
+## What's new in v0.27.0
+
+- **Per-exit traffic metrics** — `/metrics` now also emits `cf_exit_requests_5m{id,name,mode}` and `cf_exit_errors_5m{...}`: a 5-minute rolling count per tunnel exit, derived from the access log (reads at most 1 MB), so Grafana can show *which exit is actually serving traffic*.
+- **Grafana panel #13** — "Requests per exit (5-min rolling)" with request and error lines grouped by `name`; both `docs/grafana-dashboard.json` and the provisioned copy in `tools/monitoring/dashboards/` are updated (Grafana reloads in ~10s).
+- These are rolling **gauges**, not counters — plot them directly, do not wrap in `rate()`.
+
 ## What's new in v0.26.1
 
 - **Fixed: the manual *Send test* button could trip the `NotifyFailing` alert.** With no channel configured, `notify()` silently returned, but the test endpoint still recorded the attempt as `fail`; a few clicks accumulated past the threshold and left an alert on the Monitor page. No channel / unknown channel is now recorded as `skipped`, and `cf_notify_total` ignores `event="test"` so manual testing never disturbs operational alerts.

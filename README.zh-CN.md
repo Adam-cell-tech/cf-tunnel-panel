@@ -41,6 +41,12 @@ Prometheus 已经同时抓 blue/green 两个槽位，Grafana 会自动导入 `do
 并开好匿名只读 + `allow_embedding`，所以首页「监控面板」的三个字段可以直接填（细节见
 `tools/monitoring/README.md`）。
 
+### v0.27.0 更新
+
+- **按出口的流量指标**：`/metrics` 增加 `cf_exit_requests_5m{id,name,mode}` 与 `cf_exit_errors_5m{...}` —— 每个出口最近 5 分钟的请求数与错误数（滚动窗口，来自访问日志，最多读 1MB），Grafana 里终于能看出「哪个出口真在干活」。
+- **Grafana 第 13 张面板**：「按出口的请求数（5 分钟滚动）」，请求/错误两条线按 `name` 分组；`docs/grafana-dashboard.json` 与 `tools/monitoring/dashboards/` 副本同步，provisioning 约 10 秒自动加载。
+- 注意这是滚动 **gauge**（每抓取点回看 5 分钟），不是计数器，别套 `rate()`。
+
 ### v0.26.1 更新
 
 - **修复：手动「发测试」会把 `NotifyFailing` 顶起来**。没配通道时 `notify()` 直接返回，但测试接口把这次尝试记成 `fail`；点几次就积累到阈值，监控页一直挂着告警。现在「没有启用任何通道 / 指定通道不存在」记为 `skipped`，且 `cf_notify_total` 不统计 `event="test"` —— 手动测试不再干扰运营告警。

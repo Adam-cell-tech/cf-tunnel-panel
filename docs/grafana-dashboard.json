@@ -695,6 +695,53 @@
         "overrides": []
       },
       "id": 12
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "按出口的请求数（5 分钟滚动）",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 100
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 12,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "cf_exit_requests_5m",
+          "legendFormat": "{{name}} 请求"
+        },
+        {
+          "refId": "B",
+          "expr": "cf_exit_errors_5m",
+          "legendFormat": "{{name}} 错误"
+        }
+      ]
     }
   ],
   "uid": "cfp-main"

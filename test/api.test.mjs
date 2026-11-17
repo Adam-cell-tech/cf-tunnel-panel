@@ -982,6 +982,15 @@ try {
   ok('监控：非法 Prometheus 地址被拒', monBad.status === 400, String(monBad.status));
   await j('/api/settings', { method: 'POST', body: { monitoring: { promUrl: 'http://127.0.0.1:9090' } } });
 
+  // 按出口的滚动指标（Grafana 那张「按出口的请求数」靠它）
+  {
+    const r = await rawFetch(B + '/metrics');
+    const txt = await r.text();
+    ok('/metrics 带出口请求指标', /cf_exit_requests_5m\{id="/.test(txt), '');
+    ok('/metrics 带出口错误指标', /cf_exit_errors_5m\{id="/.test(txt), '');
+    ok('/metrics 出口指标带 name 标签', /cf_exit_requests_5m\{[^}]*name="/.test(txt), '');
+  }
+
   // 告警静默（面板侧）
   const mute = await j('/api/monitor/mute', { method: 'POST', body: { name: 'PanelDown', minutes: 45 } });
   ok('告警静默：保存成功', mute.status === 200 && mute.d.ok === true && !!mute.d.until, String(mute.d.until || ''));

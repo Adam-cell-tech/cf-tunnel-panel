@@ -2,6 +2,19 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.27.0
+
+Grafana 那张缺失的图补上了：**按出口看谁在吃流量**。
+
+### 新增
+- **`cf_exit_requests_5m` / `cf_exit_errors_5m`**：`/metrics` 在原有指标后追加每个出口最近 5 分钟的请求数与 4xx+5xx 数，标签 `{id,name,mode}`。数据来自访问日志（`readAccess` 只读末尾 1MB），不额外占用 cloudflared。
+  - 出口归属沿用「按域名归属」逻辑：命名隧道取 `publicHostname`、快速隧道取当前 `trycloudflare` 域名；不属于任何出口的 Host 不计数（页面上的「其它」汇总仍可用 `/api/tunnels/stats` 看）。
+- **Grafana 面板 13**：「按出口的请求数（5 分钟滚动）」两条线（请求 / 错误），按 `name` 分组。`docs/grafana-dashboard.json` 与 `tools/monitoring/dashboards/` 的副本同步更新，Grafana provisioning 约 10 秒自动加载。
+- API 测试 +3（`/metrics` 带两个出口指标、带 `name` 标签）→ **303**。
+
+### 说明
+- 这是**滚动窗口 gauge**（每个抓取点回看 5 分钟），不是计数器，所以 Grafana 里直接画原值即可，不要套 `rate()`。
+
 ## v0.26.1
 
 ### 修复

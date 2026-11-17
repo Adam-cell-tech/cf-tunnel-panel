@@ -122,9 +122,54 @@ async function handler(req, res) {
     return res.end(svg);
   }
   // 监控端点：免登录，方便 Prometheus 直接抓（内容只有聚合计数，不含 token/规则细节）
+  // 按出口的 5 分钟滚动计数（Grafana 用；走访问日志，不额外占用 cloudflared 侧）
+  function exitMetricsLines() {
+    try {
+      const winMin = 5;
+      const d = readAccess(4000, { since: Date.now() - winMin * 60 * 1000, maxBytes: 1 * 1024 * 1024 });
+      const rows = (d && d.rows) || [];
+      const hostOf = (t) => {
+        const u = publicUrlOf(t) || '';
+        const m = /^https?:\/\/([^/:]+)/i.exec(u);
+        return m ? m[1].toLowerCase() : '';
+      };
+      const byHost = new Map();
+      for (const t of state.tunnels) {
+        const h = hostOf(t);
+        if (h) byHost.set(h, t.id);
+      }
+      const acc = new Map(); // id -> {count, err}
+      for (const r of rows) {
+        const host = String(r.host || '').toLowerCase();
+        const id = byHost.get(host);
+        if (!id) continue;
+        const a = acc.get(id) || { count: 0, err: 0 };
+        a.count += 1;
+        const st = Number(r.status) || 0;
+        if (st >= 400) a.err += 1;
+        acc.set(id, a);
+      }
+      const out = [
+        `# HELP cf_exit_requests_5m 每个出口最近 ${winMin} 分钟的请求数（滚动窗口，来自 access log）`,
+        '# TYPE cf_exit_requests_5m gauge',
+        '# HELP cf_exit_errors_5m 每个出口最近 5 分钟的 4xx+5xx 数',
+        '# TYPE cf_exit_errors_5m gauge',
+      ];
+      for (const t of state.tunnels) {
+        const a = acc.get(t.id) || { count: 0, err: 0 };
+        const lbl = `id="${String(t.id).replace(/"/g, '')}",name="${String(t.name).replace(/"/g, '')}",mode="${String(t.mode || 'quick').replace(/"/g, '')}"`;
+        out.push(`cf_exit_requests_5m{${lbl}} ${a.count}`);
+        out.push(`cf_exit_errors_5m{${lbl}} ${a.err}`);
+      }
+      return out.join('\n') + '\n';
+    } catch (e) {
+      return '';
+    }
+  }
+
   if (p === '/metrics') {
     res.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8', 'Cache-Control': 'no-store' });
-    return res.end(metricsText());
+    return res.end(metricsText() + exitMetricsLines());
   }
 
   // ---------- 登录页与会话接口（必须在鉴权门之前）----------
@@ -1456,7 +1501,7 @@ async function handler(req, res) {
   // ---- Prometheus metrics
   if (p === '/metrics' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8', 'Cache-Control': 'no-store' });
-    return res.end(metricsText());
+    return res.end(metricsText() + exitMetricsLines());
   }
 
   // ---- Cloudflare API

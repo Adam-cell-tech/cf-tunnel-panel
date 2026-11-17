@@ -13,6 +13,14 @@
 | 预置 | 数据源 uid `prom-main`、仪表盘 uid `cfp-main`（slug `a650163`）、匿名只读、`allow_embedding` | 匿名 `/d-solo/cfp-main/a650163?panelId=7` 200 |
 | 面板侧 | `settings.grafana` 指向 `http://192.168.1.55:3000`，panelId 1/7/9 | 首页 CSP 含该源、`#grafanaCard` 出现 |
 
+## ✅ v0.27.0 — 按出口看流量
+
+| 项 | 做法 | 实测 |
+| --- | --- | --- |
+| 指标 | `/metrics` 追加 `cf_exit_requests_5m` / `cf_exit_errors_5m`（`readAccess` since=5min、maxBytes 1MB，按 `publicUrlOf` 归属） | 打 3 次 `Host: demo.jianghugs.shop` → `{id="a6cd34c6",name="新隧道出口 2"} 3` |
+| Grafana | 新增 panel #13「按出口的请求数（5 分钟滚动）」，docs 与 provisioning 副本同步 | Grafana API 查 `cfp-main` → panels=13 |
+| 测试 | API +3（指标存在、带 name 标签） | 303 API 全绿 |
+
 ## ✅ v0.26.1 — 手动测试不再误触发告警
 
 | 项 | 做法 | 实测 |
