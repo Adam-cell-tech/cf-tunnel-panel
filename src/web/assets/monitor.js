@@ -69,6 +69,46 @@ function slotLink(instance) {
   return '';
 }
 
+const CHECK_LABEL = { ok: ['通过', 'ok'], warn: ['注意', 'warn'], fail: ['失败', 'err'] };
+
+function renderCheck(r) {
+  const box = $('#checkBody');
+  if (!box) return;
+  if (!r || !r.checks || !r.checks.length) { box.innerHTML = '<div class="empty">没拿到体检结果</div>'; return; }
+  const head = r.fail
+    ? `<div class="hint banner" style="margin-bottom:12px"><span class="bico">!</span><div class="msg">${r.fail} 项失败、${r.warn} 项需要注意（共 ${r.total} 项）</div></div>`
+    : `<div class="muted" style="margin-bottom:12px">${r.total} 项全部通过${r.warn ? `，其中 ${r.warn} 项值得留意` : ''}</div>`;
+  const rows = r.checks.map((c) => {
+    const [txt, cls] = CHECK_LABEL[c.status] || [c.status, 'muted'];
+    return `<tr>
+      <td><span class="tag ${cls}">${txt}</span></td>
+      <td class="nowrap">${esc(c.name)}</td>
+      <td class="mono sm">${esc(c.detail || '')}</td>
+      <td class="muted sm">${c.hint ? esc(c.hint) : ''}</td>
+      <td class="mono sm muted nowrap">${c.ms}ms</td>
+    </tr>`;
+  }).join('');
+  box.innerHTML = head + `<div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th>状态</th><th>项目</th><th>结果</th><th>怎么办</th><th>耗时</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+async function runCheck() {
+  const btn = $('#btnCheck');
+  if (btn) { btn.disabled = true; btn.textContent = '体检中…'; }
+  const box = $('#checkBody');
+  if (box) box.innerHTML = '<div class="empty">正在查（每个依赖最多等 3 秒）…</div>';
+  try {
+    const r = await api('/api/selfcheck');
+    renderCheck(r);
+    if (r && r.fail) toast(`${r.fail} 项失败`, 'err');
+  } catch (e) {
+    if (box) box.innerHTML = `<div class="empty">体检没跑成：${esc(e.message)}</div>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '重新体检'; }
+  }
+}
+
 async function load() {
     const tb = $('#monTargetBody');
     const ab = $('#monAlertBody');
@@ -85,8 +125,13 @@ async function load() {
         return;
       }
       const s = d.summary || {};
+      // 面板是双槽位部署（8090/8095），滚动升级时总有一色停着 —— 那一色的 target 必然 down，
+      // 但这不是故障。只有「非槽位」的目标也挂了才标红。
+      const SLOT = /:(8090|8095)\b/;
+      const slotDownOnly = (d.targets || []).every((t) => t.health === 'up' || SLOT.test(t.instance || t.scrapeUrl || ''));
       $('#monTargets').textContent = `${s.up}/${s.total} 正常`;
-      $('#monTargets').className = 'v ' + (s.down ? 'err-hint' : 'ok-hint');
+      $('#monTargets').className = 'v ' + (!s.down ? 'ok-hint' : slotDownOnly ? 'muted' : 'err-hint');
+      $('#monTargets').title = s.down && slotDownOnly ? '停着的是备份槽位（滚动升级时会互换），不是故障' : '';
       const firing = (d.alerts || []).filter((a) => a.state === 'firing');
       $('#monAlerts').textContent = firing.length ? String(firing.length) : '0';
       $('#monAlerts').className = 'v ' + (firing.length ? 'err-hint' : 'ok-hint');
@@ -131,6 +176,7 @@ async function load() {
   document.addEventListener('DOMContentLoaded', () => {
     load().catch((e) => toast(e.message, 'err'));
     if ($('#btnMonRefresh')) $('#btnMonRefresh').addEventListener('click', () => load().catch((e) => toast(e.message, 'err')));
+    if ($('#btnCheck')) $('#btnCheck').addEventListener('click', () => runCheck());
 
     const abx = $('#monAlertBody');
     if (abx) abx.addEventListener('click', async (e) => {

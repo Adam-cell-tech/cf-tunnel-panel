@@ -989,6 +989,36 @@ const EN_V0297 = {
   '固定深色': 'Always dark',
   '固定浅色': 'Always light',
 };
+
+// v0.29.10：一键体检
+const EN_V02910 = {
+  "一键体检": "Health check",
+  "面板 / Caddy / 出口 / Prometheus / Grafana / 磁盘，一次查完，每条都给结论和怎么办": "Panel, Caddy, exits, Prometheus, Grafana and disk — all at once, each with a verdict and what to do",
+  "开始体检": "Run check",
+  "还没查过。点右上角「开始体检」，大约 3 秒。": "Not run yet. Hit \"Run check\" (about 3 seconds).",
+  "体检中…": "Checking…",
+  "重新体检": "Run again",
+  "正在查（每个依赖最多等 3 秒）…": "Checking (each dependency gets up to 3 seconds)…",
+  "状态": "Status",
+  "项目": "Check",
+  "结果": "Result",
+  "怎么办": "What to do",
+  "耗时": "Time",
+  "通过": "Pass",
+  "注意": "Warn",
+  "失败": "Fail",
+  "版本与代码一致": "Version and code match",
+  "实例角色": "Instance role",
+  "Caddy 管理接口": "Caddy admin API",
+  "规则数一致": "Route count matches",
+  "规则遮蔽": "Shadowed routes",
+  "Prometheus 抓到面板": "Prometheus scrapes panel",
+  "数据盘空间": "Data disk space",
+  "状态文件": "State file",
+  "没拿到体检结果": "No result",
+  "体检没跑成": "Check failed",
+};
+Object.assign(EN, EN_V02910);
 Object.assign(EN, EN_V0297);
 
 // v0.29.8：Grafana 局域网直连

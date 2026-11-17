@@ -424,6 +424,10 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('监控: 侧栏有监控入口', !!doc.querySelector('.side .nav a[href="/monitor"]'), '');
     const alertRows = doc.querySelectorAll('#monAlertBody tbody tr').length;
     chk('监控: 告警区要么空态要么有行', !!doc.querySelector('#monAlertBody') && (alertRows === 0 || !!doc.querySelector('#monAlertBody [data-mute], #monAlertBody [data-unmute]')), 'rows=' + alertRows);
+    // v0.29.10 一键体检卡
+    chk('体检: 监控页有体检卡与按钮', !!doc.querySelector('#checkCard') && !!doc.querySelector('#btnCheck'), '');
+    chk('体检: 未点之前是说明态', /还没查过/.test(doc.querySelector('#checkBody').textContent || ''), '');
+    chk('体检: 按钮文案可读', /体检/.test(doc.querySelector('#btnCheck').textContent || ''), '');
     const jump = doc.querySelector('#monAlertBody a.jump, #monAlertBody span.tag');
     chk('监控: 告警行带出口/面板标注', alertRows === 0 || !!jump, alertRows === 0 ? '没有告警时跳过' : (jump ? jump.textContent.trim() : '没有标注'));
     dom.window.close();

@@ -995,6 +995,20 @@ try {
   ok('监控：非法 Prometheus 地址被拒', monBad.status === 400, String(monBad.status));
   await j('/api/settings', { method: 'POST', body: { monitoring: { promUrl: 'http://127.0.0.1:9090' } } });
 
+  // 一键体检（v0.29.10）
+  {
+    const sc = await j('/api/selfcheck');
+    ok('体检：返回结构完整', sc.status === 200 && typeof sc.d.ok === 'boolean' && Array.isArray(sc.d.checks), 'total=' + (sc.d.total || 0));
+    ok('体检：至少 9 项检查', (sc.d.checks || []).length >= 9, String((sc.d.checks || []).length));
+    ok('体检：每项都有 id/name/status/detail',
+      (sc.d.checks || []).every((c) => c.id && c.name && ['ok', 'warn', 'fail'].includes(c.status) && typeof c.detail === 'string'), '');
+    const ids = (sc.d.checks || []).map((c) => c.id);
+    ok('体检：覆盖 Caddy / 磁盘 / Prometheus 抓取', ['caddy', 'disk', 'state'].every((k) => ids.includes(k)), ids.join(','));
+    ok('体检：汇总计数与明细一致',
+      sc.d.fail === (sc.d.checks || []).filter((c) => c.status === 'fail').length &&
+      sc.d.warn === (sc.d.checks || []).filter((c) => c.status === 'warn').length, '');
+  }
+
   // 按出口的滚动指标（Grafana 那张「按出口的请求数」靠它）
   {
     const r = await rawFetch(B + '/metrics');

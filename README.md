@@ -27,6 +27,12 @@ Prometheus already scrapes both blue/green slots, and Grafana auto-imports the d
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
 
+### v0.29.10 highlights
+
+- **Health check**: one button on the monitor page runs 12 checks in parallel (version/image fingerprint, instance role, Caddy admin API, route-count parity, shadowed routes, each exit's process + public reachability, Prometheus readiness *and whether it actually scrapes the panel*, Grafana health, disk space, state file). Every row gives evidence and a "what to do".
+- Monitor page no longer paints "1/2 targets up" red: with blue/green slots the idle slot is always down, so only non-slot targets turning red counts.
+- `tools/clean-audit.cjs` strips development traffic (loopback + RFC 5737 ranges) from the audit log — dry-run by default, `--apply` backs each file up first.
+
 ### v0.29.0 highlights
 
 - Grafana panels load lazily with a skeleton and an explicit failure state (reason + retry + open in new tab), instead of a blank card.

@@ -51,6 +51,7 @@ const session = _session;
 
 const secret = require('./core/secret');
 const ident = require('./core/ident');
+const _selfcheck = require('./core/selfcheck');
 const configcode = require('./core/configcode');
 const guard = require('./core/guard');
 const lease = require('./core/lease');
@@ -483,6 +484,28 @@ async function handler(req, res) {
     } catch (e) {
       return sendJson(res, 400, { ok: false, error: e.message });
     }
+  }
+
+  // 一键体检：把「哪里不对」一次性查出来（面板/Caddy/出口/Prometheus/Grafana/磁盘）
+  if (p === '/api/selfcheck' && req.method === 'GET') {
+    maybeReloadState();
+    const bi = ident.buildInfo();
+    const rt = {
+      tunnels: Object.fromEntries(state.tunnels.map((t) => {
+        const r = tunnelRt(t.id);
+        return [t.id, { status: r.status, publicUrl: publicUrlOf(t), url: r.url }];
+      })),
+      caddy: { ok: caddy.ok, error: caddy.error, routeCount: caddy.routeCount, shadowed: shadowReport() },
+    };
+    const out = await _selfcheck.runChecks(state, {
+      runtime: rt,
+      version: VERSION,
+      code: bi.code,
+      imageCode: bi.build,
+      drift: bi.drift,
+      role: lease.isLeader() ? 'leader' : 'standby',
+    });
+    return sendJson(res, 200, out);
   }
 
   // 监控页：面板替你去问 Prometheus（targets / 告警），省得再开一个标签页
