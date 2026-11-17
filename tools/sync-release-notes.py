@@ -27,6 +27,7 @@ API = 'https://api.github.com'
 DRY = '--dry' in sys.argv
 DROP_TAGS = {'v0.0.1-diag'}          # 诊断/误建的 tag，顺手清掉
 IMAGE_FROM = (0, 29, 3)               # 从这个版本起发布过 ghcr 镜像
+SHORT_TAG_FROM = (0, 29, 4)           # 从这个版本起镜像才有「不带 v 的短 tag」（0.29.3 只有 v0.29.3）
 
 
 def api(method, path, payload=None):
@@ -63,8 +64,9 @@ def load_changelog():
 def compose(ver, section):
     out = [section, '', '---', '']
     if vkey(ver) >= IMAGE_FROM:
+        tag = ver if vkey(ver) >= SHORT_TAG_FROM else 'v' + ver
         out += ['**镜像**（linux/amd64 + linux/arm64）', '', '```bash',
-                'docker pull ghcr.io/%s:%s' % (REPO, ver),
+                'docker pull ghcr.io/%s:%s' % (REPO, tag),
                 'docker pull ghcr.io/%s:latest' % REPO, '```']
     else:
         out += ['> 历史版本：这个 tag 只记录当时的发布点，没有构建镜像。']
