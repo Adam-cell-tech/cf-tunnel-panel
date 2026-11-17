@@ -393,9 +393,20 @@ function loadGFrame(el, g, getPanel) {
       el.querySelector('[data-retry]').addEventListener('click', () => loadGFrame(el, g, getPanel));
     }
   };
-  f.addEventListener('load', () => done(true));
+  f.addEventListener('load', () => {
+    // 骨架是绝对定位铺满的，必须移除，否则会一直盖在 iframe 上面
+    const skel = el.querySelector('.gskel');
+    if (skel) skel.remove();
+    done(true);
+  });
   f.addEventListener('error', () => done(false));
-  setTimeout(() => { if (el.dataset.state !== 'done') done(false); }, 12000);
+  // 第一次经 Cloudflare 隧道加载 Grafana 会比较慢（几十个 bundle，每个都要过一次隧道），
+  // 8 秒后先给个"还在加载"的安抚，25 秒才判定失败。
+  setTimeout(() => {
+    const sk = el.querySelector('.gskel span');
+    if (sk && el.dataset.state === 'loading') sk.textContent = '还在加载 Grafana（第一次会慢一些）…';
+  }, 8000);
+  setTimeout(() => { if (el.dataset.state !== 'done') done(false); }, 25000);
   el.appendChild(f);
 }
 

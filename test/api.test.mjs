@@ -460,7 +460,19 @@ ok('/api/audit 可用', au.d.ok === true && Array.isArray(au.d.rows), `${(au.d.r
 ok('/api/audit 有文件与计数', !!(au.d.stats && typeof au.d.stats.fileBytes === 'number' && typeof au.d.stats.count === 'number'), JSON.stringify(au.d.stats && { c: au.d.stats.count, b: au.d.stats.fileBytes }));
 const rec = (au.d.rows || [])[0] || {};
 ok('审计记录字段齐全', ['at', 'actor', 'ip', 'method', 'path', 'status', 'action'].every((k) => k in rec), Object.keys(rec).join(','));
-ok('审计记到了刚才那次改设置', (au.d.rows || []).some((r) => r.path === '/api/settings' && r.method === 'POST' && r.ok), '');
+// v0.29.0 起：带 x-cfp-test 头的请求（也就是本测试套件自己）不写审计，避免把「变更趋势」刷满
+const tMark = Date.now();
+await j('/api/settings', { method: 'POST', body: { panelTitle: (await j('/api/state')).d.state.settings.panelTitle } });
+await sleep(250);
+const au3 = await j('/api/audit?limit=20');
+ok('测试流量不写审计（x-cfp-test）', !(au3.d.rows || []).some((r) => r.path === '/api/settings' && Number(r.at) >= tMark - 100), '');
+const auReal = await fetch(B + '/api/settings', {
+  method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: basic },
+  body: JSON.stringify({ panelTitle: (await j('/api/state')).d.state.settings.panelTitle })
+});
+await sleep(150);
+const au2 = await j('/api/audit?limit=20');
+ok('真实写请求仍然记审计', auReal.status === 200 && (au2.d.rows || []).some((r) => r.path === '/api/settings' && r.method === 'POST' && r.mutating === true), String(au2.d.rows.length));
 ok('审计不记 GET /api/state（查看类不刷屏）', !(au.d.rows || []).some((r) => r.path === '/api/state' && r.ok), '');
 const auq = await j('/api/audit?q=' + encodeURIComponent('settings'));
 ok('审计支持关键字搜索', auq.d.ok && (auq.d.rows || []).every((r) => [r.action, r.path, r.actor, r.ip].join(' ').toLowerCase().includes('settings')), String((auq.d.rows || []).length));
