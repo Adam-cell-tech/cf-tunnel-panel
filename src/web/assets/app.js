@@ -571,10 +571,22 @@ function paintHealth(d) {
   const box = $('#healthDot');
   const txt = $('#healthText');
   const standby = d.mode === 'standby';
-  if (box) box.className = 'dot ' + (standby ? 'warn' : running ? 'ok' : 'err');
+  // 自检摘要：定时每 5 分钟跑一次（见 server.js），侧栏顺手带一句，不用特意去监控页看
+  const sc = (d.runtime || {}).selfcheck;
+  const scOk = !sc || !sc.fail;
+  if (box) box.className = 'dot ' + (sc && sc.fail ? 'err' : standby ? 'warn' : running ? 'ok' : 'err');
   if (txt) {
-    txt.textContent = (standby ? '备份实例 · ' : '') + (running ? `${running}/${list.length} 出口在线` : '没有出口在线');
-    txt.title = standby ? '当前是只读备份实例；写操作会被拒绝，主实例接管后自动恢复' : '';
+    let line = (standby ? '备份实例 · ' : '') + (running ? `${running}/${list.length} 出口在线` : '没有出口在线');
+    if (sc && sc.at) line += ` · 体检 ${sc.total - sc.fail}/${sc.total}`;
+    txt.textContent = line;
+    const bits = [];
+    if (standby) bits.push('当前是只读备份实例；写操作会被拒绝，主实例接管后自动恢复');
+    if (sc && sc.at) {
+      bits.push(`上次体检 ${Math.round((Date.now() - sc.at) / 60000)} 分钟前：${sc.total - sc.fail}/${sc.total} 项通过`);
+      if (!scOk) bits.push('失败项：' + (sc.bad || []).map((x) => x.name).join('、'));
+      bits.push('点进「监控」页可以重新体检');
+    }
+    txt.title = bits.join('\n');
   }
 }
 

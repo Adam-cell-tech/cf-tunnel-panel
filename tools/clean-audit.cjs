@@ -124,7 +124,11 @@ function main() {
 
     if (APPLY && drop > 0) {
       const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-      const backup = path.join(AUDIT_DIR, `.backup-${f}.${stamp}`);
+      // 备份放到 backups/ 下：audit/ 里的保留期清扫只认 audit-*.jsonl，
+      // 备份留在原地会一直堆着，谁也不敢删
+      const backupDir = path.join(ROOT, 'data', 'backups', 'audit-cleanup');
+      fs.mkdirSync(backupDir, { recursive: true });
+      const backup = path.join(backupDir, `${f}.${stamp}`);
       fs.copyFileSync(file, backup);
       const tmp = file + '.tmp';
       fs.writeFileSync(tmp, keep.map((r) => JSON.stringify(r)).join('\n') + (keep.length ? '\n' : ''));
@@ -149,7 +153,7 @@ function main() {
   console.log(`变更数：${totals.mutBefore} → ${totals.mutAfter}`);
   const ips = Object.entries(totals.byIp).sort((a, b) => b[1] - a[1]).slice(0, 8);
   if (ips.length) console.log('按 IP：' + ips.map(([k, v]) => `${k}×${v}`).join('  '));
-  if (!APPLY) console.log('\n演练结束。确认无误后加 --apply 真删（每个文件先备份成 data/audit/.backup-<名字>.<时间戳>）。');
+  if (!APPLY) console.log('\n演练结束。确认无误后加 --apply 真删（每个文件先备份到 data/backups/audit-cleanup/）。');
 }
 
 main();

@@ -451,6 +451,7 @@ async function handler(req, res) {
           };
         }),
         caddy: { ok: caddy.ok, error: caddy.error, lastPush: caddy.lastPush, routeCount: caddy.routeCount, listen: state.settings.caddyListen, skipped: lastSkipped, shadowed: shadowReport() },
+        selfcheck: _selfcheck.lastResult(),
         upstreams: Array.from(upstreamHealth.values()),
         publicUrl: (state.tunnels.map(publicUrlOf).filter(Boolean)[0]) || null,
         host: os.hostname(),
@@ -489,23 +490,22 @@ async function handler(req, res) {
   // 一键体检：把「哪里不对」一次性查出来（面板/Caddy/出口/Prometheus/Grafana/磁盘）
   if (p === '/api/selfcheck' && req.method === 'GET') {
     maybeReloadState();
-    const bi = ident.buildInfo();
-    const rt = {
-      tunnels: Object.fromEntries(state.tunnels.map((t) => {
-        const r = tunnelRt(t.id);
-        return [t.id, { status: r.status, publicUrl: publicUrlOf(t), url: r.url }];
-      })),
-      caddy: { ok: caddy.ok, error: caddy.error, routeCount: caddy.routeCount, shadowed: shadowReport() },
-    };
-    const out = await _selfcheck.runChecks(state, {
-      runtime: rt,
-      version: VERSION,
-      code: bi.code,
-      imageCode: bi.build,
-      drift: bi.drift,
-      role: lease.isLeader() ? 'leader' : 'standby',
-    });
+    const { rt, meta } = selfcheckContext();
+    const out = await _selfcheck.runChecks(state, { runtime: rt, ...meta });
+    const rec = _selfcheck.persist(out);          // 留痕：总览页与定时自检都读它
+    if (rec) {
+      const prev = _lastSelfcheck;
+      _lastSelfcheck = rec;
+      // 手动点体检时也走同样的「状态翻转才报」逻辑，避免重复刷通知
+      if (prev && prev.ok && !rec.ok) selfcheckAlert(rec);
+      else if (prev && !prev.ok && rec.ok) selfcheckRecovered(rec);
+    }
     return sendJson(res, 200, out);
+  }
+
+  if (p === '/api/selfcheck/history' && req.method === 'GET') {
+    const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 20, 1), 200);
+    return sendJson(res, 200, { ok: true, last: _selfcheck.lastResult(), items: _selfcheck.history(limit) });
   }
 
   // 监控页：面板替你去问 Prometheus（targets / 告警），省得再开一个标签页
@@ -2191,6 +2191,50 @@ const tlsOpts = (() => {
   try { return { cert: fs.readFileSync(c), key: fs.readFileSync(k) }; }
   catch (e) { log(`面板 HTTPS 证书读取失败（${e.message}），退回 HTTP`, 'panel'); return null; }
 })();
+
+/* ---------------- 自检：上下文 / 留痕 / 定时跑 / 状态变化才告警 ---------------- */
+function selfcheckContext() {
+  const bi = ident.buildInfo();
+  const rt = {
+    tunnels: Object.fromEntries(state.tunnels.map((t) => {
+      const r = tunnelRt(t.id);
+      return [t.id, { status: r.status, publicUrl: publicUrlOf(t), url: r.url }];
+    })),
+    caddy: { ok: caddy.ok, error: caddy.error, routeCount: caddy.routeCount, shadowed: shadowReport() },
+  };
+  return { rt, meta: { version: VERSION, code: bi.code, imageCode: bi.build, drift: bi.drift, role: lease.isLeader() ? 'leader' : 'standby' } };
+}
+
+// 进程启动就接上一次的结果：重启后不该把「原本就有的故障」再当成新故障报一遍
+let _lastSelfcheck = _selfcheck.lastResult();
+
+function selfcheckAlert(rec) {
+  const list = (rec.bad || []).slice(0, 6).map((x) => `· ${x.name}：${x.detail}`).join('\n');
+  _notify.notify('selfcheck', `面板自检 ${rec.fail} 项失败`,
+    `共 ${rec.total} 项检查：${rec.fail} 项失败、${rec.warn} 项需要注意\n${list}`).catch(() => {});
+}
+function selfcheckRecovered(rec) {
+  _notify.notify('selfcheck', '面板自检恢复正常', `${rec.total} 项全部通过。`).catch(() => {});
+}
+
+/** 只在「状态翻转」时通知：正常→故障 报一次，故障→正常 报一次，其余静默 */
+async function runSelfcheckQuiet() {
+  if (!lease.isLeader()) return;                       // 备份实例不查，免得两边重复告警
+  try {
+    maybeReloadState();
+    const { rt, meta } = selfcheckContext();
+    const out = await _selfcheck.runChecks(state, { runtime: rt, ...meta });
+    const rec = _selfcheck.persist(out);
+    if (!rec) return;
+    const prev = _lastSelfcheck;
+    _lastSelfcheck = rec;
+    if (prev && prev.ok && !rec.ok) selfcheckAlert(rec);
+    else if (prev && !prev.ok && rec.ok) selfcheckRecovered(rec);
+  } catch (e) {
+    log('自检失败（不影响面板运行）: ' + (e && e.message), 'panel');
+  }
+}
+
 const server = tlsOpts ? https.createServer(tlsOpts, onReq) : http.createServer(onReq);
 
 server.listen(PORT, '0.0.0.0', async () => {
@@ -2202,6 +2246,11 @@ server.listen(PORT, '0.0.0.0', async () => {
     startLeaderWork();
     setInterval(() => { refreshUpstreamHealth().catch(() => {}); }, 60000).unref();
     shareJanitor();
+    // 每 5 分钟自检一次（首轮延迟 45 秒，避开启动时的抖动）
+    setTimeout(() => {
+      runSelfcheckQuiet();
+      setInterval(runSelfcheckQuiet, 5 * 60 * 1000).unref();
+    }, 45000).unref();
   }
   // 监控与健康巡检两边都跑（只读采样，不改共享状态）
   startMonitor();

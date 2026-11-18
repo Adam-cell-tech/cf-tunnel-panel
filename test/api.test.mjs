@@ -1091,6 +1091,17 @@ try {
   await j('/api/settings', { method: 'POST', body: { grafana: Object.assign({}, st, { lanUrl: '' }) } });
 }
 
+// v0.29.11：体检留痕 + 定时自检
+{
+  const sc = await j('/api/selfcheck');
+  ok('体检：跑完会留痕（last.json 有总值）', sc.status === 200 && typeof sc.d.total === 'number', String(sc.status));
+  const h = await j('/api/selfcheck/history?limit=5');
+  ok('体检：历史接口返回上次结果', h.status === 200 && h.d.ok === true && h.d.last && typeof h.d.last.at === 'number', JSON.stringify(Object.keys(h.d || {})));
+  ok('体检：上次结果与本次项数一致', h.d.last && h.d.last.total === sc.d.total, `${h.d.last && h.d.last.total} vs ${sc.d.total}`);
+  const st = await j('/api/state');
+  ok('体检：/api/state 带体检摘要（侧栏直接用）', st.d.runtime && st.d.runtime.selfcheck && typeof st.d.runtime.selfcheck.total === 'number', '');
+}
+
 await restoreRoutes();
 
 console.log(`\n${pass}/${pass + fail} 通过`);

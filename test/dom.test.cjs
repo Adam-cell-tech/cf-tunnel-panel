@@ -2,6 +2,8 @@
    用法：PANEL_PASS=你的密码 node test/dom.test.cjs
    面板开着 HTTP Basic 登录，所以这里起一个本地小代理自动加凭据。 */
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 let JSDOM;
 try { ({ JSDOM } = require('jsdom')); } catch {
   console.error('缺少 jsdom：先在仓库目录执行 npm i -D jsdom');
@@ -60,7 +62,15 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('总览: 导航链接是 flex 行内布局', !!firstLink && doc.querySelectorAll('.side .nav a .ico').length === nav.length, '');
     chk('总览: 日志无 Invalid Date', !/Invalid Date/.test(doc.body.textContent), '');
     chk('总览: 当前页高亮', !!doc.querySelector('.side .nav a.active'), '');
-    chk('总览: 健康指示已填充', (doc.querySelector('#healthText') || {}).textContent !== '检测中…', (doc.querySelector('#healthText') || {}).textContent);
+    {
+      // 健康指示要等 /api/state 回来，机器忙的时候 1.8 秒不够 —— 轮询到有内容为止（最多 6 秒）
+      let t = (doc.querySelector('#healthText') || {}).textContent || '';
+      for (let i = 0; i < 12 && (!t || t === '检测中…'); i += 1) {
+        await new Promise((r) => setTimeout(r, 500));
+        t = (doc.querySelector('#healthText') || {}).textContent || '';
+      }
+      chk('总览: 健康指示已填充', !!t && t !== '检测中…', t);
+    }
     chk('总览: 有按规则流量卡', !!doc.querySelector('#pathBox'), '');
     chk('总览: 有预热提醒位', !!doc.querySelector('#warmBar'), '');
     chk('总览: 有监控嵌入卡（默认隐藏）', !!doc.querySelector('#grafanaCard'), '');
@@ -427,6 +437,10 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     // v0.29.10 一键体检卡
     chk('体检: 监控页有体检卡与按钮', !!doc.querySelector('#checkCard') && !!doc.querySelector('#btnCheck'), '');
     chk('体检: 未点之前是说明态', /还没查过/.test(doc.querySelector('#checkBody').textContent || ''), '');
+    {
+      const src = fs.readFileSync(path.join('src/web/assets/monitor.js'), 'utf8');
+      chk('体检: 打开页面就显示上次（定时）体检结果', /paintLastCheck/.test(src) && /\/api\/selfcheck\/history/.test(src), '');
+    }
     chk('体检: 按钮文案可读', /体检/.test(doc.querySelector('#btnCheck').textContent || ''), '');
     const jump = doc.querySelector('#monAlertBody a.jump, #monAlertBody span.tag');
     chk('监控: 告警行带出口/面板标注', alertRows === 0 || !!jump, alertRows === 0 ? '没有告警时跳过' : (jump ? jump.textContent.trim() : '没有标注'));
@@ -483,17 +497,26 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
   }
 
   {
-    const { dom, doc } = await open('/tunnels', 2000);
+    const { dom, doc } = await open('/tunnels', 3600);
     chk('出口流量: 卡片存在', !!doc.querySelector('#exitStatsCard'), '');
-    const body = doc.querySelector('#exitStatsBody');
-    chk('出口流量: 表格渲染出来了', !!body && /<table/.test(body.innerHTML), body ? body.innerHTML.slice(0, 40) : '');
-    chk('出口流量: 有 5xx 列', !!body && /5xx/.test(body.innerHTML), '');
+    // 这块要等 /api/exit/stats（要翻历史采样），别用固定等待，轮询到渲染为止（最多 6 秒）
+    let html = doc.querySelector('#exitStatsBody') ? doc.querySelector('#exitStatsBody').innerHTML : '';
+    for (let i = 0; i < 12 && !/<table/.test(html); i += 1) {
+      await new Promise((r) => setTimeout(r, 500));
+      const b2 = doc.querySelector('#exitStatsBody');
+      html = b2 ? b2.innerHTML : '';
+    }
+    chk('出口流量: 表格渲染出来了', /<table/.test(html), html.slice(0, 40));
+    chk('出口流量: 有 5xx 列', /5xx/.test(html), '');
     dom.window.close();
   }
   {
     const { dom, doc } = await open('/observe', 1800);
     const btn = doc.querySelector('#secBody [data-deny]');
-    chk('可疑访问: 每个 IP 有封禁按钮', !!btn, btn ? btn.getAttribute('data-deny') : '（当前没有可疑访问时跳过）');
+    // 审计被清洗过 / 窗口内确实没人被拒时列表是空的，这时该验证的是「说明态」而不是按钮
+    const empty = /世界很安静/.test(doc.querySelector('#secBody').textContent || '');
+    chk('可疑访问: 有记录则每行带封禁按钮，没有则给说明态', !!btn || empty,
+      btn ? '有行：' + btn.getAttribute('data-deny') : '空列表已给说明');
     dom.window.close();
   }
 

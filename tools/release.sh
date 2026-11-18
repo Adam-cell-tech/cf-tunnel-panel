@@ -89,8 +89,15 @@ print(f'CHANGELOG 已插入 v{ver}（{len(body.splitlines())} 行）')
 PY
 
 step "3/6 提交"
-git add package.json CHANGELOG.md
-git commit -q -m "release: v$VERSION"
+# 把工作区里所有改动一起提交：以前只 add package.json + CHANGELOG，
+# 用 --force 跳过了「工作区脏」检查时，代码改动会被悄悄留在工作区 ——
+# 后果是「tag 指的提交里没有发布出去的代码」，镜像与源码对不上（v0.29.11 就这么翻过车）。
+git add -A
+if git diff --cached --quiet; then
+  echo "没有可提交的改动（版本号与 CHANGELOG 也没变？）" >&2
+  [ "$FORCE" -eq 1 ] || exit 3
+fi
+git commit -q -m "release: v$VERSION" || true
 git --no-pager log --oneline -1
 
 step "4/6 打 tag"

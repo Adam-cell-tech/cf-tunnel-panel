@@ -93,6 +93,24 @@ function renderCheck(r) {
     <tbody>${rows}</tbody></table></div>`;
 }
 
+/** 页面打开时先把「上次（定时）体检」的结果亮出来，不用非点按钮 */
+async function paintLastCheck() {
+  const box = $('#checkBody');
+  if (!box) return;
+  try {
+    const h = await api('/api/selfcheck/history?limit=1');
+    const last = h && h.last;
+    if (!last) return;
+    const mins = Math.max(0, Math.round((Date.now() - last.at) / 60000));
+    const when = mins < 1 ? '刚刚' : mins < 60 ? `${mins} 分钟前` : `${Math.round(mins / 60)} 小时前`;
+    if (last.fail) {
+      box.innerHTML = `<div class="hint banner"><span class="bico">!</span><div class="msg">上次体检（${when}）有 ${last.fail} 项失败：${esc((last.bad || []).map((x) => x.name).join('、'))}。点右上角「开始体检」重查。</div></div>`;
+    } else {
+      box.innerHTML = `<div class="muted">上次体检：${when}，${last.total} 项全部通过（定时每 5 分钟跑一次，出问题会走通知通道告警）。</div>`;
+    }
+  } catch { /* 拿不到就保持「还没查过」的说明态 */ }
+}
+
 async function runCheck() {
   const btn = $('#btnCheck');
   if (btn) { btn.disabled = true; btn.textContent = '体检中…'; }
@@ -177,6 +195,7 @@ async function load() {
     load().catch((e) => toast(e.message, 'err'));
     if ($('#btnMonRefresh')) $('#btnMonRefresh').addEventListener('click', () => load().catch((e) => toast(e.message, 'err')));
     if ($('#btnCheck')) $('#btnCheck').addEventListener('click', () => runCheck());
+    paintLastCheck();
 
     const abx = $('#monAlertBody');
     if (abx) abx.addEventListener('click', async (e) => {

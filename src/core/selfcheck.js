@@ -129,7 +129,19 @@ async function runChecks(state, ctx = {}) {
         return { status: 'fail', detail: `进程没在跑（${st}）`, hint: '在「隧道出口」页点「启动」；反复退出看日志里的 cloudflared 报错。' };
       }
       if (!url) return { status: 'warn', detail: '在跑，但没有公网地址' };
-      const r = await fetchText(url, TIMEOUT);
+      // 走公网（过 Cloudflare 边缘）本来就慢：一个来回 1.5–2.5 秒很常见，
+      // 给 6 秒，超时只算「注意」——超时常常只是慢，不代表坏了，误报比漏报更烦人
+      let r = null;
+      try {
+        r = await fetchText(url, 6000);
+      } catch (e) {
+        const slow = e && e.name === 'AbortError';
+        return {
+          status: 'warn',
+          detail: slow ? '6 秒没响应（可能只是慢）' : `请求失败：${(e && e.message) || e}`,
+          hint: slow ? '经 Cloudflare 边缘访问本来就慢；连续几次都这样，再看 cloudflared 日志和上游服务。' : '检查 cloudflared 是否真的注册到了边缘（看面板日志）。',
+        };
+      }
       const healthy = r.status < 500;
       return {
         status: healthy ? 'ok' : 'warn',
@@ -218,4 +230,44 @@ async function runChecks(state, ctx = {}) {
   return { ok: fail === 0, fail, warn, total: checks.length, checkedAt: Date.now(), checks };
 }
 
-module.exports = { runChecks };
+/* ---------------- 结果留痕：手动跑和定时跑都写这里 ---------------- */
+const STORE_DIR = path.join(DATA_DIR, 'selfcheck');
+const LAST_FILE = path.join(STORE_DIR, 'last.json');
+const HIST_FILE = path.join(STORE_DIR, 'history.jsonl');
+const KEEP = 200;                                         // 历史最多留 200 次
+
+function persist(result) {
+  try {
+    fs.mkdirSync(STORE_DIR, { recursive: true });
+    const rec = {
+      at: result.checkedAt || Date.now(),
+      ok: result.ok, fail: result.fail, warn: result.warn, total: result.total,
+      bad: (result.checks || []).filter((c) => c.status === 'fail').map((c) => ({ id: c.id, name: c.name, detail: c.detail })),
+    };
+    fs.writeFileSync(LAST_FILE, JSON.stringify(rec));
+
+    const line = JSON.stringify(rec) + '\n';
+    let lines = [];
+    try { lines = fs.readFileSync(HIST_FILE, 'utf8').split('\n').filter(Boolean); } catch { /* 第一次跑 */ }
+    lines.push(JSON.parse(line));
+    if (lines.length > KEEP) lines = lines.slice(-KEEP);
+    fs.writeFileSync(HIST_FILE, lines.map((x) => JSON.stringify(x)).join('\n') + '\n');
+    return rec;
+  } catch {
+    return null;                                          // 留痕失败不该影响体检本身
+  }
+}
+
+function lastResult() {
+  try { return JSON.parse(fs.readFileSync(LAST_FILE, 'utf8')); } catch { return null; }
+}
+
+function history(n = 20) {
+  try {
+    return fs.readFileSync(HIST_FILE, 'utf8').split('\n').filter(Boolean)
+      .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter(Boolean).slice(-Math.max(1, Math.min(200, n))).reverse();
+  } catch { return []; }
+}
+
+module.exports = { history, lastResult, persist, runChecks };
