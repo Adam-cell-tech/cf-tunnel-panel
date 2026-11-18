@@ -27,6 +27,13 @@ Prometheus already scrapes both blue/green slots, and Grafana auto-imports the d
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
 
+### v0.29.11 highlights
+
+- **Scheduled self-check**: the panel now runs all 12 health checks itself every 5 minutes (leader only) and notifies through your notification channels when the result flips from OK to failing — and when it recovers.
+- **Results are kept**: `data/selfcheck/last.json` + `history.jsonl` (last 200 runs). The sidebar shows `· check 12/12` with the last run time and, if something failed, which item.
+- **Monitor page shows the last run** without clicking anything: "last checked 3 minutes ago, 12/12 passed".
+- **Fewer false alarms**: probes that go out through Cloudflare get a 6-second budget, and a timeout is reported as "slow" instead of "broken".
+
 ### v0.29.10 highlights
 
 - **Health check**: one button on the monitor page runs 12 checks in parallel (version/image fingerprint, instance role, Caddy admin API, route-count parity, shadowed routes, each exit's process + public reachability, Prometheus readiness *and whether it actually scrapes the panel*, Grafana health, disk space, state file). Every row gives evidence and a "what to do".
