@@ -209,6 +209,7 @@ bash tools/release.sh 0.29.11 --notes-file /tmp/notes-02911.md --build
 | Release/镜像要等 1–2 分钟 | workflow 是异步的；立刻查会看到 `release: None` 与 ghcr 404 |
 | ghcr 短 tag | `0.29.4` 之前没有不带 `v` 的短 tag（`0.29.3` 是 404）；`SHORT_TAG_FROM=(0,29,4)` 在 `sync-release-notes.py` 里控制 |
 | 手动打 tag 时 | **一次 push 多个 tag 不触发任何 workflow**，必须逐个 `git push origin :refs/tags/vX && git push origin vX` |
+| **`--force` + 代码没提交** | 早期 `release.sh` 只 `git add package.json CHANGELOG.md`，用 `--force` 跳过脏检查时**代码改动会被留在工作区**，于是 tag 指的提交里没有真正发布的代码（v0.29.11 就这么翻过车，已修为 `git add -A`）。发版后务必 `git status` 确认干净，`git show --stat vX.Y.Z` 里应能看到所有改过的源文件 |
 
 `--dry` 看计划，`--no-push` 只本地，`--force` 放宽检查。
 
