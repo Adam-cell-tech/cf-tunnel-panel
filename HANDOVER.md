@@ -1,7 +1,7 @@
 # 交接文档 · cf-tunnel-panel
 
 > 写给接手这个项目的下一位 agent。读完这一份，你应该能：拉代码 → 改 → 测 → 发版 → 排障，全程不需要再问人。
-> 最后更新：2026-11-18（v0.29.10 已发布，v0.29.11 的改动还在工作区没提交，见 §11）。
+> 最后更新：2026-11-18（**v0.29.11 已发布并在线**，工作区干净；接下来做什么见 §11→§12）。
 
 ---
 
@@ -9,7 +9,7 @@
 
 1. **不是玩具项目**：这是跑在自己服务器上的生产面板（公网 `https://panel.jianghugs.shop`），一台机器上正在承载真实流量。改完不要「先删了再说」，先看 §5 的不变量。
 2. **每个版本都有测试**：`test/api.test.mjs` + `test/dom.test.cjs` + `test/e2e-caddy.mjs`。发版前必须全绿（§7）。
-3. **当前工作区有未提交的 v0.29.11 改动**（8 个文件）。先把它收尾发掉，再开新分支做别的（§11 有逐条清单）。
+3. **当前工作区是干净的**，HEAD = `release: v0.29.11`，线上就是这个版本。想加功能直接从 `main` 拉分支（§11）。
 
 ---
 
@@ -248,45 +248,32 @@ curl -sL "https://api.github.com/repos/jianghugs/cf-tunnel-panel/releases/tags/v
 
 ---
 
-## 11. 当前未完成的工作（接手第一件事）
+## 11. 交接时的状态（已收尾，作为参考）
 
-工作区有 **8 个已改未提交**文件，属于 **v0.29.11：定时体检 + 结果留痕**：
+最后一次改动是 **v0.29.11「定时体检 + 结果留痕」**，已提交、已发版、已在线（`blue:8090` 是 leader，`drift: false`）。改动清单留在这里，方便你顺着同一条思路往下做：
 
-| 文件 | 改动 |
+| 文件 | v0.29.11 做了什么 |
 |---|---|
 | `src/core/selfcheck.js` | 新增 `persist()` / `lastResult()` / `history(n)`，写 `data/selfcheck/last.json` 与 `history.jsonl`（最多 200 条）；出口探测超时 3s→6s，超时只算「注意」不算「失败」（过 Cloudflare 本来就慢，误报太吵） |
-| `src/server.js` | 抽出 `selfcheckContext()`；`_lastSelfcheck` 接上次结果；`selfcheckAlert()` / `selfcheckRecovered()`；`runSelfcheckQuiet()`（只在 leader 跑、状态翻转才通知）；启动后 45 秒首跑、之后每 5 分钟；新增 `GET /api/selfcheck/history?limit=`；`/api/state` 的 runtime 带 `selfcheck` 摘要 |
+| `src/server.js` | 抽出 `selfcheckContext()`；`_lastSelfcheck` 接上次结果；`selfcheckAlert()` / `selfcheckRecovered()`；`runSelfcheckQuiet()`（只在 leader 跑、状态翻转才通知）；启动后 45 秒首跑、之后每 5 分钟；`GET /api/selfcheck/history?limit=`；`/api/state` 的 runtime 带 `selfcheck` 摘要 |
 | `src/core/state.js` | `notify.events` 默认值加 `selfcheck: true` |
-| `src/web/assets/app.js` | 侧栏 `paintHealth()` 追加「· 体检 N/M」，title 里写上次体检时间与失败项 |
-| `src/web/assets/monitor.js` | 新增 `paintLastCheck()`：页面打开就显示「上次体检 X 分钟前，12 项全部通过」或失败横幅 |
+| `src/web/assets/app.js` | 侧栏 `paintHealth()` 追加「· 体检 N/M」，title 写上次体检时间与失败项 |
+| `src/web/assets/monitor.js` | `paintLastCheck()`：页面打开就显示「上次体检 X 分钟前，12 项全部通过」或失败横幅 |
 | `tools/clean-audit.cjs` | 备份目录改到 `data/backups/audit-cleanup/`（原来放在 `data/audit/` 里，保留期清扫不认，会一直堆） |
-| `test/api.test.mjs` | +4 条：留痕、`/api/selfcheck/history` 结构、项数一致、`/api/state` 带摘要 |
-| `test/dom.test.cjs` | +1 条：监控页带「上次体检」逻辑；顺手把 3 处固定等待改成轮询（健康指示、出口流量表、可疑访问空列表） |
+| `test/api.test.mjs` / `test/dom.test.cjs` | +4 / +1 条；并把 3 处固定等待改成轮询（健康指示、出口流量表、可疑访问空列表） |
 
-**已验证**：`test/api.test.mjs` **331/331 通过**、`test/dom.test.cjs` **176/176 通过**（2026-11-18 实跑，对着 8095 的 leader）。
+验证记录：`api.test.mjs` **331/331**、`dom.test.cjs` **176/176**、发版后 `/healthz` = `0.29.11 / leader / drift false`、[Release v0.29.11](https://github.com/jianghugs/cf-tunnel-panel/releases/tag/v0.29.11)、ghcr 四种 tag 全 200。
 
-**收尾 4 步**：
+**你接手时的标准动作**：
 
 ```bash
 cd /mnt/sdb1/wechat_bot/cf-tunnel-panel
-
-# ① 顺手复跑一遍（代码没再动的话可跳过）
-PANEL_URL=http://127.0.0.1:8095 PANEL_PASS='<口令>' node test/api.test.mjs
-PANEL_URL=http://127.0.0.1:8095 PANEL_PASS='<口令>' NODE_PATH=/tmp/jsd/node_modules node test/dom.test.cjs
-
-# ② 补文档（README 英/中加 v0.29.11 小节、docs/ROADMAP.md 加一行）——CHANGELOG 交给 release.sh 插
-
-# ③ 发版（脚本会 bump 到 0.29.11、提交、打 tag、构建、滚动升级）
-bash tools/release.sh 0.29.11 --notes-file /tmp/notes-02911.md --build
-
-# ④ 校验：/healthz 的 version=0.29.11、mode=leader、drift=false；Release 与 ghcr 四种 tag 都是 200
-
-# ④ 更新 MEMORY / 交接记录
+git pull                                  # main 应该就是 release: v0.29.11 之后
+for p in 8090 8095; do curl -s --max-time 3 127.0.0.1:$p/healthz; echo; done   # 谁是 leader
+PANEL_URL=http://127.0.0.1:8090 PANEL_PASS='<口令>' NODE_PATH=/tmp/jsd/node_modules node test/dom.test.cjs | tail -1
 ```
 
-> 当前线上的实际情况：`green(:8095)` 是 leader，跑着 v0.29.10 + 我 docker cp 进去的未提交改动（所以 `drift: true`）；`blue(:8090)` 是停着的备份槽。发版后 `drift` 会回到 `false`。
-
----
+（发版后 leader 落在 8090；下次滚动升级会切到 8095，所以**永远先探端口，不要假设**。）
 
 ## 12. 下一步可做的事（按我认为的价值排序）
 
