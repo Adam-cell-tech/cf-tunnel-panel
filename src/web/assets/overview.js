@@ -99,7 +99,7 @@ function gridLines() {
 }
 
 // 一组（或多组堆叠）柱子的公共画法，返回 { svg, labels }
-function barsSvg(keys, series, max) {
+function barsSvg(keys, series, max, label) {
   const n = Math.max(1, keys.length);
   const innerW = 100 - CPAD * 2;
   const bw = innerW / n;
@@ -123,7 +123,11 @@ function barsSvg(keys, series, max) {
     });
     body += '</g>';
   });
-  return { svg: `<svg class="chart" viewBox="0 0 100 ${CH}" preserveAspectRatio="none" role="img" aria-label="统计图表">${body}</svg>`, labels: chartLabels(keys) };
+  // 读屏软件只看得到 name/desc：把概要数字塞进去，别只说「统计图表」
+  const name = label || '统计图表';
+  const svg = `<svg class="chart" viewBox="0 0 100 ${CH}" preserveAspectRatio="none" role="img" aria-label="${name}">`
+    + `<title>${name}</title><desc>${name}；每根柱子的具体数值可用鼠标悬停查看</desc>${body}</svg>`;
+  return { svg, labels: chartLabels(keys) };
 }
 
 function drawTrend(buckets) {
@@ -132,12 +136,13 @@ function drawTrend(buckets) {
   if (!n) { box.innerHTML = '<div class="empty">还没有流量数据（有访问后这里会自动出现）</div>'; return; }
   const max = Math.max(1, ...buckets.map((b) => b.total)) * 1.08;
   const keys = buckets.map((b) => b.t);
+  const total = buckets.reduce((a, b) => a + b.total, 0);
+  const err = buckets.reduce((a, b) => a + b.err, 0);
+  const peak = Math.max(0, ...buckets.map((b) => b.total));
   const c = barsSvg(keys, [
     { values: buckets.map((b) => b.total), color: 'var(--acc)', opacity: 0.85, name: '合计', unit: ' 次' },
     { values: buckets.map((b) => b.err), color: 'var(--err)', opacity: 0.95, name: '其中错误' },
-  ], max);
-  const total = buckets.reduce((a, b) => a + b.total, 0);
-  const err = buckets.reduce((a, b) => a + b.err, 0);
+  ], max, `最近 ${n} 小时访问量柱状图：合计 ${total} 次，其中错误 ${err} 次，峰值 ${peak} 次/小时`);
   box.innerHTML = `${c.svg}${c.labels}
     <div class="chart-sum">
       <span class="tag">合计 <b>${total}</b> 次</span>
@@ -168,7 +173,9 @@ function drawHist(points) {
   const minUp = Math.min(...points.map((p) => Number(p.running) || 0));
   const last = points[points.length - 1];
   const keys = points.map((p) => p.t);
-  box.innerHTML = `<svg class="chart" viewBox="0 0 100 ${CH}" preserveAspectRatio="none" role="img" aria-label="出口在线数历史">
+  const histLabel = `出口在线数历史折线图：当前 ${last.running} / ${last.total} 在线，区间最低 ${minUp}，共 ${points.length} 个采样点`;
+  box.innerHTML = `<svg class="chart" viewBox="0 0 100 ${CH}" preserveAspectRatio="none" role="img" aria-label="${histLabel}">
+      <title>${histLabel}</title><desc>${histLabel}</desc>
       ${gridLines()}
       <polygon points="${area}" fill="var(--acc)" opacity="0.16"></polygon>
       <polyline points="${pts}" fill="none" stroke="var(--acc)" stroke-width="1.4" vector-effect="non-scaling-stroke" stroke-linejoin="round"></polyline>
@@ -188,12 +195,12 @@ function drawAudit(buckets) {
   if (!n) { box.innerHTML = '<div class="empty">还没有变更记录</div>'; return; }
   const max = Math.max(1, ...buckets.map((b) => b.total)) * 1.08;
   const keys = buckets.map((b) => b.t);
+  const total = buckets.reduce((a, b) => a + b.total, 0);
+  const err = buckets.reduce((a, b) => a + b.err, 0);
   const c = barsSvg(keys, [
     { values: buckets.map((b) => b.total), color: 'var(--acc)', opacity: 0.85, name: '合计', unit: ' 次改动' },
     { values: buckets.map((b) => b.err), color: 'var(--err)', opacity: 0.95, name: '失败' },
-  ], max);
-  const total = buckets.reduce((a, b) => a + b.total, 0);
-  const err = buckets.reduce((a, b) => a + b.err, 0);
+  ], max, `最近 ${n} 小时变更趋势柱状图：合计 ${total} 次改动，失败 ${err} 次`);
   box.innerHTML = `${c.svg}${c.labels}
     <div class="chart-sum">
       <span class="tag">合计 <b>${total}</b> 次改动</span>
@@ -227,7 +234,7 @@ function drawPaths(groups, hours, unmatched) {
     opacity: 0.9,
     name: g.name,
     unit: ' 次请求',
-  })), stackMax);
+  })), stackMax, `最近 ${hours} 小时各规则流量堆叠图：${groups.map((g) => `${g.name} ${g.total} 次`).join('，')}`);
   const legend = groups.map((g, gi) => {
     const color = PATH_COLORS[gi % PATH_COLORS.length];
     const label = `${esc(g.name)} · ${g.total}${g.err ? ` · 5xx ${g.err}` : ''}`;

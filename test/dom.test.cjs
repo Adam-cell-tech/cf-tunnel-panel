@@ -436,12 +436,20 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('监控: 告警区要么空态要么有行', !!doc.querySelector('#monAlertBody') && (alertRows === 0 || !!doc.querySelector('#monAlertBody [data-mute], #monAlertBody [data-unmute]')), 'rows=' + alertRows);
     // v0.29.10 一键体检卡
     chk('体检: 监控页有体检卡与按钮', !!doc.querySelector('#checkCard') && !!doc.querySelector('#btnCheck'), '');
-    chk('体检: 未点之前是说明态', /还没查过/.test(doc.querySelector('#checkBody').textContent || ''), '');
+    // 有历史时页面打开即显示「上次体检」，没有历史才是「还没查过」的说明态
+    chk('体检: 未点之前要么显示上次结果、要么是说明态', /还没查过|上次体检/.test(doc.querySelector('#checkBody').textContent || ''), '');
     {
       const src = fs.readFileSync(path.join('src/web/assets/monitor.js'), 'utf8');
       chk('体检: 打开页面就显示上次（定时）体检结果', /paintLastCheck/.test(src) && /\/api\/selfcheck\/history/.test(src), '');
     }
     chk('体检: 按钮文案可读', /体检/.test(doc.querySelector('#btnCheck').textContent || ''), '');
+    chk('体检: 卡片底部有历史条容器', !!doc.querySelector('#checkHistWrap') && !!doc.querySelector('#checkHist'), '');
+    {
+      const msrc = fs.readFileSync('src/web/assets/monitor.js', 'utf8');
+      chk('体检: 历史条按次渲染三态', /paintCheckHistory/.test(msrc) && /data-s="\$\{state\}"/.test(msrc), '');
+      const osrc = fs.readFileSync('src/web/assets/overview.js', 'utf8');
+      chk('图表: 无障碍标签带数值（不再只是「统计图表」）', /aria-label="\$\{name\}"/.test(osrc) && /合计 \$\{total\} 次/.test(osrc), '');
+    }
     const jump = doc.querySelector('#monAlertBody a.jump, #monAlertBody span.tag');
     chk('监控: 告警行带出口/面板标注', alertRows === 0 || !!jump, alertRows === 0 ? '没有告警时跳过' : (jump ? jump.textContent.trim() : '没有标注'));
     dom.window.close();

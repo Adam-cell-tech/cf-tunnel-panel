@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import http from 'node:http';
 
 const B = process.env.PANEL_URL || 'http://127.0.0.1:8090';
@@ -1100,6 +1101,15 @@ try {
   ok('体检：上次结果与本次项数一致', h.d.last && h.d.last.total === sc.d.total, `${h.d.last && h.d.last.total} vs ${sc.d.total}`);
   const st = await j('/api/state');
   ok('体检：/api/state 带体检摘要（侧栏直接用）', st.d.runtime && st.d.runtime.selfcheck && typeof st.d.runtime.selfcheck.total === 'number', '');
+
+  // v0.29.12：留痕曾经整文件重写，被一条爆炸记录撑到 360MB，把事件循环卡了 20 秒
+  const histFile = path.join(process.env.DATA_DIR || 'data', 'selfcheck', 'history.jsonl');
+  let raw = '';
+  try { raw = fs.readFileSync(histFile, 'utf8'); } catch { /* 首次跑可能还没有 */ }
+  const histLines = raw.split('\n').filter(Boolean);
+  ok('体检留痕：history.jsonl 体积可控（< 256KB）', raw.length < 256 * 1024, `${raw.length} 字节`);
+  ok('体检留痕：单条记录不超过 2KB', histLines.every((l) => l.length <= 2 * 1024), `最长 ${Math.max(0, ...histLines.map((l) => l.length))}`);
+  ok('体检留痕：历史按时间倒序（最新在前）', h.d.items.length < 2 || Number(h.d.items[0].at) >= Number(h.d.items[1].at), '');
 }
 
 await restoreRoutes();

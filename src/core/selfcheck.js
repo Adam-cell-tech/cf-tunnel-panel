@@ -59,10 +59,10 @@ async function runChecks(state, ctx = {}) {
   const s = state || {};
   const settings = s.settings || {};
   const runtime = ctx.runtime || {};
-  const checks = [];
+  const tasks = [];                 // 先全部发出去，最后一起等：12 项并行最慢 ≈ 6 秒
 
   // 1) 版本与代码指纹：docker cp 部署过的老坑
-  checks.push(await step('version', '版本与代码一致', async () => {
+  tasks.push(step('version', '版本与代码一致', async () => {
     const drift = ctx.drift === true;
     return {
       status: drift ? 'warn' : 'ok',
@@ -72,7 +72,7 @@ async function runChecks(state, ctx = {}) {
   }));
 
   // 2) 实例角色
-  checks.push(await step('role', '实例角色', async () => {
+  tasks.push(step('role', '实例角色', async () => {
     const role = ctx.role || 'leader';
     return {
       status: role === 'standby' ? 'warn' : 'ok',
@@ -82,7 +82,7 @@ async function runChecks(state, ctx = {}) {
   }));
 
   // 3) Caddy 管理接口
-  checks.push(await step('caddy', 'Caddy 管理接口', async () => {
+  tasks.push(step('caddy', 'Caddy 管理接口', async () => {
     // Caddy 的 admin 接口会校验 Origin，必须带（和 pusher.js 下发时同一个值）
     const r = await fetchText(`${CADDY_ADMIN}/config/`, TIMEOUT, { Origin: CADDY_ADMIN });
     if (r.status >= 200 && r.status < 300) return { status: 'ok', detail: `${CADDY_ADMIN} 有响应（HTTP ${r.status}）` };
@@ -94,7 +94,7 @@ async function runChecks(state, ctx = {}) {
   }));
 
   // 4) 已载入的路由数
-  checks.push(await step('routes', '规则数一致', async () => {
+  tasks.push(step('routes', '规则数一致', async () => {
     const loaded = runtime.caddy ? runtime.caddy.routeCount : null;
     const local = (s.routes || []).filter((x) => !x.disabled).length;
     const caddyOk = !!(runtime.caddy && runtime.caddy.ok);
@@ -108,7 +108,7 @@ async function runChecks(state, ctx = {}) {
   }));
 
   // 5) 遮蔽检测（path:/ 吃掉同域名其它路径那个坑）
-  checks.push(await step('shadow', '规则遮蔽', async () => {
+  tasks.push(step('shadow', '规则遮蔽', async () => {
     const list = (runtime.caddy && runtime.caddy.shadowed) || [];
     if (!list.length) return { status: 'ok', detail: '没有规则被同域名的更宽规则吃掉' };
     return {
@@ -121,7 +121,7 @@ async function runChecks(state, ctx = {}) {
   // 6) 出口：进程状态 + 公网可访问性（最多查 5 个，免得一次体检拖太久）
   const exits = (s.tunnels || []).filter((t) => t.mode === 'named');
   for (const t of exits.slice(0, 5)) {
-    checks.push(await step(`exit-${t.id}`, `出口：${t.name || t.id}`, async () => {
+    tasks.push(step(`exit-${t.id}`, `出口：${t.name || t.id}`, async () => {
       const rt = runtime.tunnels && runtime.tunnels[t.id];
       const st = rt ? rt.status : 'stopped';
       const url = (rt && (rt.publicUrl || rt.url)) || '';
@@ -153,7 +153,7 @@ async function runChecks(state, ctx = {}) {
 
   // 7) Prometheus
   const prom = trimUrl((settings.monitoring || {}).promUrl);
-  checks.push(await step('prometheus', 'Prometheus', async () => {
+  tasks.push(step('prometheus', 'Prometheus', async () => {
     if (!prom) return { status: 'warn', detail: '没配地址', hint: '设置 → 监控嵌入 → Prometheus 地址' };
     const r = await fetchText(`${prom}/-/ready`);
     return {
@@ -164,7 +164,7 @@ async function runChecks(state, ctx = {}) {
   }));
 
   // 7b) Prometheus 有没有真的抓到面板（ready 只是它自己活着）
-  checks.push(await step('scrape', 'Prometheus 抓到面板', async () => {
+  tasks.push(step('scrape', 'Prometheus 抓到面板', async () => {
     if (!prom) return { status: 'warn', detail: '没配 Prometheus 地址' };
     const r = await fetchText(`${prom}/api/v1/targets`);
     let list = [];
@@ -185,7 +185,7 @@ async function runChecks(state, ctx = {}) {
 
   // 8) Grafana
   const gf = settings.grafana || {};
-  checks.push(await step('grafana', 'Grafana', async () => {
+  tasks.push(step('grafana', 'Grafana', async () => {
     if (!gf.enabled) return { status: 'warn', detail: '没启用嵌入', hint: '设置 → 监控嵌入 → 打开「嵌入 Grafana」' };
     const base = trimUrl(gf.url);
     if (!base) return { status: 'warn', detail: '没配地址' };
@@ -201,7 +201,7 @@ async function runChecks(state, ctx = {}) {
   }));
 
   // 9) 数据盘
-  checks.push(await step('disk', '数据盘空间', async () => {
+  tasks.push(step('disk', '数据盘空间', async () => {
     const st = fs.statfsSync(DATA_DIR);
     const free = st.bavail * st.bsize;
     const total = st.blocks * st.bsize;
@@ -215,7 +215,7 @@ async function runChecks(state, ctx = {}) {
   }));
 
   // 10) 状态文件可写 + 新鲜度
-  checks.push(await step('state', '状态文件', async () => {
+  tasks.push(step('state', '状态文件', async () => {
     const st = fs.statSync(STATE_FILE);
     const ageMin = Math.round((Date.now() - st.mtimeMs) / 60000);
     fs.accessSync(STATE_FILE, fs.constants.W_OK);
@@ -224,6 +224,8 @@ async function runChecks(state, ctx = {}) {
       detail: `${path.basename(STATE_FILE)} ${kb(st.size)} · ${ageMin} 分钟前改过`,
     };
   }));
+
+  const checks = await Promise.all(tasks);             // 顺序与上面声明一致
 
   const fail = checks.filter((c) => c.status === 'fail').length;
   const warn = checks.filter((c) => c.status === 'warn').length;
@@ -234,7 +236,54 @@ async function runChecks(state, ctx = {}) {
 const STORE_DIR = path.join(DATA_DIR, 'selfcheck');
 const LAST_FILE = path.join(STORE_DIR, 'last.json');
 const HIST_FILE = path.join(STORE_DIR, 'history.jsonl');
-const KEEP = 200;                                         // 历史最多留 200 次
+const KEEP = 200;                                       // 历史最多留 200 次
+const HIST_MAX_BYTES = 256 * 1024;                      // 超过就裁剪（正常一条 ~300B，200 条 ~60KB）
+const REC_MAX_BYTES = 2 * 1024;                         // 单条记录上限
+const LINE_MAX_BYTES = 8 * 1024;                        // 比这更长的行视为损坏（曾出现 200MB 的爆炸行）
+
+const clip = (v, n) => { const t = String(v == null ? '' : v); return t.length > n ? t.slice(0, n) + '…' : t; };
+
+/**
+ * 从文件尾部倒着读，凑够 n 行就停。
+ * 不用 readFileSync 整读：历史上曾有一个 360MB 的 history.jsonl，
+ * 整读+整写把事件循环卡了 20 秒，接口直接挂死。
+ */
+function tailLines(file, n, maxBytes = 4 * 1024 * 1024) {
+  const fd = fs.openSync(file, 'r');
+  try {
+    const size = fs.fstatSync(fd).size;
+    let window = Math.min(size, 64 * 1024);
+    for (;;) {
+      const start = Math.max(0, size - window);
+      const buf = Buffer.alloc(size - start);
+      fs.readSync(fd, buf, 0, buf.length, start);
+      const parts = buf.toString('utf8').split('\n');
+      if (start > 0) parts.shift();                     // 起始处大概率是半行，丢掉
+      const lines = parts.filter(Boolean);
+      if (lines.length > n || start === 0 || window >= maxBytes) return lines.slice(-n);
+      window = Math.min(window * 2, maxBytes);
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function parseLine(line) {
+  if (line.length > LINE_MAX_BYTES) return null;        // 损坏行直接忽略
+  try {
+    const x = JSON.parse(line);
+    return x && typeof x === 'object' ? x : null;
+  } catch { return null; }
+}
+
+function trimHist() {
+  try {
+    const keep = tailLines(HIST_FILE, KEEP).map(parseLine).filter(Boolean).slice(-KEEP);
+    const tmp = HIST_FILE + '.tmp';
+    fs.writeFileSync(tmp, keep.map((x) => JSON.stringify(x)).join('\n') + (keep.length ? '\n' : ''));
+    fs.renameSync(tmp, HIST_FILE);
+  } catch { /* 裁剪失败不影响体检本身 */ }
+}
 
 function persist(result) {
   try {
@@ -242,19 +291,22 @@ function persist(result) {
     const rec = {
       at: result.checkedAt || Date.now(),
       ok: result.ok, fail: result.fail, warn: result.warn, total: result.total,
-      bad: (result.checks || []).filter((c) => c.status === 'fail').map((c) => ({ id: c.id, name: c.name, detail: c.detail })),
+      bad: (result.checks || []).filter((c) => c.status === 'fail')
+        .slice(0, 8)
+        .map((c) => ({ id: clip(c.id, 40), name: clip(c.name, 60), detail: clip(c.detail, 200) })),
     };
     fs.writeFileSync(LAST_FILE, JSON.stringify(rec));
 
-    const line = JSON.stringify(rec) + '\n';
-    let lines = [];
-    try { lines = fs.readFileSync(HIST_FILE, 'utf8').split('\n').filter(Boolean); } catch { /* 第一次跑 */ }
-    lines.push(JSON.parse(line));
-    if (lines.length > KEEP) lines = lines.slice(-KEEP);
-    fs.writeFileSync(HIST_FILE, lines.map((x) => JSON.stringify(x)).join('\n') + '\n');
+    let line = JSON.stringify(rec);
+    if (line.length > REC_MAX_BYTES) {                  // 兜底：异常大的记录退化成摘要
+      line = JSON.stringify({ at: rec.at, ok: rec.ok, fail: rec.fail, warn: rec.warn, total: rec.total,
+        bad: rec.bad.slice(0, 1).map((x) => ({ id: x.id, name: x.name, detail: clip(x.detail, 80) })) });
+    }
+    fs.appendFileSync(HIST_FILE, line + '\n');          // 追加是 O(1)，不再整文件重写
+    try { if (fs.statSync(HIST_FILE).size > HIST_MAX_BYTES) trimHist(); } catch { /* 忽略 */ }
     return rec;
   } catch {
-    return null;                                          // 留痕失败不该影响体检本身
+    return null;                                        // 留痕失败不该影响体检本身
   }
 }
 
@@ -263,10 +315,9 @@ function lastResult() {
 }
 
 function history(n = 20) {
+  const limit = Math.max(1, Math.min(200, Number(n) || 20));
   try {
-    return fs.readFileSync(HIST_FILE, 'utf8').split('\n').filter(Boolean)
-      .map((l) => { try { return JSON.parse(l); } catch { return null; } })
-      .filter(Boolean).slice(-Math.max(1, Math.min(200, n))).reverse();
+    return tailLines(HIST_FILE, limit).map(parseLine).filter(Boolean).slice(-limit).reverse();
   } catch { return []; }
 }
 

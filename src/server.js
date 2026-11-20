@@ -489,17 +489,7 @@ async function handler(req, res) {
 
   // 一键体检：把「哪里不对」一次性查出来（面板/Caddy/出口/Prometheus/Grafana/磁盘）
   if (p === '/api/selfcheck' && req.method === 'GET') {
-    maybeReloadState();
-    const { rt, meta } = selfcheckContext();
-    const out = await _selfcheck.runChecks(state, { runtime: rt, ...meta });
-    const rec = _selfcheck.persist(out);          // 留痕：总览页与定时自检都读它
-    if (rec) {
-      const prev = _lastSelfcheck;
-      _lastSelfcheck = rec;
-      // 手动点体检时也走同样的「状态翻转才报」逻辑，避免重复刷通知
-      if (prev && prev.ok && !rec.ok) selfcheckAlert(rec);
-      else if (prev && !prev.ok && rec.ok) selfcheckRecovered(rec);
-    }
+    const { out } = await runSelfcheckOnce();
     return sendJson(res, 200, out);
   }
 
@@ -2217,19 +2207,37 @@ function selfcheckRecovered(rec) {
   _notify.notify('selfcheck', '面板自检恢复正常', `${rec.total} 项全部通过。`).catch(() => {});
 }
 
+/**
+ * 跑一次体检，并把「同一时刻只跑一份」这件事收在这里。
+ *
+ * 为什么要去重：12 项检查里有几个要过 Cloudflare（每个 6 秒），一次体检可能要 6 秒；
+ * 定时那一路和手动点按钮撞在一起时，两路同时打公网既慢又会让结果互相覆盖。
+ */
+let _selfcheckInflight = null;
+async function runSelfcheckOnce() {
+  if (_selfcheckInflight) return _selfcheckInflight;
+  _selfcheckInflight = (async () => {
+    maybeReloadState();
+    const { rt, meta } = selfcheckContext();
+    const out = await _selfcheck.runChecks(state, { runtime: rt, ...meta });
+    const rec = _selfcheck.persist(out);            // 留痕：总览页与定时自检都读它
+    if (rec) {
+      const prev = _lastSelfcheck;
+      _lastSelfcheck = rec;
+      // 手动与定时走同一条「状态翻转才报」逻辑，避免重复刷通知
+      if (prev && prev.ok && !rec.ok) selfcheckAlert(rec);
+      else if (prev && !prev.ok && rec.ok) selfcheckRecovered(rec);
+    }
+    return { out, rec };
+  })().finally(() => { _selfcheckInflight = null; });
+  return _selfcheckInflight;
+}
+
 /** 只在「状态翻转」时通知：正常→故障 报一次，故障→正常 报一次，其余静默 */
 async function runSelfcheckQuiet() {
   if (!lease.isLeader()) return;                       // 备份实例不查，免得两边重复告警
   try {
-    maybeReloadState();
-    const { rt, meta } = selfcheckContext();
-    const out = await _selfcheck.runChecks(state, { runtime: rt, ...meta });
-    const rec = _selfcheck.persist(out);
-    if (!rec) return;
-    const prev = _lastSelfcheck;
-    _lastSelfcheck = rec;
-    if (prev && prev.ok && !rec.ok) selfcheckAlert(rec);
-    else if (prev && !prev.ok && rec.ok) selfcheckRecovered(rec);
+    await runSelfcheckOnce();
   } catch (e) {
     log('自检失败（不影响面板运行）: ' + (e && e.message), 'panel');
   }

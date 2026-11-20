@@ -1032,6 +1032,15 @@ const EN_V0298 = {
 };
 Object.assign(EN, EN_V0298);
 
+// v0.29.12：体检历史条 + 备份槽位标注
+const EN_V02912 = {
+  '备份槽位': 'Standby slot',
+  '这是备份槽位（另一色在跑），滚动升级时会互换，不是故障': 'This is the standby slot (the other colour is serving); they swap on rolling upgrade, so it is not a fault',
+  '最近 7 次体检（左旧右新）': 'Last 7 checks (oldest on the left)',
+  '体检历史': 'Check history',
+};
+Object.assign(EN, EN_V02912);
+
 Object.assign(EN, EN_PAGES);
 
 function langOf(req) {

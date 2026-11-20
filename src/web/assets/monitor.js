@@ -2,7 +2,14 @@
 (function () {
   let gKey = '';
 
-  function badge(health) {
+  const SLOT_RE = /:(8090|8095)\b/;           // 蓝绿两槽，滚动升级时互换身份
+
+  function badge(health, target) {
+    const inst = (target && (target.instance || target.scrapeUrl)) || '';
+    // 停着的那一色不是故障：它只是备份槽位，UP 的那一色才是当前 leader
+    if (health === 'down' && SLOT_RE.test(inst)) {
+      return '<span class="tag muted" title="这是备份槽位（另一色在跑），滚动升级时会互换，不是故障">备份槽位</span>';
+    }
     const map = { up: ['正常', 'ok'], down: ['DOWN', 'err'], unknown: ['未知', 'warn'] };
     const [t, k] = map[health] || ['未知', 'warn'];
     return `<span class="tag ${k === 'ok' ? 'ok' : k === 'err' ? 'err' : 'warn'}">${t}</span>`;
@@ -111,6 +118,40 @@ async function paintLastCheck() {
   } catch { /* 拿不到就保持「还没查过」的说明态 */ }
 }
 
+/* 体检历史：每个小条 = 一次体检，绿=全通过、琥珀=有警告、红=有失败 */
+function histTip(h) {
+  const t = new Date(h.at);
+  const p2 = (x) => String(x).padStart(2, '0');
+  const hm = `${p2(t.getMonth() + 1)}-${p2(t.getDate())} ${p2(t.getHours())}:${p2(t.getMinutes())}`;
+  const bad = (h.bad || []).map((b) => b.name).filter(Boolean);
+  return `${hm} · ${h.total - h.fail}/${h.total} 通过`
+    + (h.warn ? ` · ${h.warn} 项警告` : '')
+    + (bad.length ? `\n失败：${bad.join('、')}` : '');
+}
+
+async function paintCheckHistory() {
+  const wrap = $('#checkHistWrap');
+  const box = $('#checkHist');
+  if (!wrap || !box) return;
+  let items = [];
+  try {
+    const r = await api('/api/selfcheck/history?limit=40');
+    items = (r && r.items) || [];
+  } catch { return; }
+  if (!items.length) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  box.innerHTML = items.slice().reverse().map((h) => {           // 左旧右新
+    const state = h.fail ? 'fail' : (h.warn ? 'warn' : 'ok');
+    return `<i class="bar" data-s="${state}" title="${esc(histTip(h))}"></i>`;
+  }).join('');
+  const last = items[0];
+  const mins = Math.max(0, Math.round((Date.now() - Number(last.at || 0)) / 60000));
+  $('#checkHistNote').textContent = `最近 ${items.length} 次体检（左旧右新）· 上次 `
+    + `${mins < 1 ? '刚刚' : mins + ' 分钟前'}：${last.total - last.fail}/${last.total} 通过`
+    + (last.fail ? `，${last.fail} 项失败` : '')
+    + (last.warn ? `，${last.warn} 项警告` : '');
+}
+
 async function runCheck() {
   const btn = $('#btnCheck');
   if (btn) { btn.disabled = true; btn.textContent = '体检中…'; }
@@ -119,6 +160,7 @@ async function runCheck() {
   try {
     const r = await api('/api/selfcheck');
     renderCheck(r);
+  paintCheckHistory();
     if (r && r.fail) toast(`${r.fail} 项失败`, 'err');
   } catch (e) {
     if (box) box.innerHTML = `<div class="empty">体检没跑成：${esc(e.message)}</div>`;
@@ -145,7 +187,7 @@ async function load() {
       const s = d.summary || {};
       // 面板是双槽位部署（8090/8095），滚动升级时总有一色停着 —— 那一色的 target 必然 down，
       // 但这不是故障。只有「非槽位」的目标也挂了才标红。
-      const SLOT = /:(8090|8095)\b/;
+      const SLOT = SLOT_RE;
       const slotDownOnly = (d.targets || []).every((t) => t.health === 'up' || SLOT.test(t.instance || t.scrapeUrl || ''));
       $('#monTargets').textContent = `${s.up}/${s.total} 正常`;
       $('#monTargets').className = 'v ' + (!s.down ? 'ok-hint' : slotDownOnly ? 'muted' : 'err-hint');
@@ -159,9 +201,9 @@ async function load() {
           d.targets.map((t) => `<tr>
             <td class="mono" data-label="任务">${esc(t.job)}</td>
             <td class="mono muted" data-label="实例">${slotLink(t.instance)}${esc(t.scrapeUrl || t.instance)}</td>
-            <td data-label="状态">${badge(t.health)}</td>
+            <td data-label="状态">${badge(t.health, t)}</td>
             <td class="mono" data-label="最近抓取">${esc(ago(t.lastScrape))}</td>
-            <td class="mono muted" data-label="错误">${esc(t.lastError || '—')}</td>
+            <td class="mono muted" data-label="错误">${t.health === 'down' && SLOT_RE.test(t.instance || t.scrapeUrl || '') ? '—' : esc(t.lastError || '—')}</td>
           </tr>`).join('')}</tbody></table></div>`
         : '<div class="empty">没有抓取目标</div>';
 
@@ -196,6 +238,7 @@ async function load() {
     if ($('#btnMonRefresh')) $('#btnMonRefresh').addEventListener('click', () => load().catch((e) => toast(e.message, 'err')));
     if ($('#btnCheck')) $('#btnCheck').addEventListener('click', () => runCheck());
     paintLastCheck();
+    paintCheckHistory();
 
     const abx = $('#monAlertBody');
     if (abx) abx.addEventListener('click', async (e) => {

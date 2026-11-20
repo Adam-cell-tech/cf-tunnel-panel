@@ -27,6 +27,13 @@ Prometheus already scrapes both blue/green slots, and Grafana auto-imports the d
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
 
+### v0.29.12 highlights
+
+- **Fixed a self-inflicted outage**: the self-check history file had grown to **360 MB** (a runaway escaping loop), and every 5-minute run rewrote it synchronously — the panel froze for 20+ seconds and `/api/selfcheck*` looked hung. History is now append-only with a size cap, records are truncated, and reads only happen from the tail of the file.
+- Self-check history strip on the monitor page: one bar per run (green = all pass, amber = warnings, red = failures), with a hover tooltip naming the failed checks.
+- The idle blue/green slot is now labelled “standby slot” instead of a red DOWN in the scrape targets table.
+- Chart accessibility: every SVG chart has a numeric `aria-label` plus `<title>`/`<desc>` instead of the generic “chart”.
+
 ### v0.29.11 highlights
 
 - **Scheduled self-check**: the panel now runs all 12 health checks itself every 5 minutes (leader only) and notifies through your notification channels when the result flips from OK to failing — and when it recovers.

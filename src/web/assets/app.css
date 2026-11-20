@@ -576,3 +576,13 @@ pre.log .lv-inf .dot{background:var(--acc)}
   .topbar .tools > a { min-height: 34px; padding: 0 10px; }
   .side-tools > .sm { min-height: 34px; min-width: 38px; }
 }
+
+/* 体检历史条（监控页）：一根小柱 = 一次体检，绿=全通过、琥珀=有警告、红=有失败 */
+.sc-hist-wrap{padding-top:12px;border-top:1px solid var(--line)}
+.sc-hist{display:flex;gap:3px;align-items:flex-end;height:18px;overflow-x:auto;padding-bottom:2px}
+.sc-hist .bar{display:block;flex:0 0 9px;height:9px;border-radius:2px;background:var(--line2)}
+.sc-hist .bar[data-s="ok"]{background:var(--ok);height:18px}
+.sc-hist .bar[data-s="warn"]{background:var(--warn);height:13px}
+.sc-hist .bar[data-s="fail"]{background:var(--err);height:18px}
+.sc-hist .bar:hover{outline:1px solid var(--acc);outline-offset:1px}
+.sc-hist-wrap .sub{margin-top:6px}
