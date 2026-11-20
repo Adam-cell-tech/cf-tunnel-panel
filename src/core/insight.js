@@ -25,9 +25,10 @@ function trafficByPath(hours = 12, top = 4) {
   const h = Math.max(1, Math.min(72, Number(hours) || 12));
   const n = Math.max(1, Math.min(8, Number(top) || 4));
   const now = Date.now();
-  const start = now - h * 3600 * 1000;
+  const nowHour = new Date(now).setMinutes(0, 0, 0);          // 同上：含当前这一小时
   const keys = [];
-  for (let i = 0; i < h; i += 1) keys.push(new Date(start + i * 3600 * 1000).setMinutes(0, 0, 0));
+  for (let i = h - 1; i >= 0; i -= 1) keys.push(nowHour - i * 3600 * 1000);
+  const start = nowHour - (h - 1) * 3600 * 1000;
   const groups = new Map();
   const get = (name) => {
     if (!groups.has(name)) {
@@ -91,13 +92,15 @@ function trafficByPath(hours = 12, top = 4) {
 
 function trafficByHour(hours = 12) {
   const now = Date.now();
-  const start = now - hours * 3600 * 1000;
+  // 桶必须从「整点」往回数：原来从 now-hours 往前推再取整，最后一个桶落在上一小时，
+  // 于是当前这一小时的流量全被丢掉（total 显示 0）。用 nowHour 倒推保证含当前小时。
+  const nowHour = new Date(now).setMinutes(0, 0, 0);
   const buckets = new Map();
-  for (let i = 0; i < hours; i += 1) {
-    const t = start + i * 3600 * 1000;
-    const key = new Date(t).setMinutes(0, 0, 0);
+  for (let i = hours - 1; i >= 0; i -= 1) {
+    const key = nowHour - i * 3600 * 1000;
     buckets.set(key, { t: key, total: 0, ok: 0, err: 0 });
   }
+  const start = nowHour - (hours - 1) * 3600 * 1000;
   let text = '';
   try {
     const st = fs.statSync(ACCESS_LOG_FILE);

@@ -5,6 +5,11 @@
 
 ---
 
+## ✅ v0.29.13 — 流量趋势不再「合计 0」
+
+- 根因：`trafficByHour()` / `trafficByPath()` 的桶从 `now - hours` 往前生成再 `setMinutes(0,0,0)` 取整，最后一个桶落在上一小时；`if (!b) continue` 把当前小时的日志行全丢掉。改成以 `nowHour` 为基准倒推，窗口含当前（未满）小时。
+- 抓取目标统计加「（N 为备份槽位）」。
+
 ## ✅ v0.29.12 — 体检留痕不再拖垮面板
 
 - 事故：`data/selfcheck/history.jsonl` 被一条 218MB 的爆炸行撑到 360MB，`persist()` 每次整文件重写（实测 22.5 秒）、`history()` 整读（48.7 秒），定时体检直接把事件循环卡死，`/api/selfcheck*` 接口挂住。

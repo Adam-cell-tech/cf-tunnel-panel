@@ -445,6 +445,14 @@ await rawFetch(B + '/api/viewer', { method: 'POST', headers: { 'Content-Type': '
 const tr = await j('/api/traffic?hours=6');
 ok('/api/traffic 结构正确', tr.d.ok && Array.isArray(tr.d.buckets) && tr.d.buckets.length === 6, String(tr.d.buckets && tr.d.buckets.length));
 ok('/api/traffic 桶字段齐全', (tr.d.buckets || []).every((b) => 'total' in b && 'ok' in b && 'err' in b), '');
+// v0.29.13：桶原来从 now-hours 往前走，最后一个桶落在上一小时，当前这一小时的流量全丢（total 恒 0）
+{
+  const nowHour = new Date().setMinutes(0, 0, 0);
+  const last = (tr.d.buckets || [])[tr.d.buckets.length - 1] || {};
+  const first = (tr.d.buckets || [])[0] || {};
+  ok('/api/traffic 最后一个桶是当前小时', last.t === nowHour, `${last.t} vs ${nowHour}`);
+  ok('/api/traffic 桶按整点对齐且连续', (tr.d.buckets || []).every((b, i) => b.t === first.t + i * 3600 * 1000), '');
+}
 const hist = await j('/api/history');
 ok('/api/history 可用', hist.d.ok === true && Array.isArray(hist.d.points), String((hist.d.points || []).length));
 const nh = await j('/api/notify/history');
@@ -655,6 +663,11 @@ ok('退出全部设备：返回踢掉数量并清 cookie', all.status === 200 &&
   ok('按规则流量接口可用', tp.status === 200 && Array.isArray(tp.d.groups), `${tp.status} groups=${(tp.d.groups || []).length}`);
   ok('按规则流量不与「未匹配」混在一起', !(tp.d.groups || []).some((g) => g.name === '(未匹配规则)'), JSON.stringify((tp.d.groups || []).map((g) => g.name)));
   ok('按规则流量给出未匹配计数', tp.d.unmatched && typeof tp.d.unmatched.total === 'number', JSON.stringify(tp.d.unmatched || {}));
+  {
+    const nowHour = new Date().setMinutes(0, 0, 0);
+    const g0 = (tp.d.groups || [])[0];
+    ok('按规则流量也含当前小时桶', !g0 || (g0.buckets[g0.buckets.length - 1] || {}).t === nowHour, g0 ? String((g0.buckets.slice(-1)[0] || {}).t) : '没有分组，跳过');
+  }
   const g0 = (tp.d.groups || [])[0];
   ok('按规则流量带规则 id（可点击跳转）', (tp.d.groups || []).every((g) => typeof g.id === 'string'), JSON.stringify((tp.d.groups || []).map((g) => g.id)));
   ok('按规则流量带每小时分桶', !g0 || (Array.isArray(g0.buckets) && g0.buckets.length === (tp.d.hours || 0)), String(g0 ? g0.buckets.length : 0));

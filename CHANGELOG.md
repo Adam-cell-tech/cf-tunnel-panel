@@ -2,6 +2,38 @@
 
 按日期倒序。功能细节与实测数据见 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
+## v0.29.13
+
+### 流量趋势为什么一直是 0
+
+`trafficByHour()` 与 `trafficByPath()` 原来这样造桶：
+
+```js
+const start = now - hours * 3600 * 1000;
+for (let i = 0; i < hours; i++) keys.push(new Date(start + i * 3600 * 1000).setMinutes(0, 0, 0));
+```
+
+`start` 带着当前分钟，取整后第一个桶被压到整点，最后一个桶就落在**上一小时**；遍历日志时 `if (!b) continue` 于是把「当前这一小时」的所有行都丢了。流量都发生在最近一小时里的时候，概览页就显示「合计 0 次」，而规则统计里明明有几十次请求。
+
+现在改成以 `nowHour` 为基准倒推：
+
+```js
+const nowHour = new Date(now).setMinutes(0, 0, 0);
+for (let i = hours - 1; i >= 0; i--) keys.push(nowHour - i * 3600 * 1000);
+```
+
+窗口包含当前（未满）小时；`/api/traffic` 与 `/api/traffic/paths` 一起修好。
+
+### 另一个小别扭
+
+监控页「抓取目标」在滚动升级期间显示「1/2 正常」，看着像有故障。现在写成「1/2 正常（1 为备份槽位）」，与表格里的「备份槽位」标注一致。
+
+### 验证
+
+- 修前 `/api/traffic?hours=12` 合计 **0**；修后 **114**（当前小时桶 = 21:00）。
+- API 测试 **337/337**（新增 3 条：最后一个桶必须是当前小时、桶按整点连续、按规则流量同样含当前小时）。
+- DOM 测试 **179/179**。
+
 ## v0.29.12
 
 ### 修掉一个自己造成的事故

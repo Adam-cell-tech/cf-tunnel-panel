@@ -189,7 +189,9 @@ async function load() {
       // 但这不是故障。只有「非槽位」的目标也挂了才标红。
       const SLOT = SLOT_RE;
       const slotDownOnly = (d.targets || []).every((t) => t.health === 'up' || SLOT.test(t.instance || t.scrapeUrl || ''));
-      $('#monTargets').textContent = `${s.up}/${s.total} 正常`;
+      // 停着的那一色是备份槽位，写出来免得「1/2 正常」看着像有故障
+      const slotDown = s.down && slotDownOnly ? s.down : 0;
+      $('#monTargets').textContent = `${s.up}/${s.total} 正常` + (slotDown ? `（${slotDown} 为备份槽位）` : '');
       $('#monTargets').className = 'v ' + (!s.down ? 'ok-hint' : slotDownOnly ? 'muted' : 'err-hint');
       $('#monTargets').title = s.down && slotDownOnly ? '停着的是备份槽位（滚动升级时会互换），不是故障' : '';
       const firing = (d.alerts || []).filter((a) => a.state === 'firing');

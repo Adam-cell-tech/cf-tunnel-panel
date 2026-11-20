@@ -27,6 +27,11 @@ Prometheus already scrapes both blue/green slots, and Grafana auto-imports the d
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
 
+### v0.29.13 highlights
+
+- **Fixed the traffic chart showing 0**: the hourly buckets were built forward from “now minus N hours”, so the newest bucket landed in the *previous* hour and everything since the top of the current hour was dropped — the overview could read “0 requests” while rules clearly had traffic.
+- The scrape-targets stat now says “1/2 up (1 standby slot)” instead of looking like a fault when the idle blue/green colour is down.
+
 ### v0.29.12 highlights
 
 - **Fixed a self-inflicted outage**: the self-check history file had grown to **360 MB** (a runaway escaping loop), and every 5-minute run rewrote it synchronously — the panel froze for 20+ seconds and `/api/selfcheck*` looked hung. History is now append-only with a size cap, records are truncated, and reads only happen from the tail of the file.
