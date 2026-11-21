@@ -1108,8 +1108,8 @@ try {
   const csp3 = pg.headers.get('content-security-policy') || '';
   ok('Grafana：CSP 同时放行正式地址与局域网地址',
     /frame-src[^;]*https:\/\/grafana\.jianghugs\.shop/.test(csp3) && /frame-src[^;]*http:\/\/192\.168\.1\.55:3000/.test(csp3), csp3.slice(0, 200));
-  // 还原成「没有局域网地址」，免得影响后面只看正式地址的断言
-  await j('/api/settings', { method: 'POST', body: { grafana: Object.assign({}, st, { lanUrl: '' }) } });
+  // 还原成测试前的值（生产上现在真的配了局域网地址，别把它抹掉）
+  await j('/api/settings', { method: 'POST', body: { grafana: Object.assign({}, st, { lanUrl: cur.lanUrl }) } });
 }
 
 // v0.29.11：体检留痕 + 定时自检

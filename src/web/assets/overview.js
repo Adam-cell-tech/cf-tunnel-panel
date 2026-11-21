@@ -449,7 +449,13 @@ function loadGFrame(el, g, getPanel) {
     }
   };
   const startedAt = Date.now();
+  // 骨架是绝对定位盖在 iframe 上的：只要 `load` 没触发，图就算已经画出来了也被它挡着。
+  // Grafana 的 d-solo 页 `load` 要等所有 bundle 跑完（局域网实测 6–10 秒，走公网更久），
+  // 所以 2.2 秒后先把骨架撤掉 —— 图正在画总比"正在连接"盖着好看。
+  const reveal = () => { const sk = el.querySelector('.gskel'); if (sk && sk.parentNode) sk.parentNode.removeChild(sk); };
+  const revealTimer = setTimeout(reveal, 2200);
   f.addEventListener('load', () => {
+    clearTimeout(revealTimer);
     // 被 CSP 拦掉的 iframe 也会 load，但里面是一块灰板：靠违规事件的时间戳区分
     if (cspBlockedAt && cspBlockedAt >= startedAt - 50) {
       done(false, '面板的内容安全策略（CSP）没放行这个地址。到「设置 → 监控嵌入」把地址存一遍即可自动放行；如果刚改过地址，刷新页面再看。');

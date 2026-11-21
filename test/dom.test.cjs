@@ -482,6 +482,8 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
       const msrc = fs.readFileSync('src/web/assets/monitor.js', 'utf8');
       chk('体检: 历史条按次渲染三态', /paintCheckHistory/.test(msrc) && /data-s="\$\{state\}"/.test(msrc), '');
       const osrc = fs.readFileSync('src/web/assets/overview.js', 'utf8');
+      // 骨架是绝对定位盖在 iframe 上的：load 没触发时会把已经画出来的图挡着，2.2 秒后先撤
+      chk('Grafana: 骨架到点先撤（不等 load）', /setTimeout\(reveal, 2200\)/.test(osrc), '');
       chk('图表: 无障碍标签带数值（不再只是「统计图表」）', /aria-label="\$\{name\}"/.test(osrc) && /合计 \$\{total\} 次/.test(osrc), '');
     }
     const jump = doc.querySelector('#monAlertBody a.jump, #monAlertBody span.tag');
