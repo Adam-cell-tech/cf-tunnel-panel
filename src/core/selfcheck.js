@@ -14,7 +14,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { CADDY_ADMIN, DATA_DIR, STATE_FILE, pkgVersion } = require('./paths');
+const { ACCESS_LOG_FILE, CADDY_ADMIN, DATA_DIR, STATE_FILE, pkgVersion } = require('./paths');
 
 const TIMEOUT = 3000;
 
@@ -222,6 +222,43 @@ async function runChecks(state, ctx = {}) {
     return {
       status: 'ok',
       detail: `${path.basename(STATE_FILE)} ${kb(st.size)} · ${ageMin} 分钟前改过`,
+    };
+  }));
+
+  // 11) 访问日志：最近 10 分钟的噪音占比 + 访问行能回溯多久（趋势图的可用窗口）
+  tasks.push(step('logs', '访问日志', async () => {
+    let st;
+    try { st = fs.statSync(ACCESS_LOG_FILE); } catch {
+      return { status: 'ok', detail: '还没有访问日志（面板有流量后会自动出现）' };
+    }
+    const take = Math.min(st.size, 512 * 1024);
+    const buf = Buffer.alloc(take);
+    const fd = fs.openSync(ACCESS_LOG_FILE, 'r');
+    try { fs.readSync(fd, buf, 0, take, Math.max(0, st.size - take)); } finally { fs.closeSync(fd); }
+    const since = Date.now() - 10 * 60 * 1000;
+    let access = 0, health = 0, oldest = 0, newest = 0;
+    for (const line of buf.toString('utf8').split('\n')) {
+      if (!line.includes('"logger":"')) continue;
+      const m = line.match(/"ts":([\d.]+)/);
+      const ts = m ? Number(m[1]) * 1000 : 0;
+      const isAccess = line.includes('"logger":"http.log.access');
+      const isHealth = line.includes('health_checker');
+      if (!isAccess && !isHealth) continue;
+      if (isAccess) {
+        if (ts && (!oldest || ts < oldest)) oldest = ts;
+        if (ts > newest) newest = ts;
+      }
+      if (!ts || ts < since) continue;                 // 只统计最近 10 分钟，历史噪音不算现状
+      if (isAccess) access += 1; else health += 1;
+    }
+    const noise = access + health ? Math.round((health / (access + health)) * 100) : 0;
+    const spanH = oldest && newest ? (newest - oldest) / 3600000 : 0;
+    const status = health > 200 && noise >= 80 ? 'warn' : 'ok';
+    return {
+      status,
+      detail: `最近 10 分钟：访问行 ${access} 条、健康检查 ${health} 条（噪音 ${noise}%）；访问行可回溯 ${spanH.toFixed(1)} 小时`,
+      hint: status === 'ok' ? ''
+        : '健康检查正在刷日志（两台面板同时在线时才会这样），趋势图能覆盖的窗口会缩水；滚动结束后自动恢复。',
     };
   }));
 

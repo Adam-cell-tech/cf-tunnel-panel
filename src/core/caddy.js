@@ -7,6 +7,7 @@
 const http=require('http'); const https=require('https');
 
 const path=require('path');
+const net=require('net');
  const bcrypt=require('bcryptjs');
 
 const { CLOUDFLARE_DEFAULT_RANGES, LB_POLICIES } = require('./paths');
@@ -30,6 +31,49 @@ const { runtimes, tunnelById } = require('./registry');
 //   - 老实例活着 → 一律走它（lb_policy: first，顺序固定，行为可预测）
 //   - 老实例挂掉 → Caddy 探活失败自动跳过，流量落到新实例，不需要人工切
 const PANEL_SLOT_RE = /^(?:https?:\/\/)?(?:127\.0\.0\.1|localhost):(\d+)\/?$/i;
+
+
+/**
+ * 同机另一个槽位是否在监听：滚动升级期间两台并存，平时另一台是停着的。
+ * 停着的时候不要下发主动健康检查 —— 每 2 秒一次的探测失败会在 Caddy 日志里堆出
+ * 十几万行/天（实测占日志 99.85%），却一个字节的有用信息都不带；而且日志文件被这些
+ * 噪音填满后，Caddy 轮转得更快，流量趋势图能覆盖的时间窗口也跟着缩水。
+ * 探测结果异步刷新、同步读取：没探到之前一律当作「在线」，保持原有行为。
+ */
+const SELF_PORT = String(process.env.PORT || 8090);
+const _peerLive = new Map();
+let _peerTimer = null;
+function probePort(port, timeout = 150) {
+  const num = Number(port);
+  if (!Number.isInteger(num) || num < 1 || num > 65535) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const sock = net.connect({ host: '127.0.0.1', port: num });
+    const done = (v) => { try { sock.destroy(); } catch { /* ignore */ } resolve(v); };
+    sock.setTimeout(timeout, () => done(false));
+    sock.once('connect', () => done(true));
+    sock.once('error', () => done(false));
+  });
+}
+async function refreshPeerLiveness() {
+  for (const port of panelSlots()) {
+    const key = String(port);
+    if (key === SELF_PORT) { _peerLive.set(key, true); continue; }
+    const ok = await probePort(port);
+    if (_peerLive.get(key) === true && ok === false) log('info', `同机槽位 ${key} 已下线，停止对它的健康检查`);
+    if (_peerLive.get(key) === false && ok === true) log('info', `同机槽位 ${key} 已上线，恢复双上游负载均衡`);
+    _peerLive.set(key, ok);
+  }
+}
+function startPeerWatch() {
+  if (_peerTimer) return;
+  refreshPeerLiveness().catch(() => {});
+  _peerTimer = setInterval(() => { refreshPeerLiveness().catch(() => {}); }, 3000);
+  if (_peerTimer.unref) _peerTimer.unref();
+}
+function peerLive(port) {
+  const v = _peerLive.get(String(port));
+  return v === undefined ? true : v;
+}
 
 function panelSlots() {
   const self = String(process.env.PORT || 8090);
@@ -71,7 +115,10 @@ function buildRouteHandlers(r) {
   // 3) 反向代理
   const main = parseUpstream(r.upstream);
   const slotUps = expandPanelSlots(r.upstream);
-  const upstreams = slotUps ? slotUps.map((dial) => ({ dial })) : [{ dial: main.dial }];
+  // 只把在监听的槽位写进上游：停着的那一色留着只会让每个请求先吃一次 connect refused
+  const liveUps = slotUps ? slotUps.filter((u) => peerLive(String(u).split(':').pop())) : null;
+  const useUps = liveUps && liveUps.length ? liveUps : null;
+  const upstreams = useUps ? useUps.map((dial) => ({ dial })) : [{ dial: main.dial }];
   if (r.backupUpstream) upstreams.push({ dial: parseUpstream(r.backupUpstream).dial });
 
   const proxy = { handler: 'reverse_proxy', upstreams };
@@ -81,16 +128,19 @@ function buildRouteHandlers(r) {
   proxy.transport = transport;
   if (r.timeoutSec > 0) proxy.flush_interval = 0;
 
-  if (slotUps) {
+  if (useUps) {
     // 面板槽位：优先第一个（老实例），它不健康时自动跳过 → 滚动升级不需要人工切流量
     // 用 round_robin 而不是 first：两台都健康时轮询（滚动升级期间短暂并存，代码版本可能不同但
     // 共享同一份 data/，行为一致）；一台挂掉时健康检查把它剔除，且重试会立刻落到另一台上 ——
     // 用 first 会在「老实例刚停、健康检查还没标记不健康」那段窗口里反复重试同一台死上游，
     // 实测表现为 3~5 秒的 502。
     proxy.load_balancing = { selection_policy: { policy: 'round_robin' }, try_duration: 3e9, try_interval: 250e6 };
-    proxy.health_checks = {
-      active: { uri: '/healthz', interval: '2s', timeout: '1s', fails: 2, passes: 1 },
-    };
+    // 只有两台都在监听时才需要健康检查：单槽位时没有可切换的对象，检查只会刷日志
+    if (useUps.length > 1) {
+      proxy.health_checks = {
+        active: { uri: '/healthz', interval: '2s', timeout: '1s', fails: 2, passes: 1 },
+      };
+    }
     // 不要写 fail_duration / max_fails：Caddy 2.11.9 的 reverse_proxy 不认这个字段
     // （会 400 unknown field "fail_duration"，整份配置下发失败）。被动健康检查交给默认值。
   } else if (upstreams.length > 1) {
@@ -300,4 +350,4 @@ function cloudflareRanges() {
 
 const { CADDY_ADMIN, accessLogPathForCaddy } = require('./paths');
 
-module.exports = { buildCaddyConfig, buildMatch, buildRouteHandlers, caddy, cloudflareRanges, lastSkipped, maintPage, tunnelHostOf, PANEL_SLOT_RE, panelSlots };
+module.exports = { buildCaddyConfig, buildMatch, buildRouteHandlers, caddy, cloudflareRanges, lastSkipped, maintPage, tunnelHostOf, PANEL_SLOT_RE, panelSlots, startPeerWatch, peerLive };

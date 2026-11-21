@@ -27,6 +27,12 @@ Prometheus already scrapes both blue/green slots, and Grafana auto-imports the d
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
 
+### v0.29.15 highlights
+
+- **Health checks no longer flood the log**: the slot config used to emit `health_checks` unconditionally, and the other colour is normally stopped — its failed probe every 2 s piled up to **100k+ lines/day in Caddy's log (99.85%)**, filling the file and forcing rotation sooner, which shrank the window the trend charts could cover. Health checks are now only emitted while the peer is actually listening, and an offline peer is dropped from the upstream list (otherwise every request pays a connect-refused round trip).
+- Slot up/down is detected by a watchdog that **re-pushes the config once**, so rolling upgrades still run with two upstreams plus health checks — the switch window is unchanged.
+- The self-check gained a 13th item, "access log": bytes of noise in the last 10 minutes and how far back access lines reach — previously invisible.
+
 ### v0.29.14 highlights
 
 - **Trend charts no longer break at log rotation**: the aggregations only read the tail of the live `access.log`, so once Caddy rotated (every 10 MB) the older part of the window disappeared. Recent rotated files (`.gz`) are now read too (window-bounded, at most 3, 4 MB each), so hour buckets spanning a rotation are correct.

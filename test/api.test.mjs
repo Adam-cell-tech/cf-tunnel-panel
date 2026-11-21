@@ -1159,6 +1159,29 @@ try {
   try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* 忽略 */ }
 }
 
+// v0.29.15：对端槽位离线时不再下发主动健康检查（它是日志里 99.85% 噪音的来源）
+{
+  const script = `const c = require('./src/core/caddy.js');
+    const rule = { id: 't', path: '/', upstream: 'http://127.0.0.1:' + process.env.PORT, enabled: true };
+    (async () => {
+      await c.startPeerWatch();
+      await new Promise((r) => setTimeout(r, 500));
+      const p = c.buildRouteHandlers(rule).find((h) => h.handler === 'reverse_proxy');
+      process.stdout.write(JSON.stringify({ ups: p.upstreams.length, hc: Boolean(p.health_checks) }));
+    })();`;
+  let out = {};
+  try {
+    const raw = execFileSync(process.execPath, ['-e', script], {
+      cwd: path.resolve('.'),
+      env: { ...process.env, PORT: '8090', PANEL_SLOT_PEERS: '65530' },   // 65530 不会有人监听
+      encoding: 'utf8', timeout: 8000,
+    });
+    out = JSON.parse(raw);
+  } catch (e) { out = { err: String(e.message || e).slice(0, 120) }; }
+  ok('槽位：对端离线时只留一个上游', out.ups === 1, JSON.stringify(out));
+  ok('槽位：对端离线时不下发健康检查', out.hc === false, JSON.stringify(out));
+}
+
 await restoreRoutes();
 
 console.log(`\n${pass}/${pass + fail} 通过`);

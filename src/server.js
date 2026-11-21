@@ -2262,6 +2262,21 @@ server.listen(PORT, '0.0.0.0', async () => {
   }
   // 监控与健康巡检两边都跑（只读采样，不改共享状态）
   startMonitor();
+
+  // 同机槽位在线状态：双上游 + 健康检查只在一台真正在监听时才下发（见 caddy.js）。
+  // 槽位上下线（滚动升级）时 leader 需要重推一次配置，否则新起来的那一台要等到
+  // 下次状态变更才会被写进上游列表 —— 那段时间切流量就少了兜底。
+  _caddy.startPeerWatch();
+  let _slotSig = '';
+  setInterval(() => {
+    const sig = _caddy.panelSlots().map((p2) => `${p2}:${_caddy.peerLive(p2) ? 1 : 0}`).join(',');
+    if (sig === _slotSig) return;
+    const first = !_slotSig;
+    _slotSig = sig;
+    if (first || !lease.isLeader()) return;
+    log(`槽位状态变化（${sig}），重推 Caddy 配置`, 'panel');
+    pushCaddy().catch(() => {});
+  }, 5000).unref();
 });
 
 for (const sig of ['SIGTERM', 'SIGINT']) {
