@@ -162,6 +162,12 @@ function render() {
     : (total
       ? `<div class="empty"><span class="big">🔍</span>没有匹配「${esc(filterText)}」的规则（共 ${total} 条）</div>`
       : `<div class="empty"><span class="big">⌘</span>这个作用域还没有规则${selectedExit ? '，新加的规则会绑定到这个出口' : ''}</div>`);
+  if (stickyFocus) {
+    const at = rules.findIndex((r) => r.id === stickyFocus);
+    const el = at >= 0 ? document.querySelector(`#ruleList .rule[data-i="${at}"]`) : null;
+    if (el) el.setAttribute('data-focused', '1');
+    else stickyFocus = '';   // 规则被删了或换了作用域
+  }
   const exit = (ST.state.tunnels || []).find((t) => t.id === selectedExit);
   $('#scopeTag').textContent = selectedExit ? `只看「${exit ? exit.name : selectedExit}」的专属规则` : '全局规则：对所有出口生效';
   renderWarns();
@@ -170,6 +176,9 @@ function render() {
 
 // ?focus=<规则id>：从「按规则看流量」点过来时，切到该规则所在作用域、滚过去、闪一下
 let focusId = '';
+// 闪一下之后 5 秒轮询会把列表重绘一遍，data-focused 就丢了 —— 记住这条规则，
+// 重绘时补回去，光标才不会「闪一下就没」。换作用域或手动点别的规则就清掉。
+let stickyFocus = '';
 function focusRule() {
   if (!focusId) return;
   const idx = rules.findIndex((r) => r.id === focusId);
@@ -185,6 +194,7 @@ function focusRule() {
   if (el) {
     if (el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     el.setAttribute('data-focused', '1');
+    stickyFocus = focusId;
     el.classList.add('flash');
     setTimeout(() => el.classList.remove('flash'), 1600);
   }

@@ -29,14 +29,41 @@ if (PASS) {
   });
 }
 
-async function open(path, wait = 900) {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/**
+ * 等到 fn() 返回真值，或超时返回最后一次的值。
+ * 固定 sleep 在机器忙 / 页面刚重启时会出现「还没渲染完就断言」，这正是 177/179 那类假失败的来源。
+ */
+async function waitFor(fn, ms = 8000, step = 120) {
+  const t0 = Date.now();
+  let out;
+  for (;;) {
+    try { out = await fn(); } catch { out = false; }
+    if (out) return out;
+    if (Date.now() - t0 > ms) return out;
+    await sleep(step);
+  }
+}
+/** 等到「又发生了一次 /api/state 轮询」+ 一点渲染余量（比硬等 6.5 秒快，也不会因为机器慢而误判） */
+async function pollTick(win, delta = 1, ms = 12000) {
+  const c0 = win.__calls.state;
+  await waitFor(() => win.__calls.state >= c0 + delta, ms, 100);
+  await sleep(250);
+}
+
+async function open(path, wait = 900, until = null) {
   const errors = [];
   const dom = await JSDOM.fromURL(BASE + path, {
     runScripts: 'dangerously',
     resources: 'usable',
     pretendToBeVisual: true,
     beforeParse(win) {
-      win.fetch = (u, o) => fetch(new URL(u, BASE).href, o);
+      win.__calls = { state: 0, all: 0 };
+      win.fetch = (u, o) => {
+        win.__calls.all += 1;
+        if (String(u).includes('/api/state')) win.__calls.state += 1;
+        return fetch(new URL(u, BASE).href, o);
+      };
       win.EventSource = class { constructor() { this.onmessage = null; } close() {} addEventListener() {} };
       win.alert = () => {};
       win.confirm = () => true;
@@ -44,7 +71,8 @@ async function open(path, wait = 900) {
       win.addEventListener('error', (e) => errors.push(String(e.message || e.error)));
     },
   });
-  await new Promise((r) => setTimeout(r, wait));
+  if (until) await waitFor(until(dom.window), wait);
+  else await sleep(wait);
   return { dom, win: dom.window, doc: dom.window.document, errors };
 }
 
@@ -64,11 +92,9 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('总览: 当前页高亮', !!doc.querySelector('.side .nav a.active'), '');
     {
       // 健康指示要等 /api/state 回来，机器忙的时候 1.8 秒不够 —— 轮询到有内容为止（最多 6 秒）
-      let t = (doc.querySelector('#healthText') || {}).textContent || '';
-      for (let i = 0; i < 12 && (!t || t === '检测中…'); i += 1) {
-        await new Promise((r) => setTimeout(r, 500));
-        t = (doc.querySelector('#healthText') || {}).textContent || '';
-      }
+      const ht = () => (doc.querySelector('#healthText') || {}).textContent || '';
+      await waitFor(() => ht() && ht() !== '检测中…' && ht() !== '加载中…', 9000);
+      const t = ht();
       chk('总览: 健康指示已填充', !!t && t !== '检测中…', t);
     }
     chk('总览: 有按规则流量卡', !!doc.querySelector('#pathBox'), '');
@@ -79,10 +105,13 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     {
       const hz = await (await fetch(BASE + '/healthz')).json();
       const rid = (await (await fetch(BASE + '/api/state')).json()).state.routes[0].id;
-      const { doc: rd, errors: rErrs } = await open('/rules?focus=' + encodeURIComponent(rid));
-      await new Promise((r) => setTimeout(r, 1200));
+      const { doc: rd, win: rwin, errors: rErrs } = await open('/rules?focus=' + encodeURIComponent(rid), 6000,
+        (w) => w.document.querySelector('.rule[data-focused]'));
       const hit = rd.querySelector('.rule[data-focused]');
       chk('规则页: ?focus 能定位到规则', !!hit, String(!!hit));
+      // v0.29.17：焦点标记要扛过一次 5 秒轮询重绘（之前闪一下就被重绘冲掉了）
+      await pollTick(rwin, 1);
+      chk('规则页: 轮询重绘后焦点标记仍在', !!rd.querySelector('.rule[data-focused]'), String(!!rd.querySelector('.rule[data-focused]')));
       chk('规则页: focus 页面无脚本错误', rErrs.length === 0, rErrs.join(' | ').slice(0, 160));
       chk('规则页: 每条规则有命中统计徽标', rd.querySelectorAll('#ruleList [data-hits]').length > 0,
         String(rd.querySelectorAll('#ruleList [data-hits]').length));
@@ -124,7 +153,7 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
       if (inp0) {
         inp0.value = '我改到一半的名字';
         inp0.dispatchEvent(new win.Event('input', { bubbles: true }));
-        await new Promise((r) => setTimeout(r, 6200));
+        await pollTick(win);   // 等一次真实的 /api/state 轮询过去，看它会不会把输入清掉
         const inp1 = (doc.querySelector('#tunnelList > .card') || {}).querySelector
           ? doc.querySelector('#tunnelList > .card').querySelector('[data-k="name"]') : null;
         chk('隧道: 输入出口设置后 5s 轮询不清空', !!inp1 && inp1.value === '我改到一半的名字', (inp1 || {}).value);
@@ -142,17 +171,17 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     const { doc, win } = await open('/rules');
     const before = doc.querySelectorAll('.rule').length;
     doc.querySelector('#btnAddRule').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 300));
+    await waitFor(() => doc.querySelectorAll('.rule').length === before + 1, 4000);
     const added = doc.querySelectorAll('.rule').length;
     chk('规则: 添加后 +1', added === before + 1, before + '→' + added);
-    await new Promise((r) => setTimeout(r, 6500)); // 跨过两次 5s 轮询
+    await pollTick(win, 2);   // 跨过两次 5s 轮询
     const afterWait = doc.querySelectorAll('.rule').length;
     chk('规则: 6.5 秒轮询后仍在（脏标记生效）', afterWait === added, added + '→' + afterWait);
     // 回归：在规则输入框里打字，5 秒轮询不能把内容顶回服务器旧值
     const firstPath = doc.querySelector('.rule input[data-k="path"]');
     firstPath.value = '/typed-by-test';
     firstPath.dispatchEvent(new win.Event('input', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 6500));
+    await pollTick(win, 2);
     chk('规则: 输入后 6.5 秒不被轮询清掉', firstPath.value === '/typed-by-test', firstPath.value);
     const banner = doc.querySelector('#rulesDirty');
     chk('规则: 出现「未保存」提示', !!banner && !banner.classList.contains('hidden'), banner ? banner.className : 'missing');
@@ -255,7 +284,7 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     const ad = doc.querySelector('#auditDate');
     chk('观测: 审计可按日期查看（v0.20.0）', !!ad && ad.options.length >= 1, ad ? `${ad.options.length} 个选项` : '');
     chk('观测: 日期下拉首项是「最近两天」', !!ad && (ad.options[0].textContent || '').includes('最近两天'), ad ? ad.options[0].textContent.trim() : '');
-    await new Promise((r) => setTimeout(r, 600));
+    await waitFor(() => /<table|empty/.test((doc.querySelector('#auditBody') || {}).innerHTML || ''), 6000);
     const ab = doc.querySelector('#auditBody');
     chk('观测: 审计表渲染出记录', !!ab && !!ab.querySelector('table, .empty'), ab ? ab.textContent.trim().slice(0, 30) : '');
     const ar = doc.querySelector('#btnAuditRefresh');
@@ -371,11 +400,11 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('配置即代码: 卡片存在', !!doc.querySelector('#sec-code'), '');
     chk('配置即代码: 有编辑器与按钮', !!(doc.querySelector('#cfgText') && doc.querySelector('#btnCfgApply') && doc.querySelector('#btnCfgDry')), '');
     doc.querySelector('#btnCfgLoad').click();
-    await new Promise((r) => setTimeout(r, 900));
+    await waitFor(() => (doc.querySelector('#cfgText').value || '').length > 100, 6000);
     const txt = doc.querySelector('#cfgText').value || '';
     chk('配置即代码: 载入当前声明是合法 JSON', txt.length > 100 && (() => { try { JSON.parse(txt); return true; } catch { return false; } })(), String(txt.length));
     doc.querySelector('#btnCfgDrift').click();
-    await new Promise((r) => setTimeout(r, 900));
+    await waitFor(() => /差异|一致|基线/.test(doc.querySelector('#cfgMsg').textContent || ''), 6000);
     chk('配置即代码: drift 有反馈', /差异|一致|基线/.test(doc.querySelector('#cfgMsg').textContent || ''), doc.querySelector('#cfgMsg').textContent);
     dom.window.close();
   }
@@ -389,7 +418,7 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     doc.querySelector('#qkHost').value = 'qa.example.com';
     doc.querySelector('#qkDry').checked = true;
     doc.querySelector('#btnQkRun').click();
-    await new Promise((r) => setTimeout(r, 1200));
+    await waitFor(() => /configurations|dns_records/.test((doc.querySelector('#qkOut') || {}).innerHTML || ''), 8000);
     const out = doc.querySelector('#qkOut');
     chk('工具箱: 演练结果显示计划表', /configurations|dns_records/.test(out.innerHTML), out.innerHTML.slice(0, 60));
     dom.window.close();
@@ -508,12 +537,9 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     const { dom, doc } = await open('/tunnels', 3600);
     chk('出口流量: 卡片存在', !!doc.querySelector('#exitStatsCard'), '');
     // 这块要等 /api/exit/stats（要翻历史采样），别用固定等待，轮询到渲染为止（最多 6 秒）
-    let html = doc.querySelector('#exitStatsBody') ? doc.querySelector('#exitStatsBody').innerHTML : '';
-    for (let i = 0; i < 12 && !/<table/.test(html); i += 1) {
-      await new Promise((r) => setTimeout(r, 500));
-      const b2 = doc.querySelector('#exitStatsBody');
-      html = b2 ? b2.innerHTML : '';
-    }
+    const body = () => (doc.querySelector('#exitStatsBody') || {}).innerHTML || '';
+    await waitFor(() => /<table/.test(body()), 9000);
+    const html = body();
     chk('出口流量: 表格渲染出来了', /<table/.test(html), html.slice(0, 40));
     chk('出口流量: 有 5xx 列', /5xx/.test(html), '');
     dom.window.close();

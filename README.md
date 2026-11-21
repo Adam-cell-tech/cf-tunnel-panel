@@ -27,6 +27,11 @@ Prometheus already scrapes both blue/green slots, and Grafana auto-imports the d
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
 
+### v0.29.17 highlights
+
+- **Tests no longer "sleep and hope"**: a dozen fixed `setTimeout` waits in the DOM regression suite became "poll until the condition holds" (`waitFor`) and "wait until a real 5 s poll happened" (`pollTick`, counting `/api/state` calls). Fixed waits assert before render finishes when the box is busy or the panel just restarted — that is exactly where the occasional 177/179 came from — and the suite is tens of seconds faster.
+- **A real UI bug fell out of it**: arriving from "traffic by rule" highlighted the rule for a moment, but the 5 s poll re-rendered the list and the `data-focused` marker vanished — the highlight "flashed once and was gone". The focused rule is now remembered and re-applied on every re-render, cleared when the rule is deleted or the scope changes.
+
 ### v0.29.16 highlights
 
 - **Exit network reconnects are finally visible**: when cloudflared's QUIC connection to Cloudflare's edge drops it reconnects by itself — the process never exits, so the old "重连 ×N" counter never moved, yet visitors felt "the site blipped". The panel now parses cloudflared's reconnect signals (one count per burst, 5 s dedupe), shows a "network reconnects ×N" badge on the exit card (amber at ≥3 in 10 minutes, with total and last time on hover), and the self-check grew an "exit link stability" item that suggests switching the protocol from `auto` to `http2` (TCP, friendlier to NAT) when the link flaps.
