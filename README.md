@@ -27,6 +27,13 @@ Prometheus already scrapes both blue/green slots, and Grafana auto-imports the d
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
 
+### v0.29.18 highlights
+
+- **The check history now answers "which old problem"**: under the self-check card on the monitor page there is a table of items that failed in the last 24 hours — how many times, when last, and what was said. Most frequent first. Before there was only a strip of the last 40 runs, which could not show "Grafana keeps timing out".
+- **A false failure it exposed, fixed**: the `Grafana` check used the public hostname (through Cloudflare) with a 3 s timeout, so it flapped. It now probes the LAN address when one is configured, allows 6 s, and reports a timeout as "attention" rather than "failed" (noting it may just be slow).
+- **Old config snapshots are gzipped**: the newest 10 stay plain (easy to read and diff), older ones become `.json.gz`; reading, listing and rolling back are unchanged. This instance went from 441 KB to 146 KB.
+- **Snapshot name collisions fixed**: two snapshots written in the same millisecond used to overwrite each other (real in scripts); a sequence number is added now.
+
 ### v0.29.17 highlights
 
 - **Tests no longer "sleep and hope"**: a dozen fixed `setTimeout` waits in the DOM regression suite became "poll until the condition holds" (`waitFor`) and "wait until a real 5 s poll happened" (`pollTick`, counting `/api/state` calls). Fixed waits assert before render finishes when the box is busy or the panel just restarted — that is exactly where the occasional 177/179 came from — and the suite is tens of seconds faster.

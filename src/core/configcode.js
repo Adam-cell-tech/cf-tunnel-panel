@@ -6,6 +6,11 @@
 //  - drift = 「当前运行状态」与「最近一次 apply 的声明」之间的差异，用来发现有人手改了面板
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
+
+const KEEP_TOTAL = 80;   // 一共留 80 份
+const KEEP_PLAIN = 10;   // 最近 10 份保持明文（方便直接看 / diff），更老的压成 .json.gz
+const isSnap = (f) => (f.endsWith('.json') || f.endsWith('.json.gz')) && f !== 'last-applied.json';
 
 function snapDir(dataDir) {
   const d = path.join(dataDir, 'config');
@@ -104,14 +109,27 @@ function stamp(d = new Date()) {
   return d.toISOString().replace(/[:.]/g, '-');
 }
 
-/** 落一份快照：data/config/<ts>-<label>.json，保留最近 80 份 */
+/** 落一份快照：data/config/<ts>-<label>.json，保留 80 份；除最近 10 份外压成 .json.gz */
 function writeSnapshot(dataDir, cfg, label = 'apply') {
   const dir = snapDir(dataDir);
-  const file = path.join(dir, `${stamp()}-${String(label).replace(/[^\w-]/g, '') || 'apply'}.json`);
+  const base = path.join(dir, `${stamp()}-${String(label).replace(/[^\w-]/g, '') || 'apply'}`);
+  // 同一毫秒里连写两份会撞名（脚本/测试里会真的发生）——撞了就加序号
+  let file = `${base}.json`;
+  for (let i = 2; fs.existsSync(file); i += 1) file = `${base}-${i}.json`;
   fs.writeFileSync(file, JSON.stringify(cfg, null, 2));
-  const all = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).sort();
-  for (const f of all.slice(0, Math.max(0, all.length - 80))) {
+  const all = fs.readdirSync(dir).filter(isSnap).sort();
+  for (const f of all.slice(0, Math.max(0, all.length - KEEP_TOTAL))) {
     try { fs.unlinkSync(path.join(dir, f)); } catch { /* ignore */ }
+  }
+  // 老快照压 gzip：80 份明文要 600KB+，压完只剩三分之一，读的时候 parse 一次没差别
+  const kept = fs.readdirSync(dir).filter(isSnap).sort();
+  for (const f of kept.slice(0, Math.max(0, kept.length - KEEP_PLAIN))) {
+    if (!f.endsWith('.json')) continue;
+    const src = path.join(dir, f);
+    try {
+      fs.writeFileSync(`${src}.gz`, zlib.gzipSync(fs.readFileSync(src), { level: 9 }));
+      fs.unlinkSync(src);
+    } catch { /* 压不动就留明文，不影响功能 */ }
   }
   // 最近一次 apply 的声明，供 drift 比较
   if (label === 'apply') fs.writeFileSync(path.join(dir, 'last-applied.json'), JSON.stringify(cfg, null, 2));
@@ -121,7 +139,7 @@ function writeSnapshot(dataDir, cfg, label = 'apply') {
 function listSnapshots(dataDir, limit = 20) {
   const dir = snapDir(dataDir);
   return fs.readdirSync(dir)
-    .filter((f) => f.endsWith('.json') && f !== 'last-applied.json')
+    .filter(isSnap)
     .sort()
     .reverse()
     .slice(0, limit)
@@ -132,10 +150,12 @@ function listSnapshots(dataDir, limit = 20) {
 }
 
 function readSnapshot(dataDir, file) {
-  if (!/^[\w.-]+\.json$/.test(String(file || ''))) throw new Error('快照文件名不合法');
+  if (!/^[\w.-]+\.json(\.gz)?$/.test(String(file || ''))) throw new Error('快照文件名不合法');
   const p = path.join(snapDir(dataDir), path.basename(file));
   if (!fs.existsSync(p)) throw new Error('这份快照不在了');
-  return JSON.parse(fs.readFileSync(p, 'utf8'));
+  const buf = fs.readFileSync(p);
+  const text = p.endsWith('.gz') ? zlib.gunzipSync(buf).toString('utf8') : buf.toString('utf8');
+  return JSON.parse(text);
 }
 
 function lastApplied(dataDir) {

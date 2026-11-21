@@ -207,9 +207,19 @@ async function runChecks(state, ctx = {}) {
   const gf = settings.grafana || {};
   tasks.push(step('grafana', 'Grafana', async () => {
     if (!gf.enabled) return { status: 'warn', detail: '没启用嵌入', hint: '设置 → 监控嵌入 → 打开「嵌入 Grafana」' };
-    const base = trimUrl(gf.url);
+    // 优先打局域网地址：走公网主机名的话这一枪要穿过 Cloudflare，3 秒经常不够，
+    // 会变成「体检时好时坏」的假失败（v0.29.18 前它就是这样反复报超时）
+    const lan = trimUrl(gf.lanUrl);
+    const base = lan || trimUrl(gf.url);
     if (!base) return { status: 'warn', detail: '没配地址' };
-    const r = await fetchText(`${base}/api/health`);
+    let r;
+    try {
+      r = await fetchText(`${base}/api/health`, 6000);
+    } catch (e) {
+      const to = /abort|timeout/i.test(String((e && e.message) || e));
+      return { status: 'warn', detail: `${base} → ${to ? '6 秒没响应（可能只是慢）' : String((e && e.message) || e)}`,
+        hint: to ? '体检走的是面板本机出口；如果一直超时，看 Grafana 是不是正在重启。' : '' };
+    }
     let db = '';
     try { db = (JSON.parse(r.text) || {}).database || ''; } catch { /* 不是 JSON 就只看状态码 */ }
     const healthy = r.status === 200 && (!db || db === 'ok');
@@ -293,7 +303,7 @@ async function runChecks(state, ctx = {}) {
 const STORE_DIR = path.join(DATA_DIR, 'selfcheck');
 const LAST_FILE = path.join(STORE_DIR, 'last.json');
 const HIST_FILE = path.join(STORE_DIR, 'history.jsonl');
-const KEEP = 200;                                       // 历史最多留 200 次
+const KEEP = 300;   // 每 5 分钟一条 → 300 条约等于 25 小时，够「最近 24 小时」聚合                                       // 历史最多留 200 次
 const HIST_MAX_BYTES = 256 * 1024;                      // 超过就裁剪（正常一条 ~300B，200 条 ~60KB）
 const REC_MAX_BYTES = 2 * 1024;                         // 单条记录上限
 const LINE_MAX_BYTES = 8 * 1024;                        // 比这更长的行视为损坏（曾出现 200MB 的爆炸行）
@@ -371,11 +381,38 @@ function lastResult() {
   try { return JSON.parse(fs.readFileSync(LAST_FILE, 'utf8')); } catch { return null; }
 }
 
+/** 记录里的 at 是毫秒时间戳（v0.29.12 起），老/手工数据可能是 ISO 串，两种都认 */
+function atMs(v) {
+  if (typeof v === 'number') return v;
+  const n = Number(v);
+  if (Number.isFinite(n) && n > 1e12) return n;
+  return Date.parse(v) || 0;
+}
+
+/** 把一段历史记录按检查项聚合：窗口内哪些项出过问题、各几次、最后一次的说明 */
+function fails(items, nowMs = Date.now()) {
+  const map = new Map();
+  for (const h of items || []) {
+    const at = atMs(h && h.at);
+    if (!at || at > nowMs) continue;
+    for (const b of (h.bad || [])) {
+      if (!b || !b.id) continue;
+      const cur = map.get(b.id) || { id: b.id, name: b.name || b.id, count: 0, lastAt: 0, lastDetail: '' };
+      cur.count += 1;
+      if (at >= cur.lastAt) { cur.lastAt = at; cur.lastDetail = String(b.detail || '').slice(0, 200); cur.name = b.name || cur.name; }
+      map.set(b.id, cur);
+    }
+  }
+  return [...map.values()]
+    .sort((a, b) => b.count - a.count || b.lastAt - a.lastAt)
+    .map((x) => ({ ...x, lastAt: x.lastAt ? new Date(x.lastAt).toISOString() : '' }));
+}
+
 function history(n = 20) {
-  const limit = Math.max(1, Math.min(200, Number(n) || 20));
+  const limit = Math.max(1, Math.min(KEEP, Number(n) || 20));
   try {
     return tailLines(HIST_FILE, limit).map(parseLine).filter(Boolean).slice(-limit).reverse();
   } catch { return []; }
 }
 
-module.exports = { history, lastResult, persist, runChecks };
+module.exports = { fails, history, lastResult, persist, runChecks };

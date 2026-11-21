@@ -497,8 +497,21 @@ async function handler(req, res) {
   }
 
   if (p === '/api/selfcheck/history' && req.method === 'GET') {
-    const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 20, 1), 200);
-    return sendJson(res, 200, { ok: true, last: _selfcheck.lastResult(), items: _selfcheck.history(limit) });
+    const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 20, 1), 300);
+    const hours = Math.min(Math.max(Number(url.searchParams.get('hours')) || 24, 1), 72);
+    const items = _selfcheck.history(limit);
+    const since = Date.now() - hours * 3600e3;
+    const atOf = (h) => { const v = h && h.at; const n = Number(v); return Number.isFinite(n) && n > 1e12 ? n : (Date.parse(v) || 0); };
+    const inWindow = items.filter((h) => atOf(h) >= since);
+    return sendJson(res, 200, {
+      ok: true,
+      last: _selfcheck.lastResult(),
+      hours,
+      runs: inWindow.length,
+      coverageHours: items.length ? Math.max(0, Math.round((Date.now() - (atOf(items[items.length - 1]) || Date.now())) / 36e5 * 10) / 10) : 0,
+      fails: _selfcheck.fails(inWindow),
+      items,
+    });
   }
 
   // 监控页：面板替你去问 Prometheus（targets / 告警），省得再开一个标签页

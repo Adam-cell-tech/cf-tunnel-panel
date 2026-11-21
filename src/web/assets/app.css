@@ -586,3 +586,6 @@ pre.log .lv-inf .dot{background:var(--acc)}
 .sc-hist .bar[data-s="fail"]{background:var(--err);height:18px}
 .sc-hist .bar:hover{outline:1px solid var(--acc);outline-offset:1px}
 .sc-hist-wrap .sub{margin-top:6px}
+.sc-fails{margin-top:10px}
+.sc-fails .tbl{font-size:12px}
+.sc-fails .tbl td,.sc-fails .tbl th{padding:4px 8px}

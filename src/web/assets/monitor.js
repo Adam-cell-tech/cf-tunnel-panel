@@ -137,6 +137,7 @@ async function paintCheckHistory() {
   try {
     const r = await api('/api/selfcheck/history?limit=40');
     items = (r && r.items) || [];
+    paintCheckFails(r);
   } catch { return; }
   if (!items.length) { wrap.hidden = true; return; }
   wrap.hidden = false;
@@ -150,6 +151,32 @@ async function paintCheckHistory() {
     + `${mins < 1 ? '刚刚' : mins + ' 分钟前'}：${last.total - last.fail}/${last.total} 通过`
     + (last.fail ? `，${last.fail} 项失败` : '')
     + (last.warn ? `，${last.warn} 项警告` : '');
+}
+
+/** 最近 24 小时哪些检查项出过问题（反复失败的老毛病比「刚刚失败一次」更值得看） */
+function paintCheckFails(r) {
+  const box = $('#checkFails');
+  if (!box) return;
+  const fails = (r && r.fails) || [];
+  const hours = (r && r.hours) || 24;
+  const runs = (r && r.runs) || 0;
+  if (!fails.length) {
+    box.hidden = runs < 2;   // 只跑过一两次就别下结论
+    box.innerHTML = runs >= 2
+      ? `<div class="sub">最近 ${hours} 小时跑了 ${runs} 次体检，没有失败项。</div>`
+      : '';
+    return;
+  }
+  box.hidden = false;
+  const rows = fails.map((f) => {
+    const ago = f.lastAt ? Math.max(0, Math.round((Date.now() - Date.parse(f.lastAt)) / 60000)) : null;
+    const when = ago === null ? '' : (ago < 60 ? `${ago} 分钟前` : `${Math.round(ago / 60)} 小时前`);
+    return `<tr><td>${esc(f.name || f.id)}</td><td class="num">${f.count}</td><td class="sub">${esc(when)}</td>`
+      + `<td class="sub">${esc(String(f.lastDetail || '').slice(0, 80))}</td></tr>`;
+  }).join('');
+  box.innerHTML = `<div class="tbl-wrap"><table class="tbl compact"><thead><tr>`
+    + `<th>项目</th><th class="num">次数</th><th>最后一次</th><th>说明</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    + `<div class="sub">最近 ${hours} 小时共 ${runs} 次体检里，上面这些项出过问题（次数多的优先修）。</div>`;
 }
 
 async function runCheck() {

@@ -473,6 +473,11 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     }
     chk('体检: 按钮文案可读', /体检/.test(doc.querySelector('#btnCheck').textContent || ''), '');
     chk('体检: 卡片底部有历史条容器', !!doc.querySelector('#checkHistWrap') && !!doc.querySelector('#checkHist'), '');
+    chk('体检: 历史条下面有「最近 24 小时出过问题的项」容器', !!doc.querySelector('#checkFails'), '');
+    {
+      const msrc = fs.readFileSync('src/web/assets/monitor.js', 'utf8');
+      chk('体检: 失败项按项目聚合并给出次数', /function paintCheckFails/.test(msrc) && /f\.count/.test(msrc), '');
+    }
     {
       const msrc = fs.readFileSync('src/web/assets/monitor.js', 'utf8');
       chk('体检: 历史条按次渲染三态', /paintCheckHistory/.test(msrc) && /data-s="\$\{state\}"/.test(msrc), '');

@@ -1127,6 +1127,31 @@ try {
   const anyExit = (st.d.runtime.tunnels || [])[0] || {};
   ok('体检：/api/state 的出口带 flaps10m 计数', typeof anyExit.flaps10m === 'number' && typeof anyExit.flaps === 'number', JSON.stringify(Object.keys(anyExit)));
 
+  // v0.29.18：把历史按检查项聚合，「最近 24 小时哪些项反复出问题」
+  const hf = await j('/api/selfcheck/history?limit=40&hours=24');
+  ok('体检历史：带窗口聚合字段', hf.status === 200 && Array.isArray(hf.d.fails)
+    && typeof hf.d.hours === 'number' && typeof hf.d.runs === 'number'
+    && typeof hf.d.coverageHours === 'number', JSON.stringify(Object.keys(hf.d || {})));
+  ok('体检历史：窗口内次数不超过记录条数', (hf.d.fails || []).every((f) => f.count > 0 && f.count <= Math.max(1, hf.d.runs)), JSON.stringify(hf.d.fails || []).slice(0, 120));
+  {
+    // 纯函数层面的聚合（记录里的 at 是毫秒戳，老数据可能是 ISO 串，两种都要认）
+    const script = `const s = require('./src/core/selfcheck.js');
+      const now = Date.now();
+      const items = [
+        { at: now - 60e3, bad: [{ id: 'grafana', name: 'Grafana', detail: '超时' }] },
+        { at: new Date(now - 30e3).toISOString(), bad: [{ id: 'grafana', name: 'Grafana', detail: 'HTTP 502' }, { id: 'disk', name: '数据盘', detail: '87%' }] },
+        { at: now - 10e3, bad: [] },
+      ];
+      process.stdout.write(JSON.stringify(s.fails(items)));`;
+    let agg = [];
+    try { agg = JSON.parse(execFileSync(process.execPath, ['-e', script], { cwd: path.resolve('.'), encoding: 'utf8' })); }
+    catch (e) { agg = [{ err: String(e.message || e) }]; }
+    const g = agg.find((x) => x.id === 'grafana') || {};
+    ok('体检历史：同一项多次失败合并计数', g.count === 2, JSON.stringify(agg));
+    ok('体检历史：保留最后一次的说明', g.lastDetail === 'HTTP 502', JSON.stringify(g));
+    ok('体检历史：ISO 时间串也能解析', typeof g.lastAt === 'string' && g.lastAt.length > 10, String(g.lastAt));
+  }
+
   // v0.29.12：留痕曾经整文件重写，被一条爆炸记录撑到 360MB，把事件循环卡了 20 秒
   const histFile = path.join(process.env.DATA_DIR || 'data', 'selfcheck', 'history.jsonl');
   let raw = '';
@@ -1165,6 +1190,28 @@ try {
   } catch (e) { out = { err: String(e.message || e) }; }
   ok('日志：轮转文件（.gz）里的流量也算进趋势', out.hour === 3, JSON.stringify(out));
   ok('日志：按规则聚合同样跨轮转', out.path === 3, JSON.stringify(out));
+  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* 忽略 */ }
+}
+
+// v0.29.18：老配置快照压 gzip（80 份明文 600KB+，压完只剩三分之一）
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cfp-snap-'));
+  const script = `const c = require('./src/core/configcode.js');
+    const d = process.env.DATA_DIR;
+    for (let i = 0; i < 14; i += 1) c.writeSnapshot(d, { apiVersion: 'v1', routes: [{ id: 'r' + i }] }, 'manual');
+    const items = c.listSnapshots(d, 30);
+    const gz = items.filter((x) => x.file.endsWith('.gz'));
+    const plain = items.filter((x) => !x.file.endsWith('.gz'));
+    const back = gz.length ? c.readSnapshot(d, gz[0].file) : null;
+    process.stdout.write(JSON.stringify({ total: items.length, gz: gz.length, plain: plain.length, ok: !!(back && back.apiVersion) }));`;
+  let out = {};
+  try {
+    const raw = execFileSync(process.execPath, ['-e', script], { cwd: path.resolve('.'), env: { ...process.env, DATA_DIR: tmp }, encoding: 'utf8' });
+    out = JSON.parse(raw);
+  } catch (e) { out = { err: String(e.message || e) }; }
+  ok('配置快照：老快照被压成 .gz', out.gz === 4 && out.plain === 10, JSON.stringify(out));
+  ok('配置快照：压缩后的快照仍能读回来', out.ok === true, JSON.stringify(out));
+  ok('配置快照：列表不漏压缩过的快照', out.total === 14, JSON.stringify(out));
   try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* 忽略 */ }
 }
 
