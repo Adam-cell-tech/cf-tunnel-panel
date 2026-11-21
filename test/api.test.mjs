@@ -1,4 +1,7 @@
 import fs from 'node:fs';
+import os from 'node:os';
+import zlib from 'node:zlib';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import http from 'node:http';
 
@@ -1123,6 +1126,37 @@ try {
   ok('体检留痕：history.jsonl 体积可控（< 256KB）', raw.length < 256 * 1024, `${raw.length} 字节`);
   ok('体检留痕：单条记录不超过 2KB', histLines.every((l) => l.length <= 2 * 1024), `最长 ${Math.max(0, ...histLines.map((l) => l.length))}`);
   ok('体检留痕：历史按时间倒序（最新在前）', h.d.items.length < 2 || Number(h.d.items[0].at) >= Number(h.d.items[1].at), '');
+}
+
+// v0.29.14：访问日志跨轮转可读（健康检查噪音把当前文件刷得很快，趋势图会缺一块）
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cfp-log-'));
+  const dir = path.join(tmp, 'caddy-logs');
+  fs.mkdirSync(dir, { recursive: true });
+  const now = Math.floor(Date.now() / 1000);
+  const line = (ts, uri, status = 200) => JSON.stringify({
+    level: 'info', ts, logger: 'http.log.access.main', msg: 'handled request',
+    request: { remote_ip: '1.2.3.4', host: 'panel.jianghugs.shop', uri, method: 'GET' },
+    status, size: 10, dur: 0.001,
+  });
+  fs.writeFileSync(path.join(dir, 'access.log'), `${line(now - 60, '/current')}\n`);
+  fs.writeFileSync(path.join(dir, 'access-2026-11-21T00-00-00.000-size.log.gz'),
+    zlib.gzipSync(`${line(now - 7200, '/gz-two')}\n${line(now - 18000, '/gz-five', 502)}\n`));
+
+  const script = `const i = require('./src/core/insight.js');
+    const h = i.trafficByHour(12);
+    const p = i.trafficByPath(12, 4);
+    process.stdout.write(JSON.stringify({ hour: h.buckets.reduce((a, b) => a + b.total, 0), path: p.unmatched.total + p.groups.reduce((a, g) => a + g.total, 0) }));`;
+  let out = {};
+  try {
+    const raw = execFileSync(process.execPath, ['-e', script], {
+      cwd: path.resolve('.'), env: { ...process.env, DATA_DIR: tmp }, encoding: 'utf8',
+    });
+    out = JSON.parse(raw);
+  } catch (e) { out = { err: String(e.message || e) }; }
+  ok('日志：轮转文件（.gz）里的流量也算进趋势', out.hour === 3, JSON.stringify(out));
+  ok('日志：按规则聚合同样跨轮转', out.path === 3, JSON.stringify(out));
+  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* 忽略 */ }
 }
 
 await restoreRoutes();

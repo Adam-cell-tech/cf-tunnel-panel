@@ -27,6 +27,11 @@ Prometheus already scrapes both blue/green slots, and Grafana auto-imports the d
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
 
+### v0.29.14 highlights
+
+- **Trend charts no longer break at log rotation**: the aggregations only read the tail of the live `access.log`, so once Caddy rotated (every 10 MB) the older part of the window disappeared. Recent rotated files (`.gz`) are now read too (window-bounded, at most 3, 4 MB each), so hour buckets spanning a rotation are correct.
+- **Only access lines are parsed**: 99% of the log is failed health-check retries against the stopped slot (100k+ lines/day). Instead of splitting the whole text, lines are located by `"logger":"http.log.access`, and results are memoized for 30 s (hourly charts do not need better) — ~190 ms cold, 0 ms warm.
+
 ### v0.29.13 highlights
 
 - **Fixed the traffic chart showing 0**: the hourly buckets were built forward from “now minus N hours”, so the newest bucket landed in the *previous* hour and everything since the top of the current hour was dropped — the overview could read “0 requests” while rules clearly had traffic.

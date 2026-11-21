@@ -7,6 +7,7 @@
 const http=require('http'); const https=require('https');
  const net=require('net'); const fs=require('fs');
 const path=require('path'); const os=require('os');
+const zlib=require('zlib');
 
 const { ACCESS_LOG_FILE, BACKUP_DIR, DATA_DIR, STATE_FILE, VERSION } = require('./paths');
 const _state = require('./state');
@@ -16,12 +17,83 @@ const { caddy, tunnelHostOf } = require('./caddy');
 const history = require('./history');
 const ident = require('./ident');
 const lease = require('./lease');
+// 小时粒度的图不需要秒级新鲜度：日志里 99% 是健康检查噪音，解析一次 600ms 左右，
+// 前端 5 秒轮询一次会把 Jetson 的核占住，所以结果缓存 30 秒。
+const TRAFFIC_TTL = 30 * 1000;
+const _trafficMemo = new Map();
+function trafficByHour(hours = 12) { return memoTraffic(`hour:${hours}`, () => _trafficByHour(hours)); }
+function trafficByPath(hours = 12, top = 4) { return memoTraffic(`path:${hours}:${top}`, () => _trafficByPath(hours, top)); }
+
+
+function memoTraffic(key, fn) {
+  const hit = _trafficMemo.get(key);
+  if (hit && Date.now() - hit.at < TRAFFIC_TTL) return hit.val;
+  const val = fn();
+  _trafficMemo.set(key, { at: Date.now(), val });
+  return val;
+}
+
+/**
+ * 读访问日志文本：当前文件尾部 + 最近的若干个轮转文件（.gz）。
+ * 只读尾部 2MB 是有意的 —— 这些接口 5 秒轮询一次，不能把 10MB 全解析一遍；
+ * 但轮转之后当前文件里已经没有更早的行，跨过轮转点时趋势图会缺口，所以补上 .gz。
+ */
+function readLogText(since, maxBytes = 2 * 1024 * 1024, maxGz = 2) {
+  const parts = [];
+  let any = false;
+  const tailOf = (file, limit) => {
+    const st = fs.statSync(file);
+    const from = Math.max(0, st.size - limit);
+    const fd = fs.openSync(file, 'r');
+    try {
+      const buf = Buffer.alloc(st.size - from);
+      fs.readSync(fd, buf, 0, buf.length, from);
+      return buf.toString('utf8');
+    } finally { fs.closeSync(fd); }
+  };
+  try { parts.push(tailOf(ACCESS_LOG_FILE, maxBytes)); any = true; } catch { /* 还没产生日志 */ }
+  try {
+    const dir = path.dirname(ACCESS_LOG_FILE);
+    const base = path.basename(ACCESS_LOG_FILE, '.log');          // access
+    const gz = fs.readdirSync(dir)
+      .filter((f) => f.startsWith(`${base}-`) && f.endsWith('.log.gz'))
+      .sort()                                                     // 文件名里带时间戳，字典序即时间序
+      .slice(-Math.max(1, maxGz))
+      // 轮转时间早于窗口起点的文件里不可能有窗口内的行，不必解压
+      .filter((f) => { try { return fs.statSync(path.join(dir, f)).mtimeMs >= since; } catch { return false; } });
+    for (const f of gz) {
+      let buf;
+      try { buf = zlib.gunzipSync(fs.readFileSync(path.join(dir, f))); } catch { continue; }  // 写了一半的轮转文件
+      if (buf.length > 4 * 1024 * 1024) buf = buf.subarray(buf.length - 4 * 1024 * 1024);
+      parts.unshift(buf.toString('utf8'));                        // 更早的文件放前面，保持时间顺序
+      any = true;
+    }
+  } catch { /* 目录读不到就算了 */ }
+  return any ? parts.join('\n') : null;
+}
+
+/**
+ * 只遍历访问日志行：日志里 99% 是反向代理健康检查的失败重连（槽位停着时每秒一条），
+ * 整段 split('\n') 会产生几万个字符串，这里是逐段 indexOf 扫描，只切出要的行。
+ */
+const ACCESS_MARK = '"logger":"http.log.access';
+function forEachAccess(text, fn) {
+  let i = text.indexOf(ACCESS_MARK);
+  while (i !== -1) {
+    const s = text.lastIndexOf('\n', i) + 1;
+    let e = text.indexOf('\n', i);
+    if (e === -1) e = text.length;
+    fn(text.slice(s, e));
+    i = text.indexOf(ACCESS_MARK, e);
+  }
+}
+
 /**
  * 按「归属规则」聚合的流量趋势：回答「哪个服务在吃流量」。
  * 复用 access log 与 simulateMatch，所以看不到 unmatched 的具体去向时至少能看到未匹配量。
  * 返回 { available, hours, groups: [{name, total, ok, err, buckets:[{t,total,err}] }] }（按总量降序，最多 top 组）
  */
-function trafficByPath(hours = 12, top = 4) {
+function _trafficByPath(hours = 12, top = 4) {
   const h = Math.max(1, Math.min(72, Number(hours) || 12));
   const n = Math.max(1, Math.min(8, Number(top) || 4));
   const now = Date.now();
@@ -37,22 +109,13 @@ function trafficByPath(hours = 12, top = 4) {
     }
     return groups.get(name);
   };
-  let text = '';
-  try {
-    const st = fs.statSync(ACCESS_LOG_FILE);
-    const from = Math.max(0, st.size - 2 * 1024 * 1024);
-    const fd = fs.openSync(ACCESS_LOG_FILE, 'r');
-    const buf = Buffer.alloc(st.size - from);
-    fs.readSync(fd, buf, 0, buf.length, from);
-    fs.closeSync(fd);
-    text = buf.toString('utf8');
-  } catch { return { available: false, hours: h, groups: [] }; }
-  for (const line of text.split('\n')) {
-    if (!line.trim() || !line.includes('http.log.access')) continue;
+  const text = readLogText(start);
+  if (text === null) return { available: false, hours: h, groups: [] };
+  forEachAccess(text, (line) => {
     let o;
-    try { o = JSON.parse(line); } catch { continue; }
+    try { o = JSON.parse(line); } catch { return; }
     const ts = typeof o.ts === 'number' ? o.ts * 1000 : Date.parse(String(o.ts || ''));
-    if (!Number.isFinite(ts) || ts < start) continue;
+    if (!Number.isFinite(ts) || ts < start) return;
     const key = new Date(ts).setMinutes(0, 0, 0);
     const code = Number(o.status || 0);
     // 原始 Caddy 行里，host/uri/method 在 request 子对象里（readAccess 才把它们拍平）
@@ -78,7 +141,7 @@ function trafficByPath(hours = 12, top = 4) {
     if (isErr) g.err += 1; else g.ok += 1;
     const b = g.buckets.get(key);
     if (b) { b.total += 1; if (isErr) b.err += 1; }
-  }
+  });
   // 「未匹配」通常来自健康检查、未知路径，量还经常最大；单独统计，不占图例名额
   const all = [...groups.values()];
   const unmatched = all.find((g) => g.name === '(未匹配规则)') || { total: 0, err: 0 };
@@ -90,7 +153,7 @@ function trafficByPath(hours = 12, top = 4) {
   return { available: true, hours: h, groups: list, keys, unmatched: { total: unmatched.total, err: unmatched.err } };
 }
 
-function trafficByHour(hours = 12) {
+function _trafficByHour(hours = 12) {
   const now = Date.now();
   // 桶必须从「整点」往回数：原来从 now-hours 往前推再取整，最后一个桶落在上一小时，
   // 于是当前这一小时的流量全被丢掉（total 显示 0）。用 nowHour 倒推保证含当前小时。
@@ -101,30 +164,21 @@ function trafficByHour(hours = 12) {
     buckets.set(key, { t: key, total: 0, ok: 0, err: 0 });
   }
   const start = nowHour - (hours - 1) * 3600 * 1000;
-  let text = '';
-  try {
-    const st = fs.statSync(ACCESS_LOG_FILE);
-    const from = Math.max(0, st.size - 2 * 1024 * 1024);
-    const fd = fs.openSync(ACCESS_LOG_FILE, 'r');
-    const buf = Buffer.alloc(st.size - from);
-    fs.readSync(fd, buf, 0, buf.length, from);
-    fs.closeSync(fd);
-    text = buf.toString('utf8');
-  } catch { return { available: false, hours, buckets: [] }; }
-  for (const line of text.split('\n')) {
-    if (!line.trim() || !line.includes('http.log.access')) continue;
+  const text = readLogText(start);
+  if (text === null) return { available: false, hours, buckets: [] };
+  forEachAccess(text, (line) => {
     let o;
-    try { o = JSON.parse(line); } catch { continue; }
+    try { o = JSON.parse(line); } catch { return; }
     // Caddy 的 ts 是 Unix 秒（浮点），不是 ISO 字符串
     const ts = typeof o.ts === 'number' ? o.ts * 1000 : Date.parse(String(o.ts || ''));
-    if (!Number.isFinite(ts) || ts < start) continue;
+    if (!Number.isFinite(ts) || ts < start) return;
     const key = new Date(ts).setMinutes(0, 0, 0);
     const b = buckets.get(key);
-    if (!b) continue;
+    if (!b) return;
     b.total += 1;
     const code = Number((o.status || 0));
     if (code >= 400) b.err += 1; else b.ok += 1;
-  }
+  });
   return { available: true, hours, buckets: [...buckets.values()] };
 }
 
@@ -576,4 +630,4 @@ function securityAttempts(hours = 24, limit = 3000) {
   return out;
 }
 
-module.exports = { countPanelReq, panelReqSnapshot, upstreamHealth, HISTORY_MAX, badgeSvg, diffRoutes, healthOf, histTick, metricsText, readAccess, refreshUpstreamHealth, requestsLastMinute, rtHistory, sampleHistory, shadowReport, simulateMatch, systemInfo, tcpProbeOnce, trafficByHour, trafficByPath, securityAttempts, upstreamTarget };
+module.exports = { countPanelReq, panelReqSnapshot, upstreamHealth, HISTORY_MAX, badgeSvg, diffRoutes, healthOf, histTick, metricsText, readAccess, readLogText, refreshUpstreamHealth, requestsLastMinute, rtHistory, sampleHistory, shadowReport, simulateMatch, systemInfo, tcpProbeOnce, trafficByHour, trafficByPath, securityAttempts, upstreamTarget };
