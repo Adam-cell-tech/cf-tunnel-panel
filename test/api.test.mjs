@@ -28,11 +28,16 @@ let pass = 0, fail = 0;
 // 无论中途抛错还是提前退出，退出时都写回去 —— 之前正是因为这个缺失，
 // 一次失败用例把线上的 5 条规则换成了 1 条（面板与所有域名直接 404）。
 let _snapRoutes = null;
+let _snapSettings = null;   // 这些测试会改 Grafana/通知/监控设置，跑完必须还原（否则会把生产配置改成测试值）
 async function snapRoutes() {
   try {
     const r = await fetch(`${B}/api/state`, { headers: { Authorization: basic } });
     const d = await r.json();
     _snapRoutes = (d.state && d.state.routes) || null;
+    const st = (d.state && d.state.settings) || {};
+    _snapSettings = JSON.parse(JSON.stringify({
+      grafana: st.grafana || {}, monitoring: st.monitoring || {}, notify: st.notify || {},
+    }));
   } catch { /* ignore */ }
 }
 async function restoreRoutes() {
@@ -45,6 +50,15 @@ async function restoreRoutes() {
     });
     console.log(r.ok ? '\n已还原测试前的规则' : `\n还原规则失败: HTTP ${r.status}`);
   } catch (e) { console.log('\n还原规则失败: ' + e.message); }
+  if (!_snapSettings) return;
+  try {
+    const r2 = await fetch(`${B}/api/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: basic, 'x-cfp-test': '1' },
+      body: JSON.stringify(_snapSettings),
+    });
+    console.log(r2.ok ? '已还原测试前的设置（Grafana/通知/监控）' : `还原设置失败: HTTP ${r2.status}`);
+  } catch (e) { console.log('还原设置失败: ' + e.message); }
 }
 process.on('exit', () => { /* 同步无法 await，改用 beforeExit 已处理 */ });
 process.on('SIGINT', () => { restoreRoutes().finally(() => process.exit(130)); });
