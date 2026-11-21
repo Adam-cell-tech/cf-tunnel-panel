@@ -98,6 +98,11 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
       chk('总览: 健康指示已填充', !!t && t !== '检测中…', t);
     }
     chk('总览: 有按规则流量卡', !!doc.querySelector('#pathBox'), '');
+    // v0.29.21：规则迷你表要带「主机」列（两条 / 规则靠主机区分）
+    {
+      const th = [...doc.querySelectorAll('#ruleMini th')].map((x) => x.textContent.trim());
+      chk('总览: 规则表有主机列', th.includes('主机'), th.join(','));
+    }
     chk('总览: 有预热提醒位', !!doc.querySelector('#warmBar'), '');
     chk('总览: 有监控嵌入卡（默认隐藏）', !!doc.querySelector('#grafanaCard'), '');
 
@@ -146,6 +151,7 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
     chk('隧道: 在线时卡片里有公网地址', anyUrl ? hasUrl : true, anyUrl ? '' : '（当前无线隧道，跳过）');
     chk('隧道: 在线时状态徽章出现', anyUrl ? runningNow : true, anyUrl ? '' : '（当前无线隧道，跳过）');
     chk('隧道: 每个出口都有状态标签', doc.querySelectorAll('#tunnelList .pill, #tunnelList .tag').length >= 2, '');
+    chk('隧道: 0 条专属规则时不显示那个标签', !/0 条仅限此出口/.test(doc.body.textContent), '');
     // 回归：在「出口设置」里输入后，5 秒轮询不能把未保存的输入清掉
     {
       const card0 = doc.querySelector('#tunnelList > .card');
@@ -221,6 +227,8 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
       } else { chk('设置: 搜索能收窄卡片', false, 'no input'); }
     }
     chk('设置: 分区锚点都能对上卡片', !!doc.querySelector('#sec-backup') && !!doc.querySelector('#sec-totp'), '');
+    // v0.29.21：关于卡之前把面板请求总数渲染成 undefined（total 在 panelRequests 顶层）
+    chk('设置: 页面上没有 undefined', !/undefined/.test(doc.body.textContent), '');
     const rh = doc.querySelectorAll('#notifyHist [data-resend]').length;
     chk('设置: 通知记录带重发按钮', rh >= 0, String(rh));
     chk('设置: 通知模板输入框存在', !!doc.querySelector('#notifyTplTitle') && !!doc.querySelector('#notifyTplText'), '');

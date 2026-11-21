@@ -30,7 +30,7 @@ function exitCard(t, d) {
       <h2>${esc(t.name || t.id)}</h2>
       <span class="tag">${isNamed ? '命名隧道' : '快速隧道'}</span>
       <span data-live="pill">${statusPill(rt.status)}</span>
-      <span class="tag" title="绑定到这条出口的规则数（其他规则全局生效）">${scoped} 条仅限此出口</span>
+      ${scoped ? `<span class="tag" title="绑定到这条出口的规则数（其他规则全局生效）">${scoped} 条仅限此出口</span>` : ''}
       ${metricsWarn}
       ${tokenWarn}
       ${hostWarn}

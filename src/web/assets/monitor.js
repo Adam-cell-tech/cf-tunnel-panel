@@ -147,8 +147,12 @@ async function paintCheckHistory() {
   }).join('');
   const last = items[0];
   const mins = Math.max(0, Math.round((Date.now() - Number(last.at || 0)) / 60000));
+  const agoTxt = mins < 1 ? '刚刚'
+    : mins < 60 ? `${mins} 分钟前`
+      : mins < 1440 ? `${Math.floor(mins / 60)} 小时 ${mins % 60} 分前`
+        : `${Math.floor(mins / 1440)} 天前`;
   $('#checkHistNote').textContent = `最近 ${items.length} 次体检（左旧右新）· 上次 `
-    + `${mins < 1 ? '刚刚' : mins + ' 分钟前'}：${last.total - last.fail}/${last.total} 通过`
+    + `${agoTxt}：${last.total - last.fail}/${last.total} 通过`
     + (last.fail ? `，${last.fail} 项失败` : '')
     + (last.warn ? `，${last.warn} 项警告` : '');
 }
@@ -218,7 +222,7 @@ async function load() {
       const slotDownOnly = (d.targets || []).every((t) => t.health === 'up' || SLOT.test(t.instance || t.scrapeUrl || ''));
       // 停着的那一色是备份槽位，写出来免得「1/2 正常」看着像有故障
       const slotDown = s.down && slotDownOnly ? s.down : 0;
-      $('#monTargets').textContent = `${s.up}/${s.total} 正常` + (slotDown ? `（${slotDown} 为备份槽位）` : '');
+      $('#monTargets').textContent = `${s.up}/${s.total} 正常` + (slotDown ? ` · 备份槽位 ${slotDown}` : '');
       $('#monTargets').className = 'v ' + (!s.down ? 'ok-hint' : slotDownOnly ? 'muted' : 'err-hint');
       $('#monTargets').title = s.down && slotDownOnly ? '停着的是备份槽位（滚动升级时会互换），不是故障' : '';
       const firing = (d.alerts || []).filter((a) => a.state === 'firing');

@@ -15,7 +15,13 @@ if (!PASS) {
 const basic = 'Basic ' + Buffer.from(`${USER}:${PASS}`).toString('base64');
 
 // 所有打到面板的请求自动带凭据（面板登录开着，否则全是 401）
-const rawFetch = globalThis.fetch;
+const _fetch0 = globalThis.fetch;
+// 连「不带鉴权」的请求也要打测试标记：否则故意制造的 401/403 会写进生产审计，
+// 概览页「变更趋势」里的失败数就这么被测试刷成了 100。
+const rawFetch = (u, o = {}) => {
+  const hit = B && String(u).startsWith(B);
+  return hit ? _fetch0(u, { ...o, headers: { ...(o.headers || {}), 'x-cfp-test': '1' } }) : _fetch0(u, o);
+};
 globalThis.fetch = (u, o = {}) => {
   const href = String(u);
   if (href.startsWith(B)) o = { ...o, headers: { ...(o.headers || {}), Authorization: basic, 'x-cfp-test': '1' } };
@@ -492,7 +498,8 @@ await j('/api/settings', { method: 'POST', body: { panelTitle: (await j('/api/st
 await sleep(250);
 const au3 = await j('/api/audit?limit=20');
 ok('测试流量不写审计（x-cfp-test）', !(au3.d.rows || []).some((r) => r.path === '/api/settings' && Number(r.at) >= tMark - 100), '');
-const auReal = await fetch(B + '/api/settings', {
+// 这条故意用「不带测试标记」的原始 fetch：审计里必须能看到一次真实写请求
+const auReal = await _fetch0(B + '/api/settings', {
   method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: basic },
   body: JSON.stringify({ panelTitle: (await j('/api/state')).d.state.settings.panelTitle })
 });
@@ -726,7 +733,8 @@ ok('退出全部设备：返回踢掉数量并清 cookie', all.status === 200 &&
   const gs = await rawFetch(B + '/api/state', { headers: { Authorization: OP } });
   ok('operator：能读状态', gs.status === 200, String(gs.status));
   const routesNow = (await j('/api/state')).d.state.routes;
-  const wr = await rawFetch(B + '/api/routes', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: OP }, body: JSON.stringify({ routes: routesNow }) });
+  // 故意不带测试标记：要在审计里认出「运维」这个身份
+  const wr = await _fetch0(B + '/api/routes', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: OP }, body: JSON.stringify({ routes: routesNow }) });
   ok('operator：能改规则', wr.status === 200, String(wr.status));
   const ws = await rawFetch(B + '/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: OP }, body: JSON.stringify({ panelTitle: 'x' }) });
   const wsd = await ws.json().catch(() => ({}));

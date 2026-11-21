@@ -26,8 +26,9 @@ function paintRules(d) {
   if (!list.length) { box.innerHTML = '<div class="empty">还没有规则，所有请求都会 404</div>'; return; }
   const rows = list.slice(0, 6).map((r) => `<tr>
       <td class="mono">${esc(r.path || '/')}</td>
+      <td class="mono">${r.host ? esc(r.host) : '<span class="muted">任意主机</span>'}</td>
       <td class="mono muted">${esc(r.upstream || '')}</td>
-      <td class="nowrap">${r.tunnelId ? '<span class="tag acc" title="只在绑定的那个出口上生效">仅限单出口</span>' : '<span class="tag" title="所有出口都生效">全局</span>'}</td>
+      <td class="nowrap">${r.tunnelId ? '<span class="tag acc" title="只在绑定的那个出口上生效">仅限单出口</span>' : '<span class="muted" title="所有出口都生效">全局</span>'}</td>
     </tr>`).join('');
   const c = d.runtime.caddy || {};
   const shadowed = c.shadowed || [];
@@ -41,7 +42,7 @@ function paintRules(d) {
     hint += `<div class="hint warn">${dead.length} 个上游端口不通：` +
       dead.map((u) => `<span class="mono">${esc(u.url)}</span>（${esc(u.error || '')}）`).join('、') + '</div>';
   }
-  box.innerHTML = hint + `<table><thead><tr><th>路径</th><th>上游</th><th>作用域</th></tr></thead><tbody>${rows}</tbody></table>`;
+  box.innerHTML = hint + `<table><thead><tr><th>路径</th><th>主机</th><th>上游</th><th>作用域</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 async function paintStats(d) {
@@ -52,7 +53,10 @@ async function paintStats(d) {
 
   const routes = d.state.routes || [];
   $('#statRules').textContent = (d.runtime.caddy && d.runtime.caddy.routeCount) || 0;
-  $('#statRulesX').textContent = `共 ${routes.length} 条规则，其中 ${routes.filter((r) => r.tunnelId).length} 条仅限单出口`;
+  const scoped = routes.filter((r) => r.tunnelId).length;
+  $('#statRulesX').textContent = scoped
+    ? `共 ${routes.length} 条规则，其中 ${scoped} 条仅限单出口`
+    : `共 ${routes.length} 条规则，全部对所有出口生效`;
 
   const ok = caddyOk(d);
   const c = (d.runtime.caddy) || {};
@@ -279,9 +283,9 @@ async function paintWarmHint(d) {
     let dismissed = '';
     try { dismissed = localStorage.getItem(WARM_DKEY) || ''; } catch { dismissed = ''; }
     if (dismissed === cur) { hide(); return; }
-    show(`面板换过版本（<code>${esc(shortCode(w.code))}</code> → <code>${esc(cur)}</code>），`
+    show(`面板换过版本（<code>${esc(shortCode(w.code))}</code> → <code>${esc(cur)}</code>）：`
       + '边缘缓存里还是上一版的资源，首个访客会慢一点。点'
-      + ' <a href="/tools">重新预热</a> 把新资源准备好（十几秒）。');
+      + '<a href="/tools">重新预热</a>把新资源准备好（十几秒）。');
     return;
   }
   hide();
