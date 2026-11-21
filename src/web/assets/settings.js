@@ -753,9 +753,16 @@ function applyCardSearch() {
   const q = (box.value || '').trim().toLowerCase();
   const cards = [...document.querySelectorAll('.card[id^="sec-"]')];
   let shown = 0;
+  if (!q) {
+    // 搜索清空：回到「当前分区」，不要把所有卡片都摊开
+    showSection(currentSection(), { silent: true, noScroll: true });
+    if ($('#searchHint')) $('#searchHint').textContent = '';
+    return;
+  }
   cards.forEach((c) => {
     const title = (c.querySelector('h2') || {}).textContent || '';
-    const hit = !q || (title + ' ' + (c.textContent || '')).toLowerCase().includes(q);
+    const hit = (title + ' ' + (c.textContent || '')).toLowerCase().includes(q);
+    c.hidden = false;                       // 搜索跨分区：先都放开
     c.classList.toggle('hidden', !hit);
     if (hit) shown += 1;
   });
@@ -769,8 +776,47 @@ function applyCardSearch() {
   if (hint) hint.textContent = q ? `${shown} / ${cards.length} 个分区匹配` : '';
 }
 
+// ---- 分区切换（v0.29.22）----
+// 15 张卡片连起来 6200px，滚到底要滑半天。这里把左侧导航当页签用：一次只显示一个分区，
+// 搜索时例外（跨分区搜，匹配的都显示），清空搜索回到当前分区。卡片仍然都在 DOM 里，
+// 只是用 hidden 属性控制显示 —— 这样"跳转锚点/表单校验/测试选择器"都不会受影响。
+const SEC_KEY = 'cfp-settings-sec';
+const secCards = () => [...document.querySelectorAll('.card[id^="sec-"]')];
+
+function currentSection() {
+  const h = (location.hash || '').replace('#', '');
+  if (h) return h;
+  try { return localStorage.getItem(SEC_KEY) || ''; } catch { return ''; }
+}
+
+function showSection(id, opts = {}) {
+  const cards = secCards();
+  if (!cards.length) return;
+  const want = cards.some((c) => c.id === id) ? id : cards[0].id;
+  cards.forEach((c) => { c.hidden = (c.id !== want); c.classList.remove('hidden'); });
+  [...document.querySelectorAll('.subnav a')].forEach((a) => {
+    const on = (a.getAttribute('href') || '') === '#' + want;
+    a.classList.toggle('active', on);
+    if (on) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
+  });
+  if (!opts.silent) { try { localStorage.setItem(SEC_KEY, want); } catch {} }
+  if (!opts.noScroll) window.scrollTo(0, 0);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  if (secCards().length) showSection(currentSection(), { silent: true, noScroll: true });
+  [...document.querySelectorAll('.subnav a')].forEach((a) => {
+    a.addEventListener('click', (e) => {
+      const id = (a.getAttribute('href') || '').replace('#', '');
+      if (!id) return;
+      e.preventDefault();
+      const box = $('#cardSearch');
+      if (box && box.value.trim()) { box.value = ''; applyCardSearch(); }
+      showSection(id);
+      try { history.replaceState(null, '', '#' + id); } catch {}
+    });
+  });
+  window.addEventListener('hashchange', () => showSection(currentSection()));
   const box = $('#cardSearch');
-  if (!box) return;
-  box.addEventListener('input', applyCardSearch);
+  if (box) box.addEventListener('input', applyCardSearch);
 });

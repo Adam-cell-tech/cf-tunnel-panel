@@ -98,6 +98,9 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
       chk('总览: 健康指示已填充', !!t && t !== '检测中…', t);
     }
     chk('总览: 有按规则流量卡', !!doc.querySelector('#pathBox'), '');
+    // v0.29.22：并排两卡不再强制等高（左边出口少时会被拉出大片空白）
+    chk('总览: 并排卡按内容高度（align-items:start）',
+      /start/.test(win.getComputedStyle(doc.querySelector('.grid2.top')).alignItems || ''), '');
     // v0.29.21：规则迷你表要带「主机」列（两条 / 规则靠主机区分）
     {
       const th = [...doc.querySelectorAll('#ruleMini th')].map((x) => x.textContent.trim());
@@ -227,6 +230,35 @@ function chk(name, ok, extra = '') { results.push([ok, name, extra]); }
       } else { chk('设置: 搜索能收窄卡片', false, 'no input'); }
     }
     chk('设置: 分区锚点都能对上卡片', !!doc.querySelector('#sec-backup') && !!doc.querySelector('#sec-totp'), '');
+    // v0.29.22：15 张卡片一次只显示一个分区，导航当页签
+    {
+      const sb0 = doc.querySelector('#cardSearch');
+      if (sb0 && sb0.value) { sb0.value = ''; sb0.dispatchEvent(new win.Event('input', { bubbles: true })); }
+      const cards = [...doc.querySelectorAll('.card[id^="sec-"]')];
+      const shown = cards.filter((c) => !c.hidden && !c.classList.contains('hidden'));
+      chk('设置: 一次只显示一个分区', shown.length === 1, shown.map((c) => c.id).join(','));
+      const chip = [...doc.querySelectorAll('.subnav a')].find((a) => (a.getAttribute('href') || '') === '#sec-backup');
+      if (chip) {
+        chip.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+        const after = [...doc.querySelectorAll('.card[id^="sec-"]')].filter((c) => !c.hidden && !c.classList.contains('hidden'));
+        chk('设置: 点分区标签能切换', after.length === 1 && after[0].id === 'sec-backup', after.map((c) => c.id).join(','));
+      } else {
+        chk('设置: 点分区标签能切换', false, '没有 #sec-backup 的标签');
+      }
+      // 搜索是跨分区的：搜「Grafana」应该能直接翻出监控嵌入那个分区
+      const sb2 = doc.querySelector('#cardSearch');
+      if (sb2) {
+        sb2.value = 'Grafana';
+        sb2.dispatchEvent(new win.Event('input', { bubbles: true }));
+        const hit = [...doc.querySelectorAll('.card[id^="sec-"]')]
+          .filter((c) => !c.hidden && !c.classList.contains('hidden')).map((c) => c.id);
+        chk('设置: 搜索跨分区', hit.includes('sec-grafana'), hit.join(','));
+        sb2.value = '';
+        sb2.dispatchEvent(new win.Event('input', { bubbles: true }));
+      } else {
+        chk('设置: 搜索跨分区', false, '没有搜索框');
+      }
+    }
     // v0.29.21：关于卡之前把面板请求总数渲染成 undefined（total 在 panelRequests 顶层）
     chk('设置: 页面上没有 undefined', !/undefined/.test(doc.body.textContent), '');
     const rh = doc.querySelectorAll('#notifyHist [data-resend]').length;

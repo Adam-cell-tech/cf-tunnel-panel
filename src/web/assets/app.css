@@ -95,6 +95,8 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
 .content{padding:22px 26px 60px;max-width:1240px;width:100%}
 .stack{display:flex;flex-direction:column;gap:18px}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:18px}
+/* 并排的两张卡不必等高：出口少的时候，左边会被右边的规则表拉出一大块空白 */
+.grid2.top{grid-template-columns:minmax(280px,.85fr) minmax(340px,1.15fr);align-items:start}
 .grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
 .grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
 

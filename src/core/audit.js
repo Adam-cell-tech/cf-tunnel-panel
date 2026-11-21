@@ -211,6 +211,7 @@ function days() {
       const full = path.join(AUDIT_DIR, f);
       let bytes = 0;
       try { bytes = fs.statSync(full).size; } catch {}
+      if (!bytes) continue;   // 空文件（清理/新建后还没写入）不该出现在日期下拉里
       out.push({ date: m[1], bytes, file: f });
     }
   } catch { return []; }
