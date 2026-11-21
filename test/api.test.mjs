@@ -937,7 +937,11 @@ try {
   ok('访问日志 CSV 表头正确', /时间,主机,方法,路径,状态,耗时ms,字节,来源IP/.test(csvText), csvText.slice(0, 60));
   ok('访问日志 CSV 是附件下载', /attachment/.test(csvRes.headers.get('content-disposition') || ''), '');
 
-  const bf = ((await j('/api/backups')).d.files || [])[0];
+  // v0.29.16：backups/ 下现在还有 audit-cleanup/ 之类子目录，列表必须只列 .json，
+  // 否则「最新一份备份」会指向一个目录，下载返 400、清理循环也会在 unlink 目录时抛错
+  const bkList = ((await j('/api/backups')).d.files || []);
+  ok('备份列表只列 .json 文件', bkList.length > 0 && bkList.every((f) => f.endsWith('.json')), bkList.slice(0, 3).join(','));
+  const bf = bkList[0];
   const dl = await rawFetch(B + '/api/backups/download?file=' + encodeURIComponent(bf || 'x.json'), { headers: { Authorization: basic } });
   ok('备份单份下载 200', dl.status === 200, String(dl.status));
   ok('备份下载是附件且 JSON', /attachment/.test(dl.headers.get('content-disposition') || '') && /json/.test(dl.headers.get('content-type') || ''), dl.headers.get('content-type') || '');
@@ -1117,6 +1121,11 @@ try {
   ok('体检：上次结果与本次项数一致', h.d.last && h.d.last.total === sc.d.total, `${h.d.last && h.d.last.total} vs ${sc.d.total}`);
   const st = await j('/api/state');
   ok('体检：/api/state 带体检摘要（侧栏直接用）', st.d.runtime && st.d.runtime.selfcheck && typeof st.d.runtime.selfcheck.total === 'number', '');
+
+  // v0.29.16：网络重连（cloudflared 自己重连、进程没退出）以前完全看不见，只有翻 docker logs 才知道
+  ok('体检：包含「出口链路稳定性」一项', (sc.d.checks || []).some((c) => c.id === 'flaps'), (sc.d.checks || []).map((c) => c.id).join(','));
+  const anyExit = (st.d.runtime.tunnels || [])[0] || {};
+  ok('体检：/api/state 的出口带 flaps10m 计数', typeof anyExit.flaps10m === 'number' && typeof anyExit.flaps === 'number', JSON.stringify(Object.keys(anyExit)));
 
   // v0.29.12：留痕曾经整文件重写，被一条爆炸记录撑到 360MB，把事件循环卡了 20 秒
   const histFile = path.join(process.env.DATA_DIR || 'data', 'selfcheck', 'history.jsonl');

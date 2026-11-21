@@ -255,8 +255,12 @@ function saveState(reason = 'save') {
     fs.mkdirSync(BACKUP_DIR, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     fs.writeFileSync(path.join(BACKUP_DIR, `${stamp}-${reason}.json`), JSON.stringify(state, null, 2), { mode: 0o600 });
-    const files = fs.readdirSync(BACKUP_DIR).sort();
-    for (const f of files.slice(0, Math.max(0, files.length - 20))) fs.unlinkSync(path.join(BACKUP_DIR, f));
+    // 只数 .json：backups/ 下还可能有别的目录（如 audit-cleanup/），
+    // 不过滤会把它当"最老的备份"去 unlink，抛错又被外层 catch 吞掉，备份就永远不清理了
+    const files = fs.readdirSync(BACKUP_DIR).filter((f) => f.endsWith('.json')).sort();
+    for (const f of files.slice(0, Math.max(0, files.length - 20))) {
+      try { fs.unlinkSync(path.join(BACKUP_DIR, f)); } catch {}
+    }
   } catch {}
 }
 

@@ -101,6 +101,18 @@ function startTunnel(id, opts = {}) {
           log(`${tag}公网地址已就绪: ${m[0]}`, 'cloudflared');
           schedulePush(200);
         }
+        // 网络层面的重连：cloudflared 的 QUIC 连接断了会自己重连，进程没退出、reconnects 不涨，
+        // 但访客那一刻就是「网站抽了一下」。同一波重连会按 connIndex 连着刷好几行，5 秒内只记一次。
+        if (/Retrying connection|Serve tunnel error|Unable to establish connection|Connection terminated/i.test(l)) {
+          const nowMs = Date.now();
+          const times = rt.flapTimes || (rt.flapTimes = []);
+          if (!times.length || nowMs - times[times.length - 1] > 5000) {
+            times.push(nowMs);
+            if (times.length > 50) times.shift();
+            rt.flaps = (rt.flaps || 0) + 1;
+            rt.lastFlapAt = nowMs;
+          }
+        }
         if (/status 429|provisioning failed with status 429|rate.?limit/i.test(l)) rt.throttled = true;
         if (/token.{0,24}(not valid|invalid|expired|revoked)|invalid tunnel secret|unauthorized|failed to unmarshal tunnel token/i.test(l)) {
           // token 错/被吊销：重试再多次也没用，停止自动重试，把话说人话
@@ -167,6 +179,10 @@ function runtimeOf(id) {
     publicUrl: publicUrlOf(tunnelById(id)) || null,
     startedAt: rt.startedAt, lastError: rt.lastError,
     reconnects: rt.reconnects || 0,
+    // 网络层重连（非进程重启）：flaps 是本次启动后的累计，flaps10m 只数最近 10 分钟
+    flaps: rt.flaps || 0,
+    lastFlapAt: rt.lastFlapAt || null,
+    flaps10m: (rt.flapTimes || []).filter((x) => Date.now() - x < 600000).length,
     fatal: !!rt.fatal,
     uptimeSec: rt.status === 'running' && rt.startedAt ? Math.round((Date.now() - rt.startedAt) / 1000) : 0,
   };

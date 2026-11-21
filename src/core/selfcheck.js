@@ -151,6 +151,26 @@ async function runChecks(state, ctx = {}) {
     }));
   }
 
+  // 6b) 出口链路稳定性：cloudflared 与边缘之间的 QUIC 断线重连不会让进程退出，
+  // 面板上原本完全看不见 —— 但访客那一刻就是「网站抽了一下」，所以单独查一次。
+  tasks.push(step('flaps', '出口链路稳定性', async () => {
+    const running = (s.tunnels || [])
+      .filter((t) => t.mode === 'named')
+      .map((t) => ({ name: t.name || t.id, rt: (runtime.tunnels || {})[t.id] }))
+      .filter((x) => x.rt && x.rt.status === 'running');
+    if (!running.length) return { status: 'ok', detail: '没有在运行的出口' };
+    const total = running.reduce((n, x) => n + (x.rt.flaps10m || 0), 0);
+    const worst = running.slice().sort((a2, b2) => (b2.rt.flaps10m || 0) - (a2.rt.flaps10m || 0))[0];
+    if (total >= 3) {
+      return {
+        status: 'warn',
+        detail: `最近 10 分钟共 ${total} 次网络重连（最多的是「${worst.name}」${worst.rt.flaps10m} 次）`,
+        hint: 'cloudflared 到 Cloudflare 边缘的 QUIC 连接在抖，常见原因是家宽上行丢包或 NAT 会话超时。可在「出口设置」里把协议从 auto 改成 http2（走 TCP，穿 NAT 更稳），改完点保存并重启该出口。',
+      };
+    }
+    return { status: 'ok', detail: total ? `最近 10 分钟 ${total} 次网络重连（偶发，属正常）` : '最近 10 分钟没有网络重连' };
+  }));
+
   // 7) Prometheus
   const prom = trimUrl((settings.monitoring || {}).promUrl);
   tasks.push(step('prometheus', 'Prometheus', async () => {

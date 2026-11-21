@@ -991,6 +991,14 @@ const EN_V0297 = {
 };
 
 // v0.29.10：一键体检
+const EN_V02916 = {
+  '出口链路稳定性': 'Exit link stability',
+  '没有在运行的出口': 'No running exit',
+  '最近 10 分钟没有网络重连': 'No network reconnects in the last 10 minutes',
+  '网络重连': 'Network reconnects',
+};
+Object.assign(EN, EN_V02916);
+
 const EN_V02910 = {
   "一键体检": "Health check",
   "面板 / Caddy / 出口 / Prometheus / Grafana / 磁盘，一次查完，每条都给结论和怎么办": "Panel, Caddy, exits, Prometheus, Grafana and disk — all at once, each with a verdict and what to do",

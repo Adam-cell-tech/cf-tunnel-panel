@@ -447,6 +447,9 @@ async function handler(req, res) {
             id: t.id, name: t.name, status: rt.status, pid: rt.pid, url: rt.url,
             startedAt: rt.startedAt, lastError: rt.lastError, publicUrl: publicUrlOf(t),
             reconnects: rt.reconnects || 0,
+            flaps: rt.flaps || 0,
+            lastFlapAt: rt.lastFlapAt || null,
+            flaps10m: (rt.flapTimes || []).filter((x) => Date.now() - x < 600000).length,
             uptimeSec: rt.status === 'running' && rt.startedAt ? Math.round((Date.now() - rt.startedAt) / 1000) : 0,
           };
         }),
@@ -1408,7 +1411,7 @@ async function handler(req, res) {
 
   if (p === '/api/backups' && req.method === 'GET') {
     try {
-      const files = fs.readdirSync(BACKUP_DIR).sort().reverse().slice(0, 20);
+      const files = fs.readdirSync(BACKUP_DIR).filter((f) => f.endsWith('.json')).sort().reverse().slice(0, 20);
       return sendJson(res, 200, { ok: true, files });
     } catch {
       return sendJson(res, 200, { ok: true, files: [] });
@@ -2188,7 +2191,11 @@ function selfcheckContext() {
   const rt = {
     tunnels: Object.fromEntries(state.tunnels.map((t) => {
       const r = tunnelRt(t.id);
-      return [t.id, { status: r.status, publicUrl: publicUrlOf(t), url: r.url }];
+      return [t.id, {
+        status: r.status, publicUrl: publicUrlOf(t), url: r.url,
+        flaps: r.flaps || 0, lastFlapAt: r.lastFlapAt || null,
+        flaps10m: (r.flapTimes || []).filter((x) => Date.now() - x < 600000).length,
+      }];
     })),
     caddy: { ok: caddy.ok, error: caddy.error, routeCount: caddy.routeCount, shadowed: shadowReport() },
   };

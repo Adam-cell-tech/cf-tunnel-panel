@@ -107,6 +107,9 @@ function liveRow(t, d) {
     rt.pid ? `<span class="tag">pid ${rt.pid}</span>` : '',
     rt.uptimeSec ? `<span class="tag" title="本次运行时长">已运行 ${fmtDur(rt.uptimeSec)}</span>` : '',
     (!rt.fatal && rt.reconnects) ? `<span class="tag warn" title="启动后 cloudflared 异常退出并自动重连的次数；持续增长说明网络或 token 有问题">重连 ×${rt.reconnects}</span>` : '',
+    // 网络层重连（进程没退出）：访客感知是「网站抽了一下」，但以前面板上完全看不到
+    (rt.flaps10m >= 3) ? `<span class="tag warn" title="cloudflared 到 Cloudflare 边缘的连接在抖：最近 10 分钟 ${rt.flaps10m} 次，本次启动累计 ${rt.flaps} 次${rt.lastFlapAt ? '，最近一次 ' + new Date(rt.lastFlapAt).toLocaleTimeString() : ''}。改协议为 http2 通常更稳">网络重连 ×${rt.flaps10m}</span>`
+      : (rt.flaps ? `<span class="tag" title="本次启动后累计网络重连 ${rt.flaps} 次（偶发属正常）">网络重连 ×${rt.flaps}</span>` : ''),
   ].join('');
   return (url
     ? `<a class="mono" href="${esc(url)}" target="_blank" rel="noreferrer">${esc(url)}</a><button class="sm ghost" data-act="copy">复制</button>`

@@ -27,6 +27,11 @@ Prometheus already scrapes both blue/green slots, and Grafana auto-imports the d
 `docs/grafana-dashboard.json` with anonymous viewer access and `allow_embedding` on — so the
 overview page's embed fields can be filled in immediately (details in `tools/monitoring/README.md`).
 
+### v0.29.16 highlights
+
+- **Exit network reconnects are finally visible**: when cloudflared's QUIC connection to Cloudflare's edge drops it reconnects by itself — the process never exits, so the old "重连 ×N" counter never moved, yet visitors felt "the site blipped". The panel now parses cloudflared's reconnect signals (one count per burst, 5 s dedupe), shows a "network reconnects ×N" badge on the exit card (amber at ≥3 in 10 minutes, with total and last time on hover), and the self-check grew an "exit link stability" item that suggests switching the protocol from `auto` to `http2` (TCP, friendlier to NAT) when the link flaps.
+- Housekeeping: two leftover `.backup-audit-*.jsonl` files (2.2 MB) from the earlier audit cleanup moved from `data/audit/` to `data/backups/audit-cleanup/` — that filename pattern is not matched by the retention sweep, so they would have sat there forever.
+
 ### v0.29.15 highlights
 
 - **Health checks no longer flood the log**: the slot config used to emit `health_checks` unconditionally, and the other colour is normally stopped — its failed probe every 2 s piled up to **100k+ lines/day in Caddy's log (99.85%)**, filling the file and forcing rotation sooner, which shrank the window the trend charts could cover. Health checks are now only emitted while the peer is actually listening, and an offline peer is dropped from the upstream list (otherwise every request pays a connect-refused round trip).
